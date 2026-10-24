@@ -196,8 +196,8 @@ Content-Type: application/json
 | 항목 | 결정 | 비고 |
 | --- | --- | --- |
 | 응답 형식 | 이 문서 형식 (`isSuccess / code / message / result`) | 확정 |
-| 패키지 구조 | `com.sniptext.{도메인}/controller(+dto) · service(+dto/command·query·result) · repository(+dto) · entity · exception`, `global/...` | 확정. 팀 깃허브·패키징 컨벤션 문서 참고, 의존 규칙은 ArchUnit 테스트로 강제 |
-| DB | MySQL 8.0 | 확정 |
+| 패키지 구조 | `com.sniptext.domain.{도메인}/controller(+dto) · service(+dto/command·query·result, {도메인}CommandService 쓰기 · {도메인}QueryService 조회) · repository(+dto) · entity · exception`, `com.sniptext.global/...` | 확정. 팀 깃허브·패키징 컨벤션 문서 참고, 의존 규칙은 ArchUnit 테스트로 강제 |
+| DB | MySQL 8.4 | 확정 |
 | 외부에 보이는 ID | 숫자 자동 증가 ID(Long) 그대로 사용 | 모든 조회·수정은 본인 소유 확인 후 처리, 남의 것이면 404 |
 | 시간 표기 | 모든 시각에 `+09:00` 붙임 | 확정. 4장 참고 |
 | 서비스 주소 구조 | 예) 웹 `sniptext.io`, API `api.sniptext.io` | 배포 전 결정. 재발급 쿠키 설정, 외부 출처 요청 허용 범위가 이걸로 정해짐 |
