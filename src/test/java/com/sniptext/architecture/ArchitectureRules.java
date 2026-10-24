@@ -1,8 +1,11 @@
 package com.sniptext.architecture;
 
+import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.lang.ArchCondition;
@@ -16,6 +19,8 @@ import com.tngtech.archunit.lang.SimpleConditionEvent;
  */
 final class ArchitectureRules {
 
+	private static final DescribedPredicate<JavaClass> ENUM = DescribedPredicate.describe("열거형", JavaClass::isEnum);
+
 	private final String domainRoot;
 	private final String globalRoot;
 
@@ -28,11 +33,17 @@ final class ArchitectureRules {
 		return new ArchitectureRules(root);
 	}
 
-	/** 컨트롤러는 서비스만 부른다. 레포지토리·엔티티를 직접 쓰지 않는다 (엔티티를 응답으로 내보내지 않는다). */
+	/**
+	 * 컨트롤러는 서비스만 부른다. 레포지토리·엔티티를 직접 쓰지 않는다 (엔티티를 응답으로 내보내지 않는다).
+	 * entity 패키지의 열거형은 값이므로 허용한다.
+	 */
 	ArchRule controllersDoNotUseRepositoriesOrEntities() {
+		DescribedPredicate<JavaClass> repositoryOrEntityClass = resideInAPackage(layer("repository"))
+			.or(resideInAPackage(layer("entity")).and(not(ENUM)))
+			.as("repository 패키지의 클래스 또는 entity 패키지의 열거형이 아닌 클래스");
 		return noClasses().that().resideInAPackage(layer("controller"))
-			.should().dependOnClassesThat().resideInAnyPackage(layer("repository"), layer("entity"))
-			.because("컨트롤러는 서비스만 부르고 엔티티를 응답으로 내보내지 않는다")
+			.should().dependOnClassesThat(repositoryOrEntityClass)
+			.because("컨트롤러는 서비스만 부르고 엔티티를 응답으로 내보내지 않는다 (entity 패키지의 열거형은 허용)")
 			.allowEmptyShould(true);
 	}
 
@@ -57,10 +68,11 @@ final class ArchitectureRules {
 			.allowEmptyShould(true);
 	}
 
-	/** 다른 도메인은 그 도메인의 서비스만 부른다. 남의 레포지토리·엔티티를 직접 쓰지 않는다. */
+	/** 다른 도메인은 그 도메인의 서비스만 부른다. 남의 레포지토리·엔티티를 직접 쓰지 않는다 (entity 패키지의 열거형은 허용). */
 	ArchRule noOtherDomainRepositoriesOrEntities() {
 		return classes().that().resideInAPackage(domainRoot + "..")
 			.should(notDependOnOtherDomainRepositoriesOrEntities())
+			.because("다른 도메인은 그 도메인의 서비스만 부른다 (entity 패키지의 열거형은 허용)")
 			.allowEmptyShould(true);
 	}
 
@@ -74,14 +86,16 @@ final class ArchitectureRules {
 			public void check(JavaClass origin, ConditionEvents events) {
 				String originDomain = domainOf(origin.getPackageName());
 				for (Dependency dependency : origin.getDirectDependenciesFromSelf()) {
-					String targetPackage = dependency.getTargetClass().getBaseComponentType().getPackageName();
+					JavaClass target = dependency.getTargetClass().getBaseComponentType();
+					String targetPackage = target.getPackageName();
 					String targetDomain = domainOf(targetPackage);
 					if (targetDomain == null || targetDomain.equals(originDomain)) {
 						continue;
 					}
 					String targetDomainPackage = domainRoot + "." + targetDomain + ".";
-					if ((targetPackage + ".").startsWith(targetDomainPackage + "repository.")
-						|| (targetPackage + ".").startsWith(targetDomainPackage + "entity.")) {
+					boolean inRepository = (targetPackage + ".").startsWith(targetDomainPackage + "repository.");
+					boolean inEntity = (targetPackage + ".").startsWith(targetDomainPackage + "entity.");
+					if (inRepository || (inEntity && !target.isEnum())) {
 						events.add(SimpleConditionEvent.violated(dependency, dependency.getDescription()));
 					}
 				}
