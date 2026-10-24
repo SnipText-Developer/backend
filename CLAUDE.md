@@ -201,7 +201,8 @@ domain/{도메인}/
 ## 깃·PR
 
 - 브랜치: `main`(운영) / `develop`(개발 서버) / `feat/이슈번호-이름`, `fix/...`, `refactor/...`, `chore/...` (예: `feat/12-google-login`). 브랜치 이름에는 `#`을 쓰지 않는다.
-- 커밋: `feat|fix|refactor|test|chore: 한국어 설명 (#이슈번호)` 예) `feat: 구글 로그인 ID 토큰 검증 구현 (#12)`
+- 커밋: `feat|fix|refactor|test|docs|chore: 한국어 설명 (#이슈번호)` 예) `feat: 구글 로그인 ID 토큰 검증 구현 (#12)`
+  - `docs`: 문서만 바꿀 때 (CLAUDE.md, 명세, ERD). 코드와 같이 바뀌면 코드 쪽 접두어를 쓴다
 - PR은 `develop` 대상, 변경 400줄 안팎. 넘으면 나눈다.
 
 ## 작업할 때 지킬 것
