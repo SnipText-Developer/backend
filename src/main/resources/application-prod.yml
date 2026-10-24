@@ -4,3 +4,10 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+
+# 운영에서는 스웨거를 끈다. 시큐리티 허용 목록에서도 같이 빠진다.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
