@@ -13,7 +13,8 @@ import com.sniptext.TestcontainersConfiguration;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({TestcontainersConfiguration.class, TestApiController.class, TestExceptionController.class})
+@Import({TestcontainersConfiguration.class, TestApiController.class, TestExceptionController.class,
+	TestTimeController.class})
 public abstract class IntegrationTestSupport {
 
 	@Autowired
