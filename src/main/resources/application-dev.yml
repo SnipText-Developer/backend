@@ -1,0 +1,6 @@
+# 개발 서버. 접속 정보는 전부 환경 변수로 받는다.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}

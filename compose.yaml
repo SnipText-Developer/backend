@@ -1,10 +1,20 @@
+# 로컬 개발 전용 MySQL. 아래 계정·비밀번호는 로컬에서만 쓴다.
 services:
   mysql:
-    image: 'mysql:latest'
+    image: 'mysql:8.4'
     environment:
-      - 'MYSQL_DATABASE=mydatabase'
-      - 'MYSQL_PASSWORD=secret'
-      - 'MYSQL_ROOT_PASSWORD=verysecret'
-      - 'MYSQL_USER=myuser'
+      - 'TZ=Asia/Seoul'
+      - 'MYSQL_DATABASE=sniptext'
+      - 'MYSQL_USER=sniptext'
+      - 'MYSQL_PASSWORD=sniptext-local'
+      - 'MYSQL_ROOT_PASSWORD=root-local'
+    command:
+      - '--character-set-server=utf8mb4'
+      - '--collation-server=utf8mb4_0900_ai_ci'
     ports:
-      - '3306'
+      - '3307:3306'  # 호스트에 설치된 MySQL(3306)과 겹치지 않게 3307 사용
+    volumes:
+      - 'mysql-data:/var/lib/mysql'
+
+volumes:
+  mysql-data:
