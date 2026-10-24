@@ -21,6 +21,9 @@ class ArchitectureTest {
 	static final ArchRule 레포지토리는_서비스와_컨트롤러를_쓰지_않는다 = RULES.repositoriesDoNotUseServicesOrControllers();
 
 	@ArchTest
-	static final ArchRule 다른_도메인의_레포지토리를_직접_쓰지_않는다 = RULES.noOtherDomainRepositories();
+	static final ArchRule global은_domain을_참조하지_않는다 = RULES.globalDoesNotUseDomain();
+
+	@ArchTest
+	static final ArchRule 다른_도메인의_레포지토리와_엔티티를_직접_쓰지_않는다 = RULES.noOtherDomainRepositoriesOrEntities();
 
 }

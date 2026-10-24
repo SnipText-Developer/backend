@@ -6,10 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import com.sniptext.architecture.fixture.alpha.controller.AlphaController;
-import com.sniptext.architecture.fixture.alpha.repository.AlphaRepository;
-import com.sniptext.architecture.fixture.alpha.service.AlphaService;
-import com.sniptext.architecture.fixture.alpha.service.CleanAlphaService;
+import com.sniptext.architecture.fixture.domain.alpha.controller.AlphaController;
+import com.sniptext.architecture.fixture.domain.alpha.entity.AlphaEntity;
+import com.sniptext.architecture.fixture.domain.alpha.repository.AlphaRepository;
+import com.sniptext.architecture.fixture.domain.alpha.service.AlphaService;
+import com.sniptext.architecture.fixture.domain.alpha.service.CleanAlphaService;
+import com.sniptext.architecture.fixture.global.BadGlobalConfig;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 
@@ -46,14 +48,25 @@ class ArchitectureRulesTest {
 	}
 
 	@Test
-	@DisplayName("다른 도메인의 레포지토리를 직접 쓰면 실패하고, 같은 도메인의 레포지토리는 허용한다")
-	void otherDomainRepositoryRule() {
-		assertThatThrownBy(() -> RULES.noOtherDomainRepositories().check(fixtures))
+	@DisplayName("global이 domain을 참조하면 규칙이 실패한다")
+	void globalRule() {
+		assertThatThrownBy(() -> RULES.globalDoesNotUseDomain().check(fixtures))
 			.isInstanceOf(AssertionError.class)
-			.hasMessageContaining("BetaRepository");
+			.hasMessageContaining(BadGlobalConfig.class.getSimpleName());
+	}
 
-		JavaClasses sameDomainOnly = new ClassFileImporter().importClasses(CleanAlphaService.class, AlphaRepository.class);
-		assertThatCode(() -> RULES.noOtherDomainRepositories().check(sameDomainOnly)).doesNotThrowAnyException();
+	@Test
+	@DisplayName("다른 도메인의 레포지토리·엔티티를 직접 쓰면 실패하고, 같은 도메인의 것은 허용한다")
+	void otherDomainRule() {
+		assertThatThrownBy(() -> RULES.noOtherDomainRepositoriesOrEntities().check(fixtures))
+			.isInstanceOf(AssertionError.class)
+			.hasMessageContaining("BetaRepository")
+			.hasMessageContaining("BetaEntity");
+
+		JavaClasses sameDomainOnly = new ClassFileImporter()
+			.importClasses(CleanAlphaService.class, AlphaRepository.class, AlphaEntity.class);
+		assertThatCode(() -> RULES.noOtherDomainRepositoriesOrEntities().check(sameDomainOnly))
+			.doesNotThrowAnyException();
 	}
 
 }
