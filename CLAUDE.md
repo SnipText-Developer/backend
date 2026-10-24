@@ -10,7 +10,7 @@ docker compose up -d                                   # 로컬 MySQL
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ./gradlew build                                        # 빌드 + 테스트 + 형식 검사
 ./gradlew test                                         # 전체 테스트 (도커 실행 필요)
-./gradlew test --tests "com.sniptext.template.*"       # 일부만
+./gradlew test --tests "com.sniptext.domain.template.*"  # 일부만
 ```
 
 - 형식 검사 도구: (정해지면 명령어 추가)
@@ -41,30 +41,59 @@ docker compose up -d                                   # 로컬 MySQL
 
 ```
 com.sniptext
-├── global/          # 설정, 보안, 공통 응답, 전역 예외, 공통 유틸
-├── auth/            # 로그인·가입·재발급·로그아웃
-├── user/            # 내 정보·사용량·설정, 현재 플랜 판정
-├── template/        # 내 템플릿 + 휴지통
-├── gallery/         # 갤러리 템플릿
-└── ai/              # AI 톤 교정
+├── domain
+│   ├── auth         # 로그인·가입·재발급·로그아웃. SocialAccount, RefreshToken
+│   ├── user         # User, UserTermsAgreement. 내 정보·설정·사용량, 가입 시 회원 생성
+│   ├── template     # 내 템플릿 + 휴지통 + 휴지통 정리 배치
+│   ├── gallery      # 갤러리 템플릿, 내 템플릿으로 저장
+│   ├── ai           # AI 톤 교정, 하루 사용량, 핵심 정보 검사
+│   └── plan         # 현재 플랜 조회 (PlanQueryService, 테이블 없음)
+└── global
+    ├── security     # 보안 설정, 토큰 필터·발급 도구, 로그인 회원 주입, 개발용 임시 토큰
+    ├── client       # 외부 호출 (구글 토큰 검증, 언어모델)
+    ├── config       # JPA, 출처 허용, 스케줄, 시각 직렬화
+    ├── entity       # 공통 시각 부모 엔티티
+    ├── exception    # 전역 예외 처리, 공통 에러 코드
+    ├── response     # 공통 응답, 결과 코드 인터페이스
+    └── crypto       # 본문 암호화 변환기
 ```
 
 도메인 내부:
 
 ```
-{도메인}/
-├── controller/      (+ dto/  요청·응답 객체)
-├── service/         (+ dto/command, dto/query, dto/result)
-├── repository/      (+ dto/  조회 전용 객체)
+domain/{도메인}/
+├── controller/      # {도메인}SuccessCode (성공 결과 코드 열거형)
+│   └── dto/         # {도메인}{행위}Request · {도메인}{행위}Response
+├── service/         # {도메인}CommandService (쓰기) · {도메인}QueryService (조회)
+│   └── dto/
+│       ├── command/ # {도메인}{행위}Command  (쓰기 입력)
+│       ├── query/   # {도메인}{행위}Query    (조회 입력, 파라미터 2개 이상일 때)
+│       └── result/  # {도메인}{행위}Result   (서비스 반환)
+├── repository/
+│   └── dto/         # {도메인}{대상}Row (조회 전용, 성능 문제가 확인됐을 때만)
 ├── entity/
-└── exception/       # 도메인 에러 코드 열거형
+└── exception/       # {도메인}ErrorCode (에러 결과 코드 열거형)
 ```
 
-- 컨트롤러는 서비스만 부른다. 레포지토리·엔티티를 직접 쓰지 않는다.
+- 변환: `request.toCommand()`, `Response.from(result)`, `Result.from(entity)`, 여러 개 조합은 `of()`
+- 의존 방향: `controller → service → repository · entity`. 컨트롤러는 레포지토리·엔티티를 직접 쓰지 않는다.
 - 컨트롤러의 요청 객체를 서비스에 그대로 넘기지 않는다. `command`/`query`로 바꿔 넘기고, 서비스는 `result`를 돌려준다.
 - 엔티티를 응답으로 내보내지 않는다.
-- 다른 도메인의 레포지토리를 직접 부르지 말고 그 도메인의 서비스를 거친다.
+- **다른 도메인은 그 도메인의 서비스만 부른다.** 남의 레포지토리·엔티티를 직접 쓰지 않는다. (예: 갤러리 저장 → `TemplateCommandService`)
+- `global`은 `domain`을 참조하지 않는다.
+- 성공 코드는 컨트롤러가, 에러 코드는 서비스가 쓴다. 서비스는 성공 코드를 모른다.
+- 버전 구분(`V2`)이 필요하면 컨트롤러의 요청·응답 객체에만 붙인다.
 - 의존 규칙은 ArchUnit 테스트가 강제한다. 테스트가 깨지면 구조를 고치고, 테스트를 고치지 않는다.
+
+**도메인 사이 연결 지점** (메서드 모양을 먼저 정하고 각자 개발)
+
+| 연결 | 메서드 | 만드는 쪽 → 부르는 쪽 |
+| --- | --- | --- |
+| 현재 플랜 조회 | `PlanResult getCurrentPlan(Long userId)` | plan → template, user, ai |
+| 갤러리에서 템플릿 생성 | `TemplateCreateResult createFromGallery(TemplateCreateFromGalleryCommand)` | template → gallery |
+| 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
+| AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` | ai → user |
+| 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
 
 ## 코드 규칙
 
@@ -130,7 +159,7 @@ com.sniptext
 **한도와 플랜**
 - 템플릿 한도는 휴지통 제외 개수 기준 (FREE 5 / PRO 50)
 - 생성·복구·갤러리 저장은 같은 트랜잭션에서 회원 행을 비관적 잠금으로 잡은 뒤 개수 검사 → 저장
-- 현재 플랜 판정은 `user` 도메인의 한 곳에서만 한다. 지금은 `plan_override` 값, 없으면 FREE. 다른 곳에서 플랜을 직접 판단하지 않는다.
+- 현재 플랜 판정과 한도 숫자(템플릿 5/50, AI 하루 10)는 `plan` 도메인의 `PlanQueryService` 한 곳에서만 한다. 지금은 `users.plan_override` 값, 없으면 FREE. 다른 곳에서 플랜이나 한도 숫자를 직접 쓰지 않는다.
 
 **AI 톤 교정**
 - PRO 전용, 하루 10회 (KST 날짜별 1행)
@@ -148,6 +177,7 @@ com.sniptext
 
 **캐시 헤더**
 - `GET /api/v1/gallery/**`만 `Cache-Control: public, max-age=300`. 나머지는 전부 `no-store`
+- 갤러리 경로라도 에러 응답(404, 500 등)은 `no-store` (에러가 5분간 캐시되지 않게)
 - 공개 응답에는 사람마다 다른 값을 절대 넣지 않는다 (CDN이 다른 사람에게 돌려줄 수 있음).
 
 **배치** (셰드락 필수)
@@ -170,7 +200,7 @@ com.sniptext
 
 ## 깃·PR
 
-- 브랜치: `main`(운영) / `develop`(개발 서버) / `feat/#이슈번호-이름`, `fix/...`, `refactor/...`
+- 브랜치: `main`(운영) / `develop`(개발 서버) / `feat/이슈번호-이름`, `fix/...`, `refactor/...`, `chore/...` (예: `feat/12-google-login`). 브랜치 이름에는 `#`을 쓰지 않는다.
 - 커밋: `feat|fix|refactor|test|chore: 한국어 설명 (#이슈번호)` 예) `feat: 구글 로그인 ID 토큰 검증 구현 (#12)`
 - PR은 `develop` 대상, 변경 400줄 안팎. 넘으면 나눈다.
 
