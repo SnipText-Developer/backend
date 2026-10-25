@@ -97,6 +97,11 @@ domain/{도메인}/
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
+| 플랜 지정값 조회 | `Optional<Plan> findPlanOverride(Long userId)` (`UserQueryService`) | user → plan |
+| 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
+
+- **다른 도메인 서비스를 조합하는 조회는 별도 서비스로 분리한다.** 예: 사용량 API는 `UserUsageQueryService`
+  - 순환 참조를 막기 위해서다. plan → `UserQueryService`인데 사용량 때문에 `UserQueryService` → plan을 넣으면 생성자 주입 순환으로 앱이 뜨지 않는다
 
 ## 코드 규칙
 
@@ -157,11 +162,15 @@ domain/{도메인}/
 - `last_used_at`: 사용 기록 API에서만 갱신 → 최근 사용순
 - `edited_at`: 제목·단축어·본문 수정 시에만 갱신 → 최근 수정순. 사용 기록·삭제·복구로는 바뀌지 않는다.
 - `updated_at`: 모든 변경 → 확장 동기화 기준
+- **대량 갱신 쿼리(`@Modifying`)는 자동 시각 기록을 거치지 않으므로 `updated_at`을 직접 넣는다**
+  - 해당하는 곳: 사용 기록의 `last_used_at` 갱신(C), AI 사용량 조건부 증가(A), 휴지통 일괄 처리가 있다면 그것도
+  - `updated_at`은 확장 동기화 기준이라 빠지면 S2에서 동기화가 조용히 틀어진다
 - 사용 횟수는 저장하지 않는다.
 
 **한도와 플랜**
 - 템플릿 한도는 휴지통 제외 개수 기준 (FREE 5 / PRO 50)
 - 생성·복구·갤러리 저장은 같은 트랜잭션에서 회원 행을 비관적 잠금으로 잡은 뒤 개수 검사 → 저장
+- 한도 검사는 `lockUser`를 먼저 부른 같은 트랜잭션 안에서 한다
 - 현재 플랜 판정과 한도 숫자(템플릿 5/50, AI 하루 10)는 `plan` 도메인의 `PlanQueryService` 한 곳에서만 한다. 지금은 `users.plan_override` 값, 없으면 FREE. 다른 곳에서 플랜이나 한도 숫자를 직접 쓰지 않는다.
 
 **AI 톤 교정**
