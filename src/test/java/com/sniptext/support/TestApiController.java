@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.global.response.ApiResponse;
+import com.sniptext.global.security.LoginUser;
 
 /**
  * 공통 설정 검증용 컨트롤러. 컴포넌트 스캔에서 빠지고 IntegrationTestSupport가 직접 등록한다.
@@ -26,6 +27,17 @@ public class TestApiController {
 	@PostMapping("/test/ping")
 	public ResponseEntity<ApiResponse<String>> postPing() {
 		return ApiResponse.success(TestSuccessCode.OK, "pong");
+	}
+
+	@GetMapping("/test/login-user")
+	public ResponseEntity<ApiResponse<Long>> loginUser(@LoginUser Long userId) {
+		return ApiResponse.success(TestSuccessCode.OK, userId);
+	}
+
+	// 공개 경로에서 인증 없이 @LoginUser를 쓰면 COMMON401_1인지 확인하는 용도
+	@GetMapping("/gallery/test/login-user")
+	public ResponseEntity<ApiResponse<Long>> galleryLoginUser(@LoginUser Long userId) {
+		return ApiResponse.success(TestSuccessCode.OK, userId);
 	}
 
 	@GetMapping("/test/forbidden")
