@@ -108,7 +108,13 @@ domain/{도메인}/
 - 이름: `TemplateCreateRequest`, `TemplateResponse` / 변환 메서드는 `from`, `of`
 - 요청·응답·명령·결과 객체는 `record`로 작성한다.
 - 엔티티: 세터 금지, `@NoArgsConstructor(access = AccessLevel.PROTECTED)`, 연관관계는 지연 로딩, 양방향은 꼭 필요할 때만. 값 변경은 의미 있는 메서드로 (`template.rename(...)`)
-- 롬복 허용: `@Getter`, `@NoArgsConstructor(access = PROTECTED)`, 생성자에 붙인 `@Builder`, `@RequiredArgsConstructor`, `@Slf4j`
+- 엔티티 생성: `create`로 시작하는 정적 팩토리로만 만든다. 생성 경로가 여럿이면 이름으로 구분한다 (예: `Template.create`, `Template.createFromGallery`). 빌더는 `@Builder(access = AccessLevel.PRIVATE)`로 팩토리 안에서만 쓴다
+  - 팩토리는 불변 조건(필수 값, 길이 등)만 검사하고 위반은 `IllegalArgumentException`. 바깥 입력은 요청 객체와 서비스에서 이미 검증하므로 여기서 걸리면 코드 실수라 500이 맞다
+  - 화면에 보일 에러 코드는 지금처럼 서비스가 던진다
+  - 엔티티 패키지에 생성 전용 객체를 두지 않는다. 계층별 이름(`{도메인}{행위}Command` 등)과 겹친다. 인자가 많으면 팩토리 안에서 빌더로 처리한다
+  - 테스트에서는 픽스처로 만든다 (테스트 참고)
+  - 기존 `User`는 아직 공개 빌더다. 가입 이슈에서 `create`로 바꾸고 테스트도 픽스처로 옮긴다. 그 전까지 `User.builder()`를 새 코드의 예시로 삼지 않는다
+- 롬복 허용: `@Getter`, `@NoArgsConstructor(access = PROTECTED)`, `@Builder(access = PRIVATE)`(정적 팩토리 안에서만), `@RequiredArgsConstructor`, `@Slf4j`
 - 롬복 금지: `@Setter`, `@Data`, `@AllArgsConstructor`, 엔티티의 `@ToString`·`@EqualsAndHashCode`
 - 트랜잭션: 서비스 클래스에 `@Transactional(readOnly = true)`, 쓰기 메서드에만 `@Transactional`
 - 검증: 형식 검증은 요청 객체(빈 검증), 업무 규칙 검증은 서비스
@@ -209,6 +215,7 @@ domain/{도메인}/
 - 기능 하나에 테스트가 같이 들어간다. 테스트 없는 PR은 병합하지 않는다.
 - 테스트 이름은 `@DisplayName`에 한국어로 쓴다.
 - 서비스 단위 테스트는 모키토, 레포지토리·통합 테스트는 테스트컨테이너 MySQL (H2 쓰지 않음. 생성 컬럼·잠금 동작이 다르다)
+- 테스트에서 엔티티는 `src/test/.../fixture/{엔티티}Fixture`로 만든다. 생성 인자가 바뀌어도 테스트가 한꺼번에 깨지지 않게 하기 위해서다
 - 반드시 검증할 것: 본인 소유가 아니면 404, 한도 경계(4→5, 5→6), 단축어 정규화·대소문자 중복, 동시 요청 시 한도 초과 방지
 
 ## 깃·PR

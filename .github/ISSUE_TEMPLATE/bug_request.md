@@ -1,5 +1,5 @@
 ---
-name: 버그
+name: 버그 제보
 about: 잘못 동작하는 부분을 알립니다
 title: "[fix] "
 labels: fix
