@@ -45,6 +45,25 @@ class JwtAuthenticationTest extends IntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("쿼리에 userId를 붙여도 @LoginUser에는 토큰의 회원 번호가 들어온다")
+	void queryParamDoesNotOverrideLoginUser() throws Exception {
+		mockMvc.perform(get(PROTECTED_PATH).param("userId", "999").header(HttpHeaders.AUTHORIZATION, bearer(7L)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.result").value(7));
+	}
+
+	@Test
+	@DisplayName("@LoginUser를 long에 잘못 쓰면 쿼리의 userId가 들어가지 않고 COMMON500_1")
+	void misusedLoginUserTypeDoesNotTakeQueryParam() throws Exception {
+		mockMvc.perform(get("/api/v1/test/login-user-primitive").param("userId", "999")
+				.header(HttpHeaders.AUTHORIZATION, bearer(7L)))
+			.andExpect(status().isInternalServerError())
+			.andExpect(jsonPath("$.isSuccess").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON500_1"))
+			.andExpect(jsonPath("$.result").isEmpty());
+	}
+
+	@Test
 	@DisplayName("토큰이 없거나 Bearer 접두어가 없으면 COMMON401_1")
 	void missingToken() throws Exception {
 		expectUnauthorized(mockMvc.perform(get(PROTECTED_PATH)), "COMMON401_1");

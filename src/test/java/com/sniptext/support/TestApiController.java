@@ -34,6 +34,13 @@ public class TestApiController {
 		return ApiResponse.success(TestSuccessCode.OK, userId);
 	}
 
+	// @LoginUser를 Long이 아닌 타입에 잘못 쓴 경우. 쿼리 값이 들어가지 않고 500인지 확인하는 용도
+	// (운영 코드에서는 ArchUnit이 막는다. 테스트 코드는 검사 대상이 아니라 둘 수 있다)
+	@GetMapping("/test/login-user-primitive")
+	public ResponseEntity<ApiResponse<Long>> primitiveLoginUser(@LoginUser long userId) {
+		return ApiResponse.success(TestSuccessCode.OK, userId);
+	}
+
 	// 공개 경로에서 인증 없이 @LoginUser를 쓰면 COMMON401_1인지 확인하는 용도
 	@GetMapping("/gallery/test/login-user")
 	public ResponseEntity<ApiResponse<Long>> galleryLoginUser(@LoginUser Long userId) {
