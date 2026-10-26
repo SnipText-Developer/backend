@@ -149,7 +149,7 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 		assertThat(found.getSourceGalleryTemplateId()).isNull();
 	}
 
-	// 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 BaseTimeEntityTest처럼 직접 저장한다
+	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 BaseTimeEntityTest처럼 직접 저장한다
 	private Long saveUser(String email) {
 		User user = User.builder()
 			.email(email)
