@@ -22,3 +22,9 @@ management:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+# 접근 토큰 서명 키 (32바이트 이상). 기본값이 없어 빠뜨리면 기동에 실패한다.
+# 개발 서버와 운영의 키는 반드시 다르게 둔다 (개발 서버 토큰이 운영에서 통하지 않게).
+sniptext:
+  jwt:
+    secret: ${JWT_SECRET}

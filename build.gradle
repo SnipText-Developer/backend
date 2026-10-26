@@ -30,6 +30,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	// 접근 토큰 서명·검증과 구글 ID 토큰 검증을 같은 라이브러리로 처리한다 (리소스 서버 스타터는 쓰지 않는다)
+	implementation 'org.springframework.security:spring-security-oauth2-jose'
 	implementation 'org.flywaydb:flyway-mysql'
 	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
 	implementation "io.github.openfeign.querydsl:querydsl-jpa:${querydslVersion}"
@@ -58,4 +60,6 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 	systemProperty 'user.timezone', 'Asia/Seoul'
+	// 테스트 전용 서명 키. src/test/resources/application.yml은 운영 설정을 통째로 가리므로 만들지 않는다
+	environment 'JWT_SECRET', 'test-only-jwt-secret-do-not-use-anywhere-else'
 }
