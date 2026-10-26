@@ -72,7 +72,8 @@ domain/{도메인}/
 ├── repository/
 │   └── dto/         # {도메인}{대상}Row (조회 전용, 성능 문제가 확인됐을 때만)
 ├── entity/
-└── exception/       # {도메인}ErrorCode (에러 결과 코드 열거형)
+├── exception/       # {도메인}ErrorCode (에러 결과 코드 열거형)
+└── annotation/      # 요청 검증 어노테이션 · 검사 클래스 (예: @ValidShortcut)
 ```
 
 - 변환: `request.toCommand()`, `Response.from(result)`, `Result.from(entity)`, 여러 개 조합은 `of()`
@@ -83,6 +84,7 @@ domain/{도메인}/
 - `global`은 `domain`을 참조하지 않는다.
 - 성공 코드는 컨트롤러가, 에러 코드는 서비스가 쓴다. 서비스는 성공 코드를 모른다.
 - 버전 구분(`V2`)이 필요하면 컨트롤러의 요청·응답 객체에만 붙인다.
+- 엔티티의 규칙을 쓰는 요청 검증 어노테이션은 `annotation`에 둔다. `controller/dto`에 두면 컨트롤러가 엔티티를 쓰게 되어 ArchUnit에 걸린다. `annotation`은 `entity`·`exception`만 쓰고 `controller`·`service`는 부르지 않는다.
 - 값을 나타내는 열거형(정렬 기준, 플랜, 카테고리 등)은 그 값을 저장하는 엔티티의 도메인 `entity` 패키지에 둔다. 저장하지 않는 값은 그 값을 쓰는 도메인의 `entity` 패키지에 둔다.
 - `entity` 패키지의 열거형은 컨트롤러와 다른 도메인에서 직접 써도 된다. 엔티티 클래스는 안 된다.
 - 열거형 상수 이름은 API 값이 된다. 명세를 먼저 바꾸지 않고 상수 이름을 바꾸지 않는다.
