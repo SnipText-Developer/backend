@@ -108,7 +108,12 @@ domain/{도메인}/
 - 이름: `TemplateCreateRequest`, `TemplateResponse` / 변환 메서드는 `from`, `of`
 - 요청·응답·명령·결과 객체는 `record`로 작성한다.
 - 엔티티: 세터 금지, `@NoArgsConstructor(access = AccessLevel.PROTECTED)`, 연관관계는 지연 로딩, 양방향은 꼭 필요할 때만. 값 변경은 의미 있는 메서드로 (`template.rename(...)`)
-- 롬복 허용: `@Getter`, `@NoArgsConstructor(access = PROTECTED)`, 생성자에 붙인 `@Builder`, `@RequiredArgsConstructor`, `@Slf4j`
+- 엔티티 생성: 정적 팩토리 `create(...)`로만 만든다. 빌더는 `@Builder(access = AccessLevel.PRIVATE)`로 팩토리 안에서만 쓴다
+  - 팩토리는 불변 조건(필수 값, 길이 등)만 검사하고 위반은 `IllegalArgumentException`. 바깥 입력은 요청 객체와 서비스에서 이미 검증하므로 여기서 걸리면 코드 실수라 500이 맞다
+  - 화면에 보일 에러 코드는 지금처럼 서비스가 던진다
+  - 엔티티 패키지에 생성 전용 객체를 두지 않는다. 계층별 이름(`{도메인}{행위}Command` 등)과 겹친다. 인자가 많으면 팩토리 안에서 빌더로 처리한다
+  - 테스트에서 엔티티는 `src/test/.../fixture/{엔티티}Fixture`로 만든다. 생성 인자가 바뀌어도 테스트가 한꺼번에 깨지지 않게 하기 위해서다
+- 롬복 허용: `@Getter`, `@NoArgsConstructor(access = PROTECTED)`, `@Builder(access = PRIVATE)`(정적 팩토리 안에서만), `@RequiredArgsConstructor`, `@Slf4j`
 - 롬복 금지: `@Setter`, `@Data`, `@AllArgsConstructor`, 엔티티의 `@ToString`·`@EqualsAndHashCode`
 - 트랜잭션: 서비스 클래스에 `@Transactional(readOnly = true)`, 쓰기 메서드에만 `@Transactional`
 - 검증: 형식 검증은 요청 객체(빈 검증), 업무 규칙 검증은 서비스
