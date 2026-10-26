@@ -26,4 +26,7 @@ class ArchitectureTest {
 	@ArchTest
 	static final ArchRule 다른_도메인의_레포지토리와_엔티티를_직접_쓰지_않는다 = RULES.noOtherDomainRepositoriesOrEntities();
 
+	@ArchTest
+	static final ArchRule LoginUser_파라미터는_Long_타입이다 = RULES.loginUserParametersAreLong();
+
 }

@@ -193,6 +193,11 @@ domain/{도메인}/
 - 웹의 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다.
 - 로그아웃은 접근 토큰 없이 쿠키만으로 처리하고, 쿠키가 없거나 이미 폐기돼도 성공으로 응답한다.
 - 개발용 임시 토큰 발급 경로는 `local`·`dev` 프로필에서만 켠다.
+- 컨트롤러에서 로그인 회원은 `@LoginUser Long userId`로 받는다. 인증 정보(`SecurityContextHolder`)에서 직접 꺼내지 않는다. Long만 허용한다 (ArchUnit이 강제). 다른 타입으로 쓰면 쿼리 값이 들어가는 구멍이 생긴다.
+- 접근 토큰이 없거나 만료되면 `COMMON401_1`, 위조·형식 오류·종류가 다른 토큰이면 `COMMON401_2`다. 필터는 사유만 요청 속성에 남기고, 응답은 진입점이 한다.
+- 통합 테스트에서 인증된 요청은 `IntegrationTestSupport.bearer(userId)`로 만든다 (실제 발급 도구 사용). `@WithMockUser`로는 `@LoginUser`가 채워지지 않는다.
+- 서명 키는 `JWT_SECRET` 환경 변수로 받고 32바이트 미만이면 기동에 실패한다. 개발 서버와 운영의 키는 반드시 다르게 둔다.
+- 테스트용 서명 키는 `build.gradle` 테스트 작업의 `environment`로 넣는다. `src/test/resources/application.yml`을 만들지 않는다 (운영 `application.yml`을 통째로 가린다).
 
 **캐시 헤더**
 - `GET /api/v1/gallery/**`만 `Cache-Control: public, max-age=300`. 나머지는 전부 `no-store`

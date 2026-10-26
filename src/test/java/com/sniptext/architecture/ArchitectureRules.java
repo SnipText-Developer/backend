@@ -3,18 +3,22 @@ package com.sniptext.architecture;
 import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import com.sniptext.global.security.LoginUser;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaParameter;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 /**
- * CLAUDE.md "패키지 구조"의 의존 규칙. {루트}.domain.{도메인}을 도메인으로, {루트}.global을 공통 코드로 본다.
+ * CLAUDE.md "패키지 구조"의 의존 규칙과 "인증"의 @LoginUser 타입 규칙. {루트}.domain.{도메인}을 도메인으로, {루트}.global을 공통 코드로 본다.
  * 도메인 코드가 아직 없어도 실패하지 않도록 allowEmptyShould(true)를 둔다.
  */
 final class ArchitectureRules {
@@ -74,6 +78,31 @@ final class ArchitectureRules {
 			.should(notDependOnOtherDomainRepositoriesOrEntities())
 			.because("다른 도메인은 그 도메인의 서비스만 부른다 (entity 패키지의 열거형은 허용)")
 			.allowEmptyShould(true);
+	}
+
+	/**
+	 * {@code @LoginUser}는 Long 파라미터에만 쓴다. 다른 타입이면 리졸버가 예외를 던지지만, 실행 전에 막는다.
+	 * 리졸버가 타입을 가리던 때에는 잘못 쓴 파라미터에 쿼리 값(?userId=999)이 들어갔다.
+	 */
+	ArchRule loginUserParametersAreLong() {
+		return methods().should(haveOnlyLongLoginUserParameters())
+			.because("@LoginUser는 Long만 허용한다. 다른 타입으로 쓰면 쿼리 값이 들어가는 구멍이 생긴다")
+			.allowEmptyShould(true);
+	}
+
+	private ArchCondition<JavaMethod> haveOnlyLongLoginUserParameters() {
+		return new ArchCondition<>("@LoginUser 파라미터는 java.lang.Long 타입이다") {
+			@Override
+			public void check(JavaMethod method, ConditionEvents events) {
+				for (JavaParameter parameter : method.getParameters()) {
+					if (parameter.isAnnotatedWith(LoginUser.class) && !parameter.getRawType().isEquivalentTo(Long.class)) {
+						String message = "%s의 %d번째 파라미터가 @LoginUser인데 %s 타입이다".formatted(
+							method.getFullName(), parameter.getIndex() + 1, parameter.getRawType().getName());
+						events.add(SimpleConditionEvent.violated(method, message));
+					}
+				}
+			}
+		};
 	}
 
 	private String layer(String name) {

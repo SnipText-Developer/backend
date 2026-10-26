@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import com.sniptext.architecture.fixture.domain.alpha.controller.AlphaController;
 import com.sniptext.architecture.fixture.domain.alpha.controller.CleanAlphaController;
+import com.sniptext.architecture.fixture.domain.alpha.controller.CleanLoginUserController;
+import com.sniptext.architecture.fixture.domain.alpha.controller.LoginUserMisuseController;
 import com.sniptext.architecture.fixture.domain.alpha.entity.AlphaEntity;
 import com.sniptext.architecture.fixture.domain.alpha.entity.AlphaStatus;
 import com.sniptext.architecture.fixture.domain.alpha.repository.AlphaRepository;
@@ -82,6 +84,20 @@ class ArchitectureRulesTest {
 		JavaClasses allowedOnly = new ClassFileImporter()
 			.importClasses(CleanAlphaService.class, AlphaRepository.class, AlphaEntity.class, BetaCategory.class);
 		assertThatCode(() -> RULES.noOtherDomainRepositoriesOrEntities().check(allowedOnly))
+			.doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("@LoginUser를 long·Integer에 쓰면 실패하고, Long에 쓰면 허용한다")
+	void loginUserTypeRule() {
+		assertThatThrownBy(() -> RULES.loginUserParametersAreLong().check(fixtures))
+			.isInstanceOf(AssertionError.class)
+			.hasMessageContaining(LoginUserMisuseController.class.getSimpleName() + ".primitiveLong(long)")
+			.hasMessageContaining(LoginUserMisuseController.class.getSimpleName() + ".boxedInteger(java.lang.String, java.lang.Integer)")
+			.hasMessageNotContaining(CleanLoginUserController.class.getSimpleName());
+
+		JavaClasses cleanOnly = new ClassFileImporter().importClasses(CleanLoginUserController.class);
+		assertThatCode(() -> RULES.loginUserParametersAreLong().check(cleanOnly))
 			.doesNotThrowAnyException();
 	}
 

@@ -1,0 +1,5 @@
+# 로컬 개발. DB는 도커 컴포즈가 연결한다.
+# 아래 서명 키 기본값은 로컬 전용이다. 개발 서버·운영에서는 절대 쓰지 않는다.
+sniptext:
+  jwt:
+    secret: ${JWT_SECRET:local-only-jwt-secret-for-sniptext-dev}
