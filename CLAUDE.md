@@ -192,7 +192,8 @@ domain/{도메인}/
 - 재발급 토큰은 원문 대신 SHA-256 해시를 저장한다. 쓸 때마다 교체하고, 폐기된 토큰이 다시 오면 같은 `family_id` 전체를 폐기한다.
 - 웹의 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다.
 - 로그아웃은 접근 토큰 없이 쿠키만으로 처리하고, 쿠키가 없거나 이미 폐기돼도 성공으로 응답한다.
-- 개발용 임시 토큰 발급 경로는 `local`·`dev` 프로필에서만 켠다.
+- 개발용 임시 토큰 발급 경로는 `local`·`dev` 프로필에서만 켠다. 프로필 지정은 나열 방식(`@Profile({"local", "dev"})`)으로 쓰고 `"!prod"`는 금지 (프로필을 빠뜨린 서버에서 `!prod`가 참이 되어 운영에 열린다)
+- 로컬에서 인증 API 확인: `local` 프로필로 실행 → `POST /api/v1/auth/dev-token` `{"userId":1}` → 받은 토큰을 스웨거 Authorize에 입력. 시드 회원 1번은 FREE, 2번은 PRO
 - 컨트롤러에서 로그인 회원은 `@LoginUser Long userId`로 받는다. 인증 정보(`SecurityContextHolder`)에서 직접 꺼내지 않는다. Long만 허용한다 (ArchUnit이 강제). 다른 타입으로 쓰면 쿼리 값이 들어가는 구멍이 생긴다.
 - 접근 토큰이 없거나 만료되면 `COMMON401_1`, 위조·형식 오류·종류가 다른 토큰이면 `COMMON401_2`다. 필터는 사유만 요청 속성에 남기고, 응답은 진입점이 한다.
 - 통합 테스트에서 인증된 요청은 `IntegrationTestSupport.bearer(userId)`로 만든다 (실제 발급 도구 사용). `@WithMockUser`로는 `@LoginUser`가 채워지지 않는다.

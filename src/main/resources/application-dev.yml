@@ -4,3 +4,6 @@ spring:
     url: ${DB_URL}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+  flyway:
+    # 기본값을 통째로 덮어쓰므로 db/migration을 빼면 테이블 생성이 사라진다. db/seed는 개발용 시드 회원
+    locations: classpath:db/migration,classpath:db/seed
