@@ -184,7 +184,7 @@ class TemplateTest {
 
 	}
 
-	/** 수정 시각이 NOW로 채워진 템플릿. 저장 없이 단위 테스트에서 수정 시각이 바뀌지 않는지 보기 위해 쓴다 */
+	/** 수정 시각이 NOW인 템플릿 */
 	private static Template editedTemplate() {
 		Template template = TemplateFixture.template(USER_ID);
 		template.edit(TITLE, SHORTCUT, CONTENT, NOW);
