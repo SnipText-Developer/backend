@@ -13,10 +13,8 @@ import lombok.NoArgsConstructor;
 /**
  * 템플릿 본문. NFC 정규화와 CRLF → LF 통일을 한 뒤 1~3000자인 값만 만들 수 있다 (글자 수는 화면과 같은 String.length()).
  * NFC는 맥 자모 분리형 입력이 글자 수를 부풀리고 화면 검색에서 어긋나지 않게 하기 위해서다.
- * 앞뒤 공백과 줄바꿈은 본문의 일부라 그대로 둔다. 공백만 있는지는 화면(JS trim)과 같은 기준으로 본다 (TextWhitespace).
- * 형식이 틀린 중괄호도 일반 글자로 두고 막지 않는다.
- * 사용자에게 보여 줄 에러(TEMPLATE400_6·7)는 요청 단계(@ValidTemplateContent)에서 먼저 막으므로, create에서 실패하면
- * 검사를 빠뜨린 버그다. 본문은 로그에 남기지 않으므로 메시지에 입력값을 넣지 않고 toString을 만들지 않는다.
+ * 앞뒤 공백과 줄바꿈은 본문의 일부라 그대로 둔다.
+ * create의 예외는 요청 검증을 빠뜨린 버그다. 로그에 남으므로 메시지와 toString에 입력값을 넣지 않는다.
  */
 @Getter
 @Embeddable
