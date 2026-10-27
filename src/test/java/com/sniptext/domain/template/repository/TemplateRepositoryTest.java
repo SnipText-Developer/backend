@@ -3,6 +3,7 @@ package com.sniptext.domain.template.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -115,6 +116,20 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 
 		assertThat(template.getEditedAt()).isEqualTo(FIXED).isEqualTo(template.getCreatedAt());
 		assertThat(reload(template).getEditedAt()).isEqualTo(FIXED);
+	}
+
+	@Test
+	@DisplayName("같은 값으로 수정하면 UPDATE가 나가지 않아 수정 시각과 updated_at이 그대로다")
+	void sameValuesEditDoesNotUpdate() {
+		Template template = templateRepository.saveAndFlush(TemplateFixture.template(userId));
+		clock.advance(Duration.ofHours(1));
+
+		template.edit(template.getTitle(), template.getShortcut(), template.getContent(), LocalDateTime.now(clock));
+		templateRepository.flush();
+
+		Template found = reload(template);
+		assertThat(found.getEditedAt()).isEqualTo(FIXED);
+		assertThat(found.getUpdatedAt()).isEqualTo(FIXED);
 	}
 
 	@Test

@@ -99,6 +99,40 @@ class TemplateTest {
 		}
 
 		@Test
+		@DisplayName("세 값이 모두 기존과 같으면 수정 시각을 바꾸지 않는다 (편집 화면을 열었다가 그대로 저장)")
+		void sameValuesKeepEditedAt() {
+			Template template = editedTemplate();
+
+			template.edit(TemplateTitle.create(TemplateFixture.TITLE), Shortcut.create(TemplateFixture.SHORTCUT),
+				TemplateContent.create(TemplateFixture.CONTENT), NOW.plusHours(1));
+
+			assertThat(template.getEditedAt()).isEqualTo(NOW);
+		}
+
+		@Test
+		@DisplayName("정리한 뒤 같은 값이면 같은 값으로 보고 수정 시각을 바꾸지 않는다")
+		void sameAfterNormalizationKeepsEditedAt() {
+			Template template = editedTemplate();
+
+			template.edit(TemplateTitle.create(" " + TemplateFixture.TITLE + " "), SHORTCUT,
+				TemplateContent.create(TemplateFixture.CONTENT.replace("\n", "\r\n")), NOW.plusHours(1));
+
+			assertThat(template.getEditedAt()).isEqualTo(NOW);
+		}
+
+		@Test
+		@DisplayName("단축어 대소문자만 바꿔도 수정으로 보고 수정 시각을 바꾼다")
+		void caseOnlyShortcutChangeUpdatesEditedAt() {
+			Template template = editedTemplate();
+			template.edit(TITLE, Shortcut.create("/Quote"), CONTENT, NOW.plusHours(1));
+
+			template.edit(TITLE, Shortcut.create("/quote"), CONTENT, NOW.plusHours(2));
+
+			assertThat(template.getShortcut().getValue()).isEqualTo("/quote");
+			assertThat(template.getEditedAt()).isEqualTo(NOW.plusHours(2));
+		}
+
+		@Test
 		@DisplayName("이름, 단축어, 본문, 수정 시각 중 하나라도 없으면 IllegalArgumentException")
 		void requiredValues() {
 			Template template = editedTemplate();
@@ -184,9 +218,9 @@ class TemplateTest {
 
 	}
 
-	/** 수정 시각이 NOW인 템플릿 */
+	/** 수정 시각이 NOW인 템플릿. 같은 값 수정은 무시되므로 다른 이름에서 수정해 만든다 */
 	private static Template editedTemplate() {
-		Template template = TemplateFixture.template(USER_ID);
+		Template template = Template.create(USER_ID, TemplateTitle.create("처음 이름"), SHORTCUT, CONTENT);
 		template.edit(TITLE, SHORTCUT, CONTENT, NOW);
 		return template;
 	}
