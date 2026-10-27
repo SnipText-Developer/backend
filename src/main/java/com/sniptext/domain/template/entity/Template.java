@@ -98,9 +98,13 @@ public class Template extends BaseTimeEntity {
 			.build();
 	}
 
+	/** 세 값이 모두 기존과 같으면 아무것도 바꾸지 않는다 (전체 수정이라 편집 화면을 그대로 저장해도 호출된다) */
 	public void edit(TemplateTitle title, Shortcut shortcut, TemplateContent content, LocalDateTime now) {
 		validateValues(title, shortcut, content);
 		require(now != null, "수정 시각이 없다");
+		if (title.equals(this.title) && shortcut.equals(this.shortcut) && content.equals(this.content)) {
+			return;
+		}
 		this.title = title;
 		this.shortcut = shortcut;
 		this.content = content;
