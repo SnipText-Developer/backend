@@ -12,21 +12,24 @@ import org.springframework.data.repository.query.Param;
 import com.sniptext.domain.ai.entity.AiToneDailyUsage;
 
 /**
- * 선점은 "행 확보 → 조건부 증가" 두 단계로 한다. INSERT ... ON DUPLICATE KEY UPDATE 한 번으로 하면
- * 드라이버가 돌려주는 행 수의 의미가 설정에 따라 달라 성공·실패 판정이 흔들린다.
+ * 선점은 "행 확보 → 조건부 증가" 두 단계로 한다. INSERT ... ON DUPLICATE KEY UPDATE 한 번으로 증가까지 하고
+ * 그 행 수로 판정하면, 드라이버가 돌려주는 행 수의 의미가 설정에 따라 달라 성공·실패 판정이 흔들린다.
  * 조건부 UPDATE는 바뀐 행 수가 1(성공)/0(실패)로 분명하다.
  * 대량 갱신 쿼리는 감사 기능을 거치지 않으므로 updated_at을 직접 넣는다.
  */
 public interface AiToneDailyUsageRepository extends JpaRepository<AiToneDailyUsage, Long> {
 
 	/**
-	 * 그날 행이 없으면 0회로 만든다. 이미 있으면 아무것도 하지 않는다.
-	 * INSERT IGNORE는 외래키 위반도 경고로 넘기므로, 회원 존재 확인은 부르는 쪽(플랜 조회)에서 먼저 한다.
+	 * 그날 행이 없으면 0회로 만든다. 이미 있으면 값을 바꾸지 않는다. 돌려주는 행 수는 판정에 쓰지 않는다.
+	 * INSERT IGNORE를 쓰지 않는다. 중복 행에 공유 잠금을 걸어, 동시 요청 둘이 공유 잠금을 쥔 채
+	 * 이어지는 UPDATE에서 서로의 배타 잠금을 기다리는 교착이 생긴다 (동시 선점 테스트에서 재현).
+	 * ON DUPLICATE KEY UPDATE는 중복 행에 배타 잠금을 걸어 두 번째 요청이 첫 번째 커밋까지 기다린다.
 	 */
 	@Modifying
 	@Query(value = """
-		INSERT IGNORE INTO ai_tone_daily_usages (user_id, usage_date, used_count, updated_at)
+		INSERT INTO ai_tone_daily_usages (user_id, usage_date, used_count, updated_at)
 		VALUES (:userId, :usageDate, 0, :now)
+		ON DUPLICATE KEY UPDATE used_count = used_count
 		""", nativeQuery = true)
 	int insertIfAbsent(@Param("userId") Long userId, @Param("usageDate") LocalDate usageDate,
 		@Param("now") LocalDateTime now);

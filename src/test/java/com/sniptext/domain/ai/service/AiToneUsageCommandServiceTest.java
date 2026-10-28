@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -40,6 +41,8 @@ import com.sniptext.support.MutableClockConfiguration;
 class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 
 	private static final int LIMIT = 10;
+	/** 동시 선점 테스트 반복 횟수 */
+	private static final int REPEATS = 10;
 	/** DATETIME(6)과 같은 마이크로초 정밀도 */
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 25, 10, 0, 0, 123_456_000);
 	private static final LocalDate TODAY = NOW.toLocalDate();
@@ -135,41 +138,29 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		assertThat(aiToneUsageCommandService.reserve(userId, LIMIT).usedCountAfter()).isEqualTo(1);
 	}
 
-	@Test
+	/**
+	 * 행 확보 쿼리가 중복 행에 공유 잠금을 걸면(INSERT IGNORE) 두 요청이 이어지는 UPDATE에서 교착에 빠진다.
+	 * 교착은 타이밍에 따라 가끔 나므로(INSERT IGNORE일 때 50번 중 19번) 여러 번 돌린다.
+	 * 한 번이라도 실패하면 잠금 순서를 의심한다.
+	 */
+	@RepeatedTest(REPEATS)
 	@DisplayName("9회 사용 상태에서 두 요청이 동시에 선점하면 1건만 성공하고 최종 10회다")
 	void concurrentReserve() throws Exception {
 		reserveTimes(9);
-		CountDownLatch ready = new CountDownLatch(2);
-		CountDownLatch start = new CountDownLatch(1);
-		ExecutorService executor = Executors.newFixedThreadPool(2);
 
-		try {
-			List<Future<Outcome>> futures = new ArrayList<>();
-			for (int i = 0; i < 2; i++) {
-				futures.add(executor.submit(() -> {
-					ready.countDown();
-					await(start);
-					try {
-						aiToneUsageCommandService.reserve(userId, LIMIT);
-						return Outcome.RESERVED;
-					} catch (BusinessException e) {
-						return e.getResultCode() == AiErrorCode.DAILY_LIMIT_EXCEEDED ? Outcome.LIMIT_EXCEEDED : Outcome.OTHER;
-					}
-				}));
-			}
-			await(ready);
-			start.countDown();
+		List<Outcome> outcomes = reserveConcurrently(2);
 
-			List<Outcome> outcomes = new ArrayList<>();
-			for (Future<Outcome> future : futures) {
-				outcomes.add(future.get(30, TimeUnit.SECONDS));
-			}
+		assertThat(outcomes).containsExactlyInAnyOrder(Outcome.RESERVED, Outcome.LIMIT_EXCEEDED);
+		assertThat(usedCount(TODAY)).isEqualTo(10);
+	}
 
-			assertThat(outcomes).containsExactlyInAnyOrder(Outcome.RESERVED, Outcome.LIMIT_EXCEEDED);
-			assertThat(usedCount(TODAY)).isEqualTo(10);
-		} finally {
-			executor.shutdownNow();
-		}
+	@RepeatedTest(REPEATS)
+	@DisplayName("오늘 행이 없을 때 두 요청이 동시에 선점하면 둘 다 성공하고 행은 1개, 2회다")
+	void concurrentReserveWithoutRow() throws Exception {
+		List<Outcome> outcomes = reserveConcurrently(2);
+
+		assertThat(outcomes).containsExactly(Outcome.RESERVED, Outcome.RESERVED);
+		assertThat(usedCount(TODAY)).isEqualTo(2);
 	}
 
 	@Test
@@ -244,6 +235,39 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	private void reserveTimes(int times) {
 		for (int i = 0; i < times; i++) {
 			aiToneUsageCommandService.reserve(userId, LIMIT);
+		}
+	}
+
+	/** 스레드들을 출발선에 세운 뒤 동시에 선점하게 하고 각 결과를 모은다 */
+	private List<Outcome> reserveConcurrently(int threads) throws Exception {
+		CountDownLatch ready = new CountDownLatch(threads);
+		CountDownLatch start = new CountDownLatch(1);
+		ExecutorService executor = Executors.newFixedThreadPool(threads);
+
+		try {
+			List<Future<Outcome>> futures = new ArrayList<>();
+			for (int i = 0; i < threads; i++) {
+				futures.add(executor.submit(() -> {
+					ready.countDown();
+					await(start);
+					try {
+						aiToneUsageCommandService.reserve(userId, LIMIT);
+						return Outcome.RESERVED;
+					} catch (BusinessException e) {
+						return e.getResultCode() == AiErrorCode.DAILY_LIMIT_EXCEEDED ? Outcome.LIMIT_EXCEEDED : Outcome.OTHER;
+					}
+				}));
+			}
+			await(ready);
+			start.countDown();
+
+			List<Outcome> outcomes = new ArrayList<>();
+			for (Future<Outcome> future : futures) {
+				outcomes.add(future.get(30, TimeUnit.SECONDS));
+			}
+			return outcomes;
+		} finally {
+			executor.shutdownNow();
 		}
 	}
 
