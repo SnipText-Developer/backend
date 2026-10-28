@@ -81,13 +81,13 @@ final class ArchitectureRules {
 	}
 
 	/**
-	 * support는 다른 도메인이 써도 되는 순수 규칙만 둔다. 같은 도메인의 service·repository·controller를 참조하면
-	 * 다른 도메인이 support를 통해 그 계층에 닿게 되므로 막는다.
+	 * support는 다른 도메인이 써도 되는 순수 규칙만 둔다. 어느 도메인이든 service·repository·controller를 참조하면
+	 * 상태·DB·스프링 빈에 묶이고, 다른 도메인이 support를 통해 그 계층에 닿게 되므로 막는다.
 	 */
-	ArchRule supportDoesNotUseSameDomainLayers() {
-		return classes().that().resideInAPackage(layer("support"))
-			.should(notDependOnSameDomainLayers("service", "repository", "controller"))
-			.because("support는 상태·DB·스프링 빈 없는 순수 규칙만 둔다")
+	ArchRule supportHoldsOnlyPureRules() {
+		return noClasses().that().resideInAPackage(layer("support"))
+			.should().dependOnClassesThat().resideInAnyPackage(layer("service"), layer("repository"), layer("controller"))
+			.because("support에는 다른 도메인이 써도 되는 순수 규칙만 둔다 (어느 도메인의 service·repository·controller도 참조하지 않는다)")
 			.allowEmptyShould(true);
 	}
 
@@ -137,24 +137,6 @@ final class ArchitectureRules {
 					boolean inEntity = (targetPackage + ".").startsWith(targetDomainPackage + "entity.");
 					if (inRepository || (inEntity && !target.isEnum())) {
 						events.add(SimpleConditionEvent.violated(dependency, dependency.getDescription()));
-					}
-				}
-			}
-		};
-	}
-
-	private ArchCondition<JavaClass> notDependOnSameDomainLayers(String... layers) {
-		return new ArchCondition<>("같은 도메인의 " + String.join("·", layers) + "에 의존하지 않는다") {
-			@Override
-			public void check(JavaClass origin, ConditionEvents events) {
-				String originDomain = domainOf(origin.getPackageName());
-				String originDomainPackage = domainRoot + "." + originDomain + ".";
-				for (Dependency dependency : origin.getDirectDependenciesFromSelf()) {
-					String targetPackage = dependency.getTargetClass().getBaseComponentType().getPackageName() + ".";
-					for (String layer : layers) {
-						if (targetPackage.startsWith(originDomainPackage + layer + ".")) {
-							events.add(SimpleConditionEvent.violated(dependency, dependency.getDescription()));
-						}
 					}
 				}
 			}
