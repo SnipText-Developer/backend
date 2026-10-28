@@ -2,7 +2,7 @@ package com.sniptext.domain.template.entity;
 
 /**
  * 템플릿 이름이 규칙을 어긴 이유. 검사 순서대로 나열한다 (저장하지 않는 값).
- * API로 그대로 내보내지 않는 내부 값이다. 결과 코드로 바꿀 때는 TemplateErrorCode.from을 쓴다.
+ * API로 그대로 내보내지 않는 내부 값이다.
  */
 public enum TemplateTitleViolation {
 

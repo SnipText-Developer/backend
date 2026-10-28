@@ -33,6 +33,23 @@ class TemplateTitleTest {
 	}
 
 	@ParameterizedTest
+	@ValueSource(strings = {"견적\n안내", "견적\t안내", "견적\r\n안내", "견적\n\n\t안내", "견적\u2028안내"})
+	@DisplayName("가운데 줄바꿈·탭은 이어진 묶음째 공백 하나로 바꾼다 (한 줄로 보여 주는 곳에서 깨지지 않게)")
+	void replaceInnerLineBreaksAndTabs(String title) {
+		assertThat(TemplateTitle.create(title).getValue()).isEqualTo("견적 안내");
+	}
+
+	@Test
+	@DisplayName("줄바꿈·탭을 공백으로 바꾼 뒤 글자 수를 센다 (CRLF가 공백 하나가 되어 50자면 통과)")
+	void lengthAfterReplacingLineBreaks() {
+		String title = "가".repeat(25) + "\r\n" + "가".repeat(24);
+
+		assertThat(title).hasSize(51);
+		assertThat(TemplateTitle.findViolation(title)).isEmpty();
+		assertThat(TemplateTitle.create(title).getValue()).hasSize(50);
+	}
+
+	@ParameterizedTest
 	@ValueSource(strings = {" 견적 ", "﻿견적", "　견적　", "견적 ", " 견적 "})
 	@DisplayName("화면(JS trim)이 공백으로 보는 NBSP·BOM·전각 공백·줄 구분자도 앞뒤에서 제거한다")
 	void stripUnicodeSpaces(String title) {
