@@ -3,6 +3,7 @@ package com.sniptext.domain.template.entity;
 import java.text.Normalizer;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -11,11 +12,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 템플릿 이름. NFC 정규화와 앞뒤 공백 제거를 한 뒤 1~50자인 값만 만들 수 있다. 이름 중복은 허용한다.
+ * 템플릿 이름. NFC 정규화, 가운데 줄바꿈·탭을 공백 하나로 바꾸기, 앞뒤 공백 제거를 한 뒤 1~50자인 값만 만들 수 있다.
  * NFC는 맥 자모 분리형 입력이 글자 수를 부풀리고 화면 검색에서 어긋나지 않게 하기 위해서다.
- * 공백은 화면(JS trim)과 같은 기준으로 본다 (TextWhitespace).
- * 사용자에게 보여 줄 에러(TEMPLATE400_1·2)는 요청 단계(@ValidTemplateTitle)에서 먼저 막으므로, create에서 실패하면
- * 검사를 빠뜨린 버그다. 메시지는 로그에 남으므로 입력값 없이 위반 이름만 넣는다. 같은 이유로 toString을 만들지 않는다.
+ * 줄바꿈·탭은 화면 입력칸으로는 들어오지 않지만, API로 들어오면 카드·확장 팝업처럼 한 줄로 보여 주는 곳이 깨진다.
+ * create의 예외는 요청 검증을 빠뜨린 버그다. 로그에 남으므로 메시지와 toString에 입력값을 넣지 않는다.
  */
 @Getter
 @Embeddable
@@ -23,6 +23,7 @@ import lombok.NoArgsConstructor;
 public class TemplateTitle {
 
 	private static final int MAX_LENGTH = 50;
+	private static final Pattern LINE_BREAKS_AND_TABS = Pattern.compile("[\\t\\n\\x0B\\f\\r\\u0085\\u2028\\u2029]+");
 
 	@Column(name = "title", nullable = false, length = 50)
 	private String value;
@@ -72,7 +73,8 @@ public class TemplateTitle {
 	}
 
 	private static String normalize(String title) {
-		return TextWhitespace.strip(Normalizer.normalize(title, Normalizer.Form.NFC));
+		String nfc = Normalizer.normalize(title, Normalizer.Form.NFC);
+		return TextWhitespace.strip(LINE_BREAKS_AND_TABS.matcher(nfc).replaceAll(" "));
 	}
 
 }
