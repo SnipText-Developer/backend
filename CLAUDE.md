@@ -74,7 +74,7 @@ domain/{도메인}/
 ├── entity/
 ├── exception/       # {도메인}ErrorCode (에러 결과 코드 열거형)
 ├── annotation/      # 요청 검증 어노테이션 · 검사 클래스 (예: @ValidShortcut)
-└── support/         # 다른 도메인이 써도 되는 순수 규칙 (예: TemplateVariables)
+└── support/         # 다른 도메인이 써도 되는 순수 규칙 (예: TemplateVariableExtractor)
 ```
 
 - 변환: `request.toCommand()`, `Response.from(result)`, `Result.from(entity)`, 여러 개 조합은 `of()`
@@ -167,7 +167,7 @@ domain/{도메인}/
 **본문·변수**
 - 저장 전 `CRLF` → `LF`, 그다음 글자 수 검사. 글자 수는 `String.length()` (화면과 같은 기준)
 - 변수: `\{\{([가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9_]+)\}\}`만 변수. 형식이 틀린 중괄호는 일반 글자로 두고 저장을 막지 않는다.
-- 변수 목록은 저장하지 않는다. 조회 시 복호화한 본문에서 뽑아 첫 등장 순, 중복 제거로 내려준다. 목록은 `TemplateVariables.extract`(`template/support`)로만 만든다.
+- 변수 목록은 저장하지 않는다. 조회 시 복호화한 본문에서 뽑아 첫 등장 순, 중복 제거로 내려준다. 목록은 `TemplateVariableExtractor.extract`(`template/support`)로만 만든다.
 
 **시각 컬럼의 의미** (섞지 말 것)
 - `last_used_at`: 사용 기록 API에서만 갱신 → 최근 사용순

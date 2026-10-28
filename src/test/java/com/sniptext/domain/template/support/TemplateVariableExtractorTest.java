@@ -13,7 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-class TemplateVariablesTest {
+class TemplateVariableExtractorTest {
 
 	/** 역추적이 폭발하면 수 초 이상 걸린다. CI의 느린 첫 실행도 견디도록 넉넉히 1초로 둔다. */
 	private static final Duration QUICK = Duration.ofSeconds(1);
@@ -21,14 +21,14 @@ class TemplateVariablesTest {
 	@Test
 	@DisplayName("변수를 첫 등장 순으로, 같은 이름은 한 번만 돌려준다")
 	void firstAppearanceOrderWithoutDuplicates() {
-		assertThat(TemplateVariables.extract("{{고객명}} {{금액}} {{고객명}}"))
+		assertThat(TemplateVariableExtractor.extract("{{고객명}} {{금액}} {{고객명}}"))
 			.containsExactly("고객명", "금액");
 	}
 
 	@Test
 	@DisplayName("한글 완성형·자음·모음, 영문, 숫자, 밑줄을 변수 이름으로 허용한다")
 	void allowedCharacters() {
-		assertThat(TemplateVariables.extract("{{고객명}}{{ㄱㄴ}}{{ㅏㅣ}}{{Name}}{{2026}}{{고객_이름1}}"))
+		assertThat(TemplateVariableExtractor.extract("{{고객명}}{{ㄱㄴ}}{{ㅏㅣ}}{{Name}}{{2026}}{{고객_이름1}}"))
 			.containsExactly("고객명", "ㄱㄴ", "ㅏㅣ", "Name", "2026", "고객_이름1");
 	}
 
@@ -43,19 +43,19 @@ class TemplateVariablesTest {
 	})
 	@DisplayName("형식이 틀린 중괄호는 변수가 아니고 에러도 아니다")
 	void notVariables(String content) {
-		assertThat(TemplateVariables.extract(content)).isEmpty();
+		assertThat(TemplateVariableExtractor.extract(content)).isEmpty();
 	}
 
 	@Test
 	@DisplayName("세 겹 중괄호 {{{고객명}}}은 안쪽 {{고객명}}을 변수로 본다 (명세에 없는 경우를 고정)")
 	void tripleBraces() {
-		assertThat(TemplateVariables.extract("{{{고객명}}}")).containsExactly("고객명");
+		assertThat(TemplateVariableExtractor.extract("{{{고객명}}}")).containsExactly("고객명");
 	}
 
 	@Test
 	@DisplayName("형식이 틀린 중괄호가 섞여도 바른 변수는 뽑는다")
 	void mixedWithInvalid() {
-		assertThat(TemplateVariables.extract("{고객} {{ 금액 }} {{고객명}}님 {{}} {{날짜}}"))
+		assertThat(TemplateVariableExtractor.extract("{고객} {{ 금액 }} {{고객명}}님 {{}} {{날짜}}"))
 			.containsExactly("고객명", "날짜");
 	}
 
@@ -63,13 +63,13 @@ class TemplateVariablesTest {
 	@NullAndEmptySource
 	@DisplayName("null·빈 문자열이면 빈 목록")
 	void nullOrEmpty(String content) {
-		assertThat(TemplateVariables.extract(content)).isEmpty();
+		assertThat(TemplateVariableExtractor.extract(content)).isEmpty();
 	}
 
 	@Test
 	@DisplayName("돌려준 목록은 수정할 수 없다")
 	void unmodifiable() {
-		List<String> variables = TemplateVariables.extract("{{고객명}}");
+		List<String> variables = TemplateVariableExtractor.extract("{{고객명}}");
 
 		assertThatThrownBy(() -> variables.add("금액"))
 			.isInstanceOf(UnsupportedOperationException.class);
@@ -81,7 +81,7 @@ class TemplateVariablesTest {
 		String content = "{{".repeat(1500);
 		assertThat(content).hasSize(3000);
 
-		List<String> variables = assertTimeoutPreemptively(QUICK, () -> TemplateVariables.extract(content));
+		List<String> variables = assertTimeoutPreemptively(QUICK, () -> TemplateVariableExtractor.extract(content));
 
 		assertThat(variables).isEmpty();
 	}
@@ -92,7 +92,7 @@ class TemplateVariablesTest {
 		String content = ("{{" + "가".repeat(98)).repeat(30);
 		assertThat(content).hasSize(3000);
 
-		List<String> variables = assertTimeoutPreemptively(QUICK, () -> TemplateVariables.extract(content));
+		List<String> variables = assertTimeoutPreemptively(QUICK, () -> TemplateVariableExtractor.extract(content));
 
 		assertThat(variables).isEmpty();
 	}
