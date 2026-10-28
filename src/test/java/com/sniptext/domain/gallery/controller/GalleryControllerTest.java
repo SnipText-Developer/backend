@@ -106,6 +106,31 @@ class GalleryControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("변수 없는 템플릿은 목록에서 variables가 null이나 누락이 아닌 빈 배열이다")
+	void emptyVariablesInList() throws Exception {
+		MvcResult result = mockMvc.perform(get(LIST_PATH))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.result.templates[1].galleryTemplateId").value(thanks.getId()))
+			.andExpect(jsonPath("$.result.templates[1].variables").isArray())
+			.andExpect(jsonPath("$.result.templates[1].variables", hasSize(0)))
+			.andReturn();
+
+		assertThat(body(result)).contains("\"variables\":[]");
+	}
+
+	@Test
+	@DisplayName("변수 없는 템플릿은 상세에서 variables가 null이나 누락이 아닌 빈 배열이다")
+	void emptyVariablesInDetail() throws Exception {
+		MvcResult result = mockMvc.perform(get(LIST_PATH + "/{id}", thanks.getId()))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.result.variables").isArray())
+			.andExpect(jsonPath("$.result.variables", hasSize(0)))
+			.andReturn();
+
+		assertThat(body(result)).contains("\"variables\":[]");
+	}
+
+	@Test
 	@DisplayName("상세: 비공개 템플릿이면 GALLERY404_1, 캐시 금지")
 	void hiddenDetail() throws Exception {
 		expectNotFound(hidden.getId());

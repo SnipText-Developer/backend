@@ -75,6 +75,22 @@ class GalleryDevSeedTest extends IntegrationTestSupport {
 		assertThat(contents).anyMatch(content -> !content.contains("{{"));
 	}
 
+	/**
+	 * 시드는 '\n' 이스케이프로 줄바꿈을 쓴다. DB가 역슬래시를 일반 글자로 보는 설정(NO_BACKSLASH_ESCAPES)이면
+	 * 역슬래시+n 두 글자로 들어가는데, 이 경우도 규칙 검사는 통과하므로 따로 본다.
+	 */
+	@Test
+	@DisplayName("시드 본문의 줄바꿈은 진짜 LF이고, 역슬래시+n 두 글자나 CR이 없다")
+	void seedContentHasRealLineFeeds() {
+		List<String> contents = seedRows().stream().map(row -> (String)row.get("content")).toList();
+
+		assertThat(contents).anyMatch(content -> content.contains("\n"));
+		assertThat(contents).allSatisfy(content -> {
+			assertThat(content).doesNotContain("\\n");
+			assertThat(content).doesNotContain("\r");
+		});
+	}
+
 	private List<Map<String, Object>> seedRows() {
 		return jdbcTemplate.queryForList(
 			"SELECT id, category, title, shortcut, content, display_order, is_published FROM gallery_templates ORDER BY id");
