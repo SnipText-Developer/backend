@@ -160,7 +160,11 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		List<Outcome> outcomes = reserveConcurrently(2);
 
 		assertThat(outcomes).containsExactly(Outcome.RESERVED, Outcome.RESERVED);
-		assertThat(usedCount(TODAY)).isEqualTo(2);
+		assertThat(aiToneDailyUsageRepository.findAll())
+			.filteredOn(usage -> usage.getUserId().equals(userId) && usage.getUsageDate().equals(TODAY))
+			.singleElement()
+			.extracting(AiToneDailyUsage::getUsedCount)
+			.isEqualTo(2);
 	}
 
 	@Test
