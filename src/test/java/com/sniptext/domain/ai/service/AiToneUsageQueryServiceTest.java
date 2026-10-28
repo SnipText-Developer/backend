@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.sniptext.domain.ai.repository.AiToneDailyUsageRepository;
 import com.sniptext.domain.ai.service.dto.result.AiToneUsageResult;
@@ -41,6 +42,9 @@ class AiToneUsageQueryServiceTest extends IntegrationTestSupport {
 
 	@Autowired
 	private UserRepository userRepository;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
 
 	@Autowired
 	private MutableClock clock;
@@ -84,6 +88,23 @@ class AiToneUsageQueryServiceTest extends IntegrationTestSupport {
 
 		assertThat(aiToneUsageQueryService.getTodayUsage(userId))
 			.isEqualTo(new AiToneUsageResult(true, 4, 10, 6, NEXT_MIDNIGHT));
+	}
+
+	@Test
+	@DisplayName("같은 날 PRO로 3회 쓴 뒤 FREE가 되면 0/0/0, 다시 PRO가 되면 3/10, 남은 7")
+	void planChangedSameDay() {
+		Long userId = saveUser(Plan.PRO);
+		for (int i = 0; i < 3; i++) {
+			aiToneUsageCommandService.reserve(userId, 10);
+		}
+
+		changePlanOverride(userId, null);
+		assertThat(aiToneUsageQueryService.getTodayUsage(userId))
+			.isEqualTo(new AiToneUsageResult(false, 0, 0, 0, NEXT_MIDNIGHT));
+
+		changePlanOverride(userId, Plan.PRO);
+		assertThat(aiToneUsageQueryService.getTodayUsage(userId))
+			.isEqualTo(new AiToneUsageResult(true, 3, 10, 7, NEXT_MIDNIGHT));
 	}
 
 	@Test
@@ -143,6 +164,12 @@ class AiToneUsageQueryServiceTest extends IntegrationTestSupport {
 			.nickname("닉네임")
 			.planOverride(planOverride)
 			.build()).getId();
+	}
+
+	/** User에는 플랜 지정값을 바꾸는 메서드가 없어(결제 도입 전에는 DB에서 바꾼다) 테스트도 SQL로 바꾼다 */
+	private void changePlanOverride(Long userId, Plan planOverride) {
+		jdbcTemplate.update("UPDATE users SET plan_override = ? WHERE id = ?",
+			planOverride == null ? null : planOverride.name(), userId);
 	}
 
 }
