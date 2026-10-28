@@ -99,7 +99,7 @@ domain/{도메인}/
 | 현재 플랜 조회 | `PlanResult getCurrentPlan(Long userId)` | plan → template, user, ai |
 | 갤러리에서 템플릿 생성 | `TemplateCreateResult createFromGallery(TemplateCreateFromGalleryCommand)` | template → gallery |
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
-| AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` | ai → user |
+| AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
 | 플랜 지정값 조회 | `Optional<Plan> findPlanOverride(Long userId)` (`UserQueryService`) | user → plan |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
