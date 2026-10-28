@@ -18,7 +18,7 @@ import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 /**
- * CLAUDE.md "패키지 구조"의 의존 규칙과 "인증"의 @LoginUser 타입 규칙. {루트}.domain.{도메인}을 도메인으로, {루트}.global을 공통 코드로 본다.
+ * CLAUDE.md "패키지 구조"·"도메인 내부"의 의존 규칙과 "인증"의 @LoginUser 타입 규칙. {루트}.domain.{도메인}을 도메인으로, {루트}.global을 공통 코드로 본다.
  * 도메인 코드가 아직 없어도 실패하지 않도록 allowEmptyShould(true)를 둔다.
  */
 final class ArchitectureRules {
@@ -81,6 +81,17 @@ final class ArchitectureRules {
 	}
 
 	/**
+	 * support는 다른 도메인이 써도 되는 순수 규칙만 둔다. 같은 도메인의 service·repository·controller를 참조하면
+	 * 다른 도메인이 support를 통해 그 계층에 닿게 되므로 막는다.
+	 */
+	ArchRule supportDoesNotUseSameDomainLayers() {
+		return classes().that().resideInAPackage(layer("support"))
+			.should(notDependOnSameDomainLayers("service", "repository", "controller"))
+			.because("support는 상태·DB·스프링 빈 없는 순수 규칙만 둔다")
+			.allowEmptyShould(true);
+	}
+
+	/**
 	 * {@code @LoginUser}는 Long 파라미터에만 쓴다. 다른 타입이면 리졸버가 예외를 던지지만, 실행 전에 막는다.
 	 * 리졸버가 타입을 가리던 때에는 잘못 쓴 파라미터에 쿼리 값(?userId=999)이 들어갔다.
 	 */
@@ -126,6 +137,24 @@ final class ArchitectureRules {
 					boolean inEntity = (targetPackage + ".").startsWith(targetDomainPackage + "entity.");
 					if (inRepository || (inEntity && !target.isEnum())) {
 						events.add(SimpleConditionEvent.violated(dependency, dependency.getDescription()));
+					}
+				}
+			}
+		};
+	}
+
+	private ArchCondition<JavaClass> notDependOnSameDomainLayers(String... layers) {
+		return new ArchCondition<>("같은 도메인의 " + String.join("·", layers) + "에 의존하지 않는다") {
+			@Override
+			public void check(JavaClass origin, ConditionEvents events) {
+				String originDomain = domainOf(origin.getPackageName());
+				String originDomainPackage = domainRoot + "." + originDomain + ".";
+				for (Dependency dependency : origin.getDirectDependenciesFromSelf()) {
+					String targetPackage = dependency.getTargetClass().getBaseComponentType().getPackageName() + ".";
+					for (String layer : layers) {
+						if (targetPackage.startsWith(originDomainPackage + layer + ".")) {
+							events.add(SimpleConditionEvent.violated(dependency, dependency.getDescription()));
+						}
 					}
 				}
 			}

@@ -15,6 +15,8 @@ import com.sniptext.architecture.fixture.domain.alpha.entity.AlphaStatus;
 import com.sniptext.architecture.fixture.domain.alpha.repository.AlphaRepository;
 import com.sniptext.architecture.fixture.domain.alpha.service.AlphaService;
 import com.sniptext.architecture.fixture.domain.alpha.service.CleanAlphaService;
+import com.sniptext.architecture.fixture.domain.alpha.support.AlphaSupport;
+import com.sniptext.architecture.fixture.domain.alpha.support.CleanAlphaSupport;
 import com.sniptext.architecture.fixture.domain.beta.entity.BetaCategory;
 import com.sniptext.architecture.fixture.global.BadGlobalConfig;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -84,6 +86,21 @@ class ArchitectureRulesTest {
 		JavaClasses allowedOnly = new ClassFileImporter()
 			.importClasses(CleanAlphaService.class, AlphaRepository.class, AlphaEntity.class, BetaCategory.class);
 		assertThatCode(() -> RULES.noOtherDomainRepositoriesOrEntities().check(allowedOnly))
+			.doesNotThrowAnyException();
+	}
+
+	@Test
+	@DisplayName("support가 같은 도메인의 서비스·레포지토리·컨트롤러를 쓰면 실패하고, entity 패키지의 열거형만 쓰면 허용한다")
+	void supportRule() {
+		assertThatThrownBy(() -> RULES.supportDoesNotUseSameDomainLayers().check(fixtures))
+			.isInstanceOf(AssertionError.class)
+			.hasMessageContaining(AlphaSupport.class.getSimpleName() + ".alphaService")
+			.hasMessageContaining(AlphaSupport.class.getSimpleName() + ".alphaRepository")
+			.hasMessageContaining(AlphaSupport.class.getSimpleName() + ".alphaController")
+			.hasMessageNotContaining(CleanAlphaSupport.class.getSimpleName());
+
+		JavaClasses cleanOnly = new ClassFileImporter().importClasses(CleanAlphaSupport.class, AlphaStatus.class);
+		assertThatCode(() -> RULES.supportDoesNotUseSameDomainLayers().check(cleanOnly))
 			.doesNotThrowAnyException();
 	}
 
