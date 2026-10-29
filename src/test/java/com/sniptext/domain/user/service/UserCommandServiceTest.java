@@ -20,6 +20,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.domain.user.exception.UserErrorCode;
 import com.sniptext.domain.user.repository.UserRepository;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.exception.BusinessException;
 import com.sniptext.support.IntegrationTestSupport;
 
@@ -58,11 +59,8 @@ class UserCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("탈퇴 회원을 잠그면 USER404_1")
 	void lockDeletedUser() {
-		User deleted = userRepository.save(User.builder()
-			.email("deleted@sniptext.com")
-			.nickname("탈퇴회원")
-			.deletedAt(LocalDateTime.of(2026, 10, 1, 0, 0))
-			.build());
+		User deleted = userRepository.save(
+			UserFixture.deletedUser("deleted@sniptext.com", LocalDateTime.of(2026, 10, 1, 0, 0)));
 
 		assertThatThrownBy(
 			() -> transactionTemplate.executeWithoutResult(status -> userCommandService.lockUser(deleted.getId())))
@@ -122,10 +120,7 @@ class UserCommandServiceTest extends IntegrationTestSupport {
 	}
 
 	private User saveUser() {
-		return userRepository.save(User.builder()
-			.email("lock@sniptext.com")
-			.nickname("잠금회원")
-			.build());
+		return userRepository.save(UserFixture.user("lock@sniptext.com"));
 	}
 
 	private static void await(CountDownLatch latch) {
