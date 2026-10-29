@@ -14,7 +14,8 @@ import javax.crypto.spec.SecretKeySpec;
 
 /**
  * AES-256-GCM. 저장값은 {@code v1:} + Base64(IV 12바이트 ‖ 암호문 ‖ 태그 16바이트)다.
- * 버전 표시는 키를 바꿀 때 옛 키로 쓴 값을 구분하기 위해 둔다.
+ * v1은 형식 버전이자 지금 키를 뜻한다 (설정에 키가 하나뿐이다).
+ * 키를 바꾸면 새 키로 쓴 값은 v2로 저장하고, 복호화할 때 접두어로 키를 고른다.
  * 원문·저장값·키는 예외 메시지에 넣지 않는다 (전역 예외 처리가 예외와 원인을 로그에 남긴다).
  */
 public class AesGcmContentCipher implements ContentCipher {
