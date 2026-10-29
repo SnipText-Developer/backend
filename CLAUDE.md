@@ -99,7 +99,7 @@ domain/{도메인}/
 | 현재 플랜 조회 | `PlanResult getCurrentPlan(Long userId)` | plan → template, user, ai |
 | 갤러리에서 템플릿 생성 | `TemplateCreateResult createFromGallery(TemplateCreateFromGalleryCommand)` | template → gallery |
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
-| AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` | ai → user |
+| AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
 | 플랜 지정값 조회 | `Optional<Plan> findPlanOverride(Long userId)` (`UserQueryService`) | user → plan |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
@@ -213,6 +213,7 @@ domain/{도메인}/
 - `GET /api/v1/gallery/**`만 `Cache-Control: public, max-age=300`. 나머지는 전부 `no-store`
 - 갤러리 경로라도 에러 응답(404, 500 등)은 `no-store` (에러가 5분간 캐시되지 않게)
 - 공개 응답에는 사람마다 다른 값을 절대 넣지 않는다 (CDN이 다른 사람에게 돌려줄 수 있음).
+- 갤러리 운영 데이터는 db/migration의 버전 마이그레이션으로 넣고, 넣기 전에 내 템플릿 규칙 검사(시드 검사 테스트와 같은 방식)를 통과시킨다
 
 **배치** (셰드락 필수)
 - 매일 00:10 휴지통 30일 지난 템플릿 영구 삭제
@@ -221,6 +222,7 @@ domain/{도메인}/
 ## 보안·개인정보
 
 - `templates.content`는 JPA 변환기로 AES-GCM 암호화한다. DB에서 본문을 검색하지 않는다 (검색은 화면에서).
+- 본문 암호화 키는 `CONTENT_ENCRYPTION_KEY` 환경 변수로 받는다 (Base64로 인코딩한 32바이트, 아니면 기동 실패). 개발 서버와 운영의 키는 반드시 다르게 두고, 키를 잃으면 저장된 본문을 복구할 수 없다.
 - 갤러리 본문은 공개 데이터라 암호화하지 않는다.
 - 템플릿 본문, 토큰, 이메일을 로그에 남기지 않는다.
 - 비밀 값은 환경 변수로만 읽는다. `.env`와 실제 키를 커밋하지 않는다.

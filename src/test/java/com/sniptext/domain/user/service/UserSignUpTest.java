@@ -6,13 +6,15 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.LocalDateTime;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.IllegalTransactionStateException;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.user.entity.TermsType;
 import com.sniptext.domain.user.entity.User;
@@ -24,8 +26,11 @@ import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClock;
 import com.sniptext.support.MutableClockConfiguration;
 
-/** 가입 시 회원 생성(UserCommandService.signUp). 닉네임 정리의 경계는 NicknameNormalizerTest에서 본다. */
-@Transactional
+/**
+ * 가입 시 회원 생성(UserCommandService.signUp). 닉네임 정리의 경계는 NicknameNormalizerTest에서 본다.
+ * 클래스에 @Transactional을 붙이지 않는다. auth의 가입 처리처럼 각 호출을 TransactionTemplate으로 감싸 실제로 커밋하고,
+ * 트랜잭션 밖에서 부르는 경우도 그대로 검증한다. 끝나면 만든 약관 동의와 회원을 지운다.
+ */
 @Import(MutableClockConfiguration.class)
 class UserSignUpTest extends IntegrationTestSupport {
 
@@ -42,6 +47,9 @@ class UserSignUpTest extends IntegrationTestSupport {
 	private UserTermsAgreementRepository userTermsAgreementRepository;
 
 	@Autowired
+	private TransactionTemplate transactionTemplate;
+
+	@Autowired
 	private MutableClock clock;
 
 	@BeforeEach
@@ -49,15 +57,22 @@ class UserSignUpTest extends IntegrationTestSupport {
 		clock.setTo(NOW);
 	}
 
+	@AfterEach
+	void tearDown() {
+		userTermsAgreementRepository.deleteAllInBatch();
+		userRepository.deleteAllInBatch();
+	}
+
 	@Test
-	@DisplayName("가입하면 회원 1명과 필수 약관 동의 2줄(SERVICE·PRIVACY, 현재 버전 v1, 지금 시각)이 저장된다")
+	@DisplayName("가입하면 회원 1명(마지막 로그인은 지금)과 필수 약관 동의 2줄(SERVICE·PRIVACY, 현재 버전 v1, 지금 시각)이 저장된다")
 	void signUp() {
-		Long userId = userCommandService.signUp(new UserSignUpCommand("signup@gmail.com", "  홍길동 ", PROFILE));
+		Long userId = signUp(new UserSignUpCommand("signup@gmail.com", "  홍길동 ", PROFILE));
 
 		User user = userRepository.findById(userId).orElseThrow();
 		assertThat(user.getEmail()).isEqualTo("signup@gmail.com");
 		assertThat(user.getNickname()).isEqualTo("홍길동");
 		assertThat(user.getProfileImageUrl()).isEqualTo(PROFILE);
+		assertThat(user.getLastLoginAt()).isEqualTo(NOW);
 		assertThat(userTermsAgreementRepository.findAllByUserId(userId))
 			.extracting(UserTermsAgreement::getTermsType, UserTermsAgreement::getVersion, UserTermsAgreement::getAgreedAt)
 			.containsExactlyInAnyOrder(
@@ -68,7 +83,7 @@ class UserSignUpTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("구글 이름이 없으면 이메일 앞부분을 닉네임으로 저장한다")
 	void nicknameFromEmail() {
-		Long userId = userCommandService.signUp(new UserSignUpCommand("noname@gmail.com", null, null));
+		Long userId = signUp(new UserSignUpCommand("noname@gmail.com", null, null));
 
 		assertThat(userRepository.findById(userId).orElseThrow().getNickname()).isEqualTo("noname");
 	}
@@ -78,20 +93,42 @@ class UserSignUpTest extends IntegrationTestSupport {
 	void dropTooLongProfileImage() {
 		String tooLong = "https://x.com/" + "a".repeat(User.PROFILE_IMAGE_URL_MAX_LENGTH);
 
-		Long tooLongUserId = userCommandService.signUp(new UserSignUpCommand("long@gmail.com", "긴주소", tooLong));
-		Long blankUserId = userCommandService.signUp(new UserSignUpCommand("blank@gmail.com", "빈주소", " "));
+		Long tooLongUserId = signUp(new UserSignUpCommand("long@gmail.com", "긴주소", tooLong));
+		Long blankUserId = signUp(new UserSignUpCommand("blank@gmail.com", "빈주소", " "));
 
 		assertThat(userRepository.findById(tooLongUserId).orElseThrow().getProfileImageUrl()).isNull();
 		assertThat(userRepository.findById(blankUserId).orElseThrow().getProfileImageUrl()).isNull();
 	}
 
 	@Test
-	@DisplayName("같은 이메일로 다시 가입하면 DB 유니크 위반이 그대로 올라간다 (AUTH409_1 변환은 auth의 몫)")
+	@DisplayName("같은 이메일로 다시 가입하면 DB 유니크 위반이 그대로 올라가고 두 번째 가입은 저장되지 않는다 (AUTH409_1 변환은 auth의 몫)")
 	void duplicateEmail() {
-		userCommandService.signUp(new UserSignUpCommand("dup@gmail.com", "처음", null));
+		signUp(new UserSignUpCommand("dup@gmail.com", "처음", null));
+		long users = userRepository.count();
+		long agreements = userTermsAgreementRepository.count();
 
-		assertThatThrownBy(() -> userCommandService.signUp(new UserSignUpCommand("dup@gmail.com", "두번째", null)))
+		assertThatThrownBy(() -> signUp(new UserSignUpCommand("dup@gmail.com", "두번째", null)))
 			.isInstanceOf(DataIntegrityViolationException.class);
+		assertThat(userRepository.count()).isEqualTo(users);
+		assertThat(userTermsAgreementRepository.count()).isEqualTo(agreements);
+	}
+
+	@Test
+	@DisplayName("트랜잭션 밖에서 부르면 IllegalTransactionStateException이고 회원·약관 동의를 저장하지 않는다")
+	void signUpOutsideTransaction() {
+		long users = userRepository.count();
+		long agreements = userTermsAgreementRepository.count();
+
+		assertThatThrownBy(() -> userCommandService.signUp(new UserSignUpCommand("alone@gmail.com", "혼자", null)))
+			.isInstanceOf(IllegalTransactionStateException.class);
+
+		assertThat(userRepository.count()).isEqualTo(users);
+		assertThat(userTermsAgreementRepository.count()).isEqualTo(agreements);
+	}
+
+	/** auth의 가입 처리처럼 바깥 트랜잭션을 열고 부른다. */
+	private Long signUp(UserSignUpCommand command) {
+		return transactionTemplate.execute(status -> userCommandService.signUp(command));
 	}
 
 }
