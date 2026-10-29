@@ -16,7 +16,9 @@ import com.sniptext.global.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
-/** 내 템플릿 (로그인 필요, 캐시 금지). */
+/**
+ * 내 템플릿 (로그인 필요, 캐시 금지).
+ */
 @RestController
 @RequestMapping("/api/v1/templates")
 @RequiredArgsConstructor
@@ -25,9 +27,12 @@ public class TemplateController {
 	private final TemplateCommandService templateCommandService;
 
 	@PostMapping
-	public ResponseEntity<ApiResponse<TemplateResponse>> createTemplate(@LoginUser Long userId,
+	public ResponseEntity<ApiResponse<TemplateResponse>> createTemplate(
+		@LoginUser Long userId,
 		@Valid @RequestBody TemplateCreateRequest request) {
+
 		TemplateCreateResult result = templateCommandService.create(request.toCommand(userId));
+
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_CREATED, TemplateResponse.from(result));
 	}
 

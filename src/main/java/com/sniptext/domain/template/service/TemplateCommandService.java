@@ -38,18 +38,20 @@ public class TemplateCommandService {
 	@Transactional
 	public TemplateCreateResult create(TemplateCreateCommand command) {
 		userCommandService.lockUser(command.userId());
+
 		validateTemplateLimit(command.userId());
 
 		TemplateTitle title = TemplateTitle.create(command.title());
+
 		Shortcut shortcut = Shortcut.create(command.shortcut());
-		TemplateContent content = TemplateContent.create(command.content());
 		validateShortcutAvailable(command.userId(), shortcut);
+
+		TemplateContent content = TemplateContent.create(command.content());
 
 		Template template = Template.create(command.userId(), title, shortcut, content);
 		return TemplateCreateResult.from(save(template));
 	}
 
-	/** lockUser를 먼저 부른 같은 트랜잭션 안에서만 부른다. 개수는 countActive와 같은 쿼리다 */
 	private void validateTemplateLimit(Long userId) {
 		int templateLimit = planQueryService.getCurrentPlan(userId).templateLimit();
 		if (templateRepository.countByUserIdAndDeletedAtIsNull(userId) >= templateLimit) {
@@ -57,7 +59,6 @@ public class TemplateCommandService {
 		}
 	}
 
-	/** 활성 템플릿(휴지통 제외)에 같은 단축어 키가 있으면 저장을 시도하지 않는다 (실패한 INSERT는 겹친 단축어를 DB 에러 로그에 남긴다) */
 	private void validateShortcutAvailable(Long userId, Shortcut shortcut) {
 		if (templateRepository.existsByUserIdAndActiveShortcutKey(userId, shortcut.getKey())) {
 			throw new BusinessException(TemplateErrorCode.SHORTCUT_DUPLICATED);
