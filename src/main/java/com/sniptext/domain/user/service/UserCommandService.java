@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +17,10 @@ import com.sniptext.domain.user.repository.UserTermsAgreementRepository;
 import com.sniptext.domain.user.service.dto.command.UserSignUpCommand;
 import com.sniptext.global.exception.BusinessException;
 
+import lombok.RequiredArgsConstructor;
+
 @Service
+@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class UserCommandService {
 
@@ -28,19 +30,7 @@ public class UserCommandService {
 	private final UserRepository userRepository;
 	private final UserTermsAgreementRepository userTermsAgreementRepository;
 	private final Clock clock;
-	private final String currentTermsVersion;
-
-	public UserCommandService(UserRepository userRepository,
-		UserTermsAgreementRepository userTermsAgreementRepository, Clock clock,
-		@Value("${sniptext.terms.current-version}") String currentTermsVersion) {
-		if (currentTermsVersion.isBlank() || currentTermsVersion.length() > UserTermsAgreement.VERSION_MAX_LENGTH) {
-			throw new IllegalStateException("sniptext.terms.current-version은 1~20자여야 합니다");
-		}
-		this.userRepository = userRepository;
-		this.userTermsAgreementRepository = userTermsAgreementRepository;
-		this.clock = clock;
-		this.currentTermsVersion = currentTermsVersion;
-	}
+	private final TermsProperties termsProperties;
 
 	/**
 	 * 가입할 때 회원과 필수 약관 동의 기록(현재 버전)을 저장하고 회원 ID를 돌려준다. 가입은 바로 로그인 처리되므로 로그인 시각도 남긴다.
@@ -48,7 +38,8 @@ public class UserCommandService {
 	 * 혼자 커밋되면 소셜 계정 없는 회원이 남아 다시 가입할 수 없으므로, 호출자 트랜잭션 안에서만 동작하게 강제한다
 	 * (밖에서 부르면 IllegalTransactionStateException).
 	 * 같은 이메일이 이미 있으면 DB 유니크 위반(DataIntegrityViolationException)이 그대로 올라간다.
-	 * 사용자에게 보일 에러(AUTH409_1)로 바꾸는 일은 auth가 한다.
+	 * 사용자에게 보일 에러(AUTH409_1)로 바꾸는 일은 auth가 트랜잭션 바깥에서 한다
+	 * (유니크 위반 뒤 트랜잭션은 롤백 전용이라, 안에서 잡고 정상 반환하면 커밋 때 UnexpectedRollbackException이 난다).
 	 */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public Long signUp(UserSignUpCommand command) {
@@ -59,7 +50,7 @@ public class UserCommandService {
 		userRepository.save(user);
 
 		userTermsAgreementRepository.saveAll(REQUIRED_TERMS.stream()
-			.map(termsType -> UserTermsAgreement.create(user.getId(), termsType, currentTermsVersion, now))
+			.map(termsType -> UserTermsAgreement.create(user.getId(), termsType, termsProperties.currentVersion(), now))
 			.toList());
 		return user.getId();
 	}
