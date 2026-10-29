@@ -3,6 +3,8 @@ package com.sniptext.domain.user.entity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.LocalDateTime;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -105,6 +107,28 @@ class UserTest {
 			.message()
 			.doesNotContain(EMAIL)
 			.doesNotContain(nickname);
+	}
+
+	@Test
+	@DisplayName("로그인을 기록하면 마지막 로그인 시각이 바뀌고, 다시 기록하면 새 시각으로 바뀐다")
+	void recordLogin() {
+		User user = User.create(EMAIL, NICKNAME, PROFILE);
+		LocalDateTime first = LocalDateTime.of(2026, 10, 29, 21, 0);
+
+		user.recordLogin(first);
+		assertThat(user.getLastLoginAt()).isEqualTo(first);
+
+		user.recordLogin(first.plusDays(1));
+		assertThat(user.getLastLoginAt()).isEqualTo(first.plusDays(1));
+	}
+
+	@Test
+	@DisplayName("로그인 시각이 없으면 IllegalArgumentException")
+	void recordLoginWithoutTime() {
+		User user = User.create(EMAIL, NICKNAME, PROFILE);
+
+		assertThatThrownBy(() -> user.recordLogin(null))
+			.isInstanceOf(IllegalArgumentException.class);
 	}
 
 }
