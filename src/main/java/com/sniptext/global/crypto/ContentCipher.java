@@ -8,7 +8,7 @@ public interface ContentCipher {
 
 	String encrypt(String plaintext);
 
-	/** 키가 다르거나 변조됐거나 형식이 틀리면 조용히 넘기지 않고 IllegalStateException을 던진다. */
+	/** 키가 다르거나 변조됐거나 형식이 틀리면 조용히 넘기지 않고 ContentDecryptionException을 던진다. */
 	String decrypt(String stored);
 
 }

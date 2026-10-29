@@ -86,23 +86,23 @@ public class AesGcmContentCipher implements ContentCipher {
 			return new String(decrypted, StandardCharsets.UTF_8);
 		} catch (GeneralSecurityException e) {
 			// 다른 키·변조면 태그 검사에서 걸린다. JDK 예외 메시지에는 값이 들어가지 않는다
-			throw new IllegalStateException("본문을 복호화할 수 없습니다 (키가 다르거나 값이 변조됨)", e);
+			throw new ContentDecryptionException("본문을 복호화할 수 없습니다 (키가 다르거나 값이 변조됨)", e);
 		}
 	}
 
 	private static byte[] decodeBody(String stored) {
 		if (stored == null || !stored.startsWith(VERSION_PREFIX)) {
-			throw new IllegalStateException("본문 저장값의 형식 버전을 알 수 없습니다");
+			throw new ContentDecryptionException("본문 저장값의 형식 버전을 알 수 없습니다");
 		}
 		byte[] body;
 		try {
 			body = Base64.getDecoder().decode(stored.substring(VERSION_PREFIX.length()));
 		} catch (IllegalArgumentException e) {
 			// 디코더 예외 메시지에 저장값 글자가 들어가므로 원인을 붙이지 않는다
-			throw new IllegalStateException("본문 저장값이 Base64가 아닙니다");
+			throw new ContentDecryptionException("본문 저장값이 Base64가 아닙니다");
 		}
 		if (body.length < IV_LENGTH + TAG_LENGTH) {
-			throw new IllegalStateException("본문 저장값이 너무 짧습니다");
+			throw new ContentDecryptionException("본문 저장값이 너무 짧습니다");
 		}
 		return body;
 	}
