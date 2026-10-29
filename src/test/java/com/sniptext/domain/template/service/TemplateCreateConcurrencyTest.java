@@ -20,9 +20,9 @@ import org.springframework.context.annotation.Import;
 
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
-import com.sniptext.domain.user.entity.User;
 import com.sniptext.domain.user.repository.UserRepository;
 import com.sniptext.fixture.TemplateFixture;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.exception.BusinessException;
 import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClockConfiguration;
@@ -50,8 +50,7 @@ class TemplateCreateConcurrencyTest extends IntegrationTestSupport {
 
 	@BeforeEach
 	void setUp() {
-		userId = userRepository.save(User.builder().email("concurrency@sniptext.com").nickname("닉네임").build())
-			.getId();
+		userId = userRepository.save(UserFixture.user("concurrency@sniptext.com")).getId();
 	}
 
 	// 회원을 지우면 외래키(ON DELETE CASCADE)로 템플릿도 지워진다

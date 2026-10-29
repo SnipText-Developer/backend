@@ -33,6 +33,7 @@ import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.user.entity.Plan;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.fixture.TemplateFixture;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClock;
 import com.sniptext.support.MutableClockConfiguration;
@@ -255,13 +256,8 @@ class TemplateControllerTest extends IntegrationTestSupport {
 		templateRepository.flush();
 	}
 
-	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 BaseTimeEntityTest처럼 직접 저장한다
 	private Long saveUser(String email, Plan planOverride) {
-		User user = User.builder()
-			.email(email)
-			.nickname("닉네임")
-			.planOverride(planOverride)
-			.build();
+		User user = UserFixture.userWithPlanOverride(email, planOverride);
 		entityManager.persist(user);
 		entityManager.flush();
 		return user.getId();
