@@ -4,7 +4,10 @@ import java.text.Normalizer;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.sniptext.global.crypto.EncryptedStringConverter;
+
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Embeddable;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -23,7 +26,8 @@ public class TemplateContent {
 
 	private static final int MAX_LENGTH = 3000;
 
-	// TODO 본문 암호화 변환기 이슈에서 이 필드에 @Convert를 붙인다. 지금은 평문으로 저장한다
+	// DB에는 AES-GCM 암호문(v1:...)으로 저장한다. DB에서 본문을 검색하지 않는다 (검색은 화면에서)
+	@Convert(converter = EncryptedStringConverter.class)
 	@Column(name = "content", nullable = false, columnDefinition = "TEXT")
 	private String value;
 
