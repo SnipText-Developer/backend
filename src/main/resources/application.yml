@@ -28,3 +28,7 @@ springdoc:
 sniptext:
   jwt:
     secret: ${JWT_SECRET}
+  # 템플릿 본문 암호화 키 (Base64로 인코딩한 32바이트). 기본값이 없어 빠뜨리면 기동에 실패한다.
+  # 개발 서버와 운영의 키는 반드시 다르게 두고, 잃어버리면 저장된 본문을 되살릴 수 없다.
+  crypto:
+    content-key: ${CONTENT_ENCRYPTION_KEY}
