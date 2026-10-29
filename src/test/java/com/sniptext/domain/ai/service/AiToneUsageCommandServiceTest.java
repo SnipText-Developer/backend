@@ -21,6 +21,7 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.ai.entity.AiToneDailyUsage;
 import com.sniptext.domain.ai.exception.AiErrorCode;
@@ -34,7 +35,8 @@ import com.sniptext.support.MutableClock;
 import com.sniptext.support.MutableClockConfiguration;
 
 /**
- * 클래스에 @Transactional을 붙이지 않는다. 선점은 자기 트랜잭션으로 끝나야 하고, 동시 선점을 실제 커밋 순서로 검증해야 한다.
+ * 클래스에 @Transactional을 붙이지 않는다. 선점은 호출자 트랜잭션 밖에서만 불리고(안에서 부르면 예외),
+ * 동시 선점을 실제 커밋 순서로 검증해야 한다.
  * 대신 끝나면 만든 사용량과 회원을 지운다.
  */
 @Import(MutableClockConfiguration.class)
@@ -58,6 +60,9 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 
 	@Autowired
 	private MutableClock clock;
+
+	@Autowired
+	private TransactionTemplate transactionTemplate;
 
 	private Long userId;
 
@@ -234,6 +239,29 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		assertThatThrownBy(() -> aiToneUsageCommandService.reserve(userId, LIMIT))
 			.isInstanceOf(BusinessException.class);
 		assertThat(usage(TODAY).getUpdatedAt()).isEqualTo(NOW);
+	}
+
+	@Test
+	@DisplayName("바깥 트랜잭션 안에서 선점하면 IllegalStateException이고 행이 생기지 않는다")
+	void reserveInsideOuterTransaction() {
+		assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(
+			status -> aiToneUsageCommandService.reserve(userId, LIMIT)))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessage("AI 사용량 선점·반환은 호출자 트랜잭션 밖에서 불러야 한다");
+		assertThat(aiToneDailyUsageRepository.findByUserIdAndUsageDate(userId, TODAY)).isEmpty();
+	}
+
+	@Test
+	@DisplayName("바깥 트랜잭션 안에서 반환하면 IllegalStateException이고 횟수는 그대로다")
+	void releaseInsideOuterTransaction() {
+		reserveTimes(3);
+		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+
+		assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(
+			status -> aiToneUsageCommandService.release(reservation)))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessage("AI 사용량 선점·반환은 호출자 트랜잭션 밖에서 불러야 한다");
+		assertThat(usedCount(TODAY)).isEqualTo(4);
 	}
 
 	private void reserveTimes(int times) {
