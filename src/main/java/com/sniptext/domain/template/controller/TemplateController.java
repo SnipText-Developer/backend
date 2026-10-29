@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.sniptext.domain.template.controller.dto.TemplateCreateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateResponse;
 import com.sniptext.domain.template.service.TemplateCommandService;
+import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
 
@@ -26,8 +27,8 @@ public class TemplateController {
 	@PostMapping
 	public ResponseEntity<ApiResponse<TemplateResponse>> createTemplate(@LoginUser Long userId,
 		@Valid @RequestBody TemplateCreateRequest request) {
-		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_CREATED,
-			TemplateResponse.from(templateCommandService.create(request.toCommand(userId))));
+		TemplateCreateResult result = templateCommandService.create(request.toCommand(userId));
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_CREATED, TemplateResponse.from(result));
 	}
 
 }
