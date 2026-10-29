@@ -40,8 +40,10 @@ public class TemplateCommandService {
 		userCommandService.lockUser(command.userId());
 		validateTemplateLimit(command.userId());
 
-		Template template = Template.create(command.userId(), TemplateTitle.create(command.title()),
-			Shortcut.create(command.shortcut()), TemplateContent.create(command.content()));
+		TemplateTitle title = TemplateTitle.create(command.title());
+		Shortcut shortcut = Shortcut.create(command.shortcut());
+		TemplateContent content = TemplateContent.create(command.content());
+		Template template = Template.create(command.userId(), title, shortcut, content);
 		return TemplateCreateResult.from(save(template));
 	}
 
