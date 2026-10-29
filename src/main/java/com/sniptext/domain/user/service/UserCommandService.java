@@ -43,18 +43,21 @@ public class UserCommandService {
 	}
 
 	/**
-	 * 가입할 때 회원과 필수 약관 동의 기록(현재 버전)을 저장하고 회원 ID를 돌려준다.
+	 * 가입할 때 회원과 필수 약관 동의 기록(현재 버전)을 저장하고 회원 ID를 돌려준다. 가입은 바로 로그인 처리되므로 로그인 시각도 남긴다.
 	 * 호출자(auth의 가입 처리) 트랜잭션에 합류해 소셜 계정·토큰 저장과 함께 커밋되거나 함께 취소된다.
+	 * 혼자 커밋되면 소셜 계정 없는 회원이 남아 다시 가입할 수 없으므로, 호출자 트랜잭션 안에서만 동작하게 강제한다
+	 * (밖에서 부르면 IllegalTransactionStateException).
 	 * 같은 이메일이 이미 있으면 DB 유니크 위반(DataIntegrityViolationException)이 그대로 올라간다.
 	 * 사용자에게 보일 에러(AUTH409_1)로 바꾸는 일은 auth가 한다.
 	 */
-	@Transactional
+	@Transactional(propagation = Propagation.MANDATORY)
 	public Long signUp(UserSignUpCommand command) {
-		String nickname = NicknameNormalizer.normalize(command.name(), command.email());
-		User user = userRepository.save(
-			User.create(command.email(), nickname, fitProfileImageUrl(command.profileImageUrl())));
-
 		LocalDateTime now = LocalDateTime.now(clock);
+		String nickname = NicknameNormalizer.normalize(command.name(), command.email());
+		User user = User.create(command.email(), nickname, fitProfileImageUrl(command.profileImageUrl()));
+		user.recordLogin(now);
+		userRepository.save(user);
+
 		userTermsAgreementRepository.saveAll(REQUIRED_TERMS.stream()
 			.map(termsType -> UserTermsAgreement.create(user.getId(), termsType, currentTermsVersion, now))
 			.toList());

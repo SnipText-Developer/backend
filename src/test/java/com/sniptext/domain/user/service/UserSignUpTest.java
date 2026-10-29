@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.IllegalTransactionStateException;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.sniptext.domain.user.entity.TermsType;
@@ -50,7 +52,7 @@ class UserSignUpTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("가입하면 회원 1명과 필수 약관 동의 2줄(SERVICE·PRIVACY, 현재 버전 v1, 지금 시각)이 저장된다")
+	@DisplayName("가입하면 회원 1명(마지막 로그인은 지금)과 필수 약관 동의 2줄(SERVICE·PRIVACY, 현재 버전 v1, 지금 시각)이 저장된다")
 	void signUp() {
 		Long userId = userCommandService.signUp(new UserSignUpCommand("signup@gmail.com", "  홍길동 ", PROFILE));
 
@@ -58,6 +60,7 @@ class UserSignUpTest extends IntegrationTestSupport {
 		assertThat(user.getEmail()).isEqualTo("signup@gmail.com");
 		assertThat(user.getNickname()).isEqualTo("홍길동");
 		assertThat(user.getProfileImageUrl()).isEqualTo(PROFILE);
+		assertThat(user.getLastLoginAt()).isEqualTo(NOW);
 		assertThat(userTermsAgreementRepository.findAllByUserId(userId))
 			.extracting(UserTermsAgreement::getTermsType, UserTermsAgreement::getVersion, UserTermsAgreement::getAgreedAt)
 			.containsExactlyInAnyOrder(
@@ -92,6 +95,20 @@ class UserSignUpTest extends IntegrationTestSupport {
 
 		assertThatThrownBy(() -> userCommandService.signUp(new UserSignUpCommand("dup@gmail.com", "두번째", null)))
 			.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
+	@DisplayName("트랜잭션 밖에서 부르면 IllegalTransactionStateException이고 회원·약관 동의를 저장하지 않는다")
+	void signUpOutsideTransaction() {
+		long users = userRepository.count();
+		long agreements = userTermsAgreementRepository.count();
+
+		assertThatThrownBy(() -> userCommandService.signUp(new UserSignUpCommand("alone@gmail.com", "혼자", null)))
+			.isInstanceOf(IllegalTransactionStateException.class);
+
+		assertThat(userRepository.count()).isEqualTo(users);
+		assertThat(userTermsAgreementRepository.count()).isEqualTo(agreements);
 	}
 
 }
