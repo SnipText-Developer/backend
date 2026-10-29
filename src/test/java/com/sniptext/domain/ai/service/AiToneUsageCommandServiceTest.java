@@ -172,6 +172,19 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 			.isEqualTo(2);
 	}
 
+	@RepeatedTest(REPEATS)
+	@DisplayName("오늘 행이 없을 때 10건이 동시에 선점하면 모두 성공하고 행은 1개, 10회다")
+	void concurrentReserveUpToLimitWithoutRow() throws Exception {
+		List<Outcome> outcomes = reserveConcurrently(LIMIT);
+
+		assertThat(outcomes).hasSize(LIMIT).containsOnly(Outcome.RESERVED);
+		assertThat(aiToneDailyUsageRepository.findAll())
+			.filteredOn(usage -> usage.getUserId().equals(userId) && usage.getUsageDate().equals(TODAY))
+			.singleElement()
+			.extracting(AiToneDailyUsage::getUsedCount)
+			.isEqualTo(LIMIT);
+	}
+
 	@Test
 	@DisplayName("반환하면 1 줄어든다")
 	void release() {
