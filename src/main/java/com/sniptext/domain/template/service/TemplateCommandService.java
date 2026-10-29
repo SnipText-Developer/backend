@@ -1,6 +1,7 @@
 package com.sniptext.domain.template.service;
 
 import org.hibernate.exception.ConstraintViolationException;
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -82,15 +83,26 @@ public class TemplateCommandService {
 		}
 	}
 
-	// MySQL은 제약 이름 앞에 테이블 이름을 붙여 알려 주므로(templates.uk_...) 끝부분으로 비교한다
+	/**
+	 * 에러 메시지를 해석하지 않고 하이버네이트가 정리한 종류와 제약 이름으로 판단한다.
+	 * MySQL은 제약 이름 앞에 테이블 이름을 붙여 알려 주므로(templates.uk_...) 마지막 "." 뒤만 정확히 비교한다.
+	 * 이 모양은 TemplateRepositoryTest가 실제 MySQL로 고정한다.
+	 */
 	private static boolean isActiveShortcutDuplicate(DataIntegrityViolationException e) {
 		for (Throwable cause = e; cause != null; cause = cause.getCause()) {
 			if (cause instanceof ConstraintViolationException violation) {
-				String constraintName = violation.getConstraintName();
-				return constraintName != null && constraintName.endsWith(ACTIVE_SHORTCUT_UNIQUE);
+				return violation.getKind() == ConstraintKind.UNIQUE
+					&& ACTIVE_SHORTCUT_UNIQUE.equals(withoutTablePrefix(violation.getConstraintName()));
 			}
 		}
 		return false;
+	}
+
+	private static String withoutTablePrefix(String constraintName) {
+		if (constraintName == null) {
+			return null;
+		}
+		return constraintName.substring(constraintName.lastIndexOf('.') + 1);
 	}
 
 }

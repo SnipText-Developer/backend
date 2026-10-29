@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.hibernate.exception.ConstraintViolationException;
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -134,7 +135,7 @@ class TemplateCommandServiceTest {
 	@DisplayName("미리 조회를 통과했어도 저장에서 활성 단축어 유니크 위반이 나면 TEMPLATE409_1이고, 예외 메시지에 겹친 단축어가 남지 않는다")
 	void duplicateShortcut() {
 		givenActiveCount(FREE, 0);
-		givenSaveFails("templates.uk_templates_user_active_shortcut");
+		givenSaveFails(ConstraintKind.UNIQUE, "templates.uk_templates_user_active_shortcut");
 
 		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
 			.isInstanceOf(BusinessException.class)
@@ -144,11 +145,16 @@ class TemplateCommandServiceTest {
 			.isEqualTo(TemplateErrorCode.SHORTCUT_DUPLICATED);
 	}
 
-	@Test
-	@DisplayName("단축어 유니크가 아닌 무결성 위반은 바꾸지 않고 그대로 던진다 (코드 실수라 500)")
-	void otherIntegrityViolation() {
+	@ParameterizedTest
+	@CsvSource({
+		"FOREIGN_KEY, templates.fk_templates_user",
+		"UNIQUE,      templates.xuk_templates_user_active_shortcut",
+		"OTHER,       templates.uk_templates_user_active_shortcut"
+	})
+	@DisplayName("단축어 유니크(종류 UNIQUE, 이름 정확히 일치)가 아닌 무결성 위반은 바꾸지 않고 그대로 던진다 (코드 실수라 500)")
+	void otherIntegrityViolation(ConstraintKind kind, String constraintName) {
 		givenActiveCount(FREE, 0);
-		givenSaveFails("fk_templates_user");
+		givenSaveFails(kind, constraintName);
 
 		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
 			.isInstanceOf(DataIntegrityViolationException.class);
@@ -170,9 +176,10 @@ class TemplateCommandServiceTest {
 		});
 	}
 
-	private void givenSaveFails(String constraintName) {
+	/** 실제 MySQL·하이버네이트가 넘기는 모양(TemplateRepositoryTest에서 고정)대로 위반 예외를 만든다 */
+	private void givenSaveFails(ConstraintKind kind, String constraintName) {
 		ConstraintViolationException cause = new ConstraintViolationException(
-			"Duplicate entry '1-/quote' for key '" + constraintName + "'", new SQLException(), constraintName);
+			"Duplicate entry '1-/quote' for key '" + constraintName + "'", new SQLException(), kind, constraintName);
 		given(templateRepository.saveAndFlush(any(Template.class)))
 			.willThrow(new DataIntegrityViolationException(cause.getMessage(), cause));
 	}
