@@ -31,3 +31,6 @@ sniptext:
   # 가입 때 동의받는 약관의 현재 버전. 약관이 바뀌면 이 값만 올린다 (본문은 랜딩의 /terms/{버전} 정적 페이지)
   terms:
     current-version: v1
+  # 구글 로그인 클라이언트 ID (ID 토큰의 대상 검사에 쓴다). 기본값이 없어 빠뜨리면 기동에 실패한다
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}

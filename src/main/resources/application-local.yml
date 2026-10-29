@@ -8,3 +8,6 @@ spring:
 sniptext:
   jwt:
     secret: ${JWT_SECRET:local-only-jwt-secret-for-sniptext-dev}
+  # 실제 구글 로그인을 확인하려면 GOOGLE_CLIENT_ID 환경 변수로 진짜 값을 넣는다
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:local-google-client-id}

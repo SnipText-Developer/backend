@@ -62,4 +62,5 @@ tasks.named('test') {
 	systemProperty 'user.timezone', 'Asia/Seoul'
 	// 테스트 전용 서명 키. src/test/resources/application.yml은 운영 설정을 통째로 가리므로 만들지 않는다
 	environment 'JWT_SECRET', 'test-only-jwt-secret-do-not-use-anywhere-else'
+	environment 'GOOGLE_CLIENT_ID', 'test-google-client-id'
 }
