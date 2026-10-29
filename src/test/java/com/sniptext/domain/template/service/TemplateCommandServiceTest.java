@@ -102,7 +102,7 @@ class TemplateCommandServiceTest {
 	}
 
 	@Test
-	@DisplayName("회원 행을 잠근 뒤에 플랜 한도와 개수를 확인하고 저장한다")
+	@DisplayName("회원 행을 잠근 뒤에 플랜 한도와 개수, 단축어 중복을 확인하고 저장한다")
 	void locksBeforeLimitCheck() {
 		givenActiveCount(FREE, 0);
 		givenSaveSucceeds();
@@ -113,11 +113,25 @@ class TemplateCommandServiceTest {
 		inOrder.verify(userCommandService).lockUser(USER_ID);
 		inOrder.verify(planQueryService).getCurrentPlan(USER_ID);
 		inOrder.verify(templateRepository).countByUserIdAndDeletedAtIsNull(USER_ID);
+		inOrder.verify(templateRepository).existsByUserIdAndActiveShortcutKey(USER_ID, "/quote");
 		inOrder.verify(templateRepository).saveAndFlush(any());
 	}
 
 	@Test
-	@DisplayName("활성 단축어 유니크 위반은 TEMPLATE409_1로 바뀌고, 예외 메시지에 겹친 단축어가 남지 않는다")
+	@DisplayName("활성 템플릿에 같은 단축어 키가 있으면 저장 전에 TEMPLATE409_1이고 저장하지 않는다")
+	void duplicateShortcutBeforeSave() {
+		givenActiveCount(FREE, 0);
+		given(templateRepository.existsByUserIdAndActiveShortcutKey(USER_ID, "/quote")).willReturn(true);
+
+		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
+			.isInstanceOf(BusinessException.class)
+			.extracting("resultCode")
+			.isEqualTo(TemplateErrorCode.SHORTCUT_DUPLICATED);
+		then(templateRepository).should(never()).saveAndFlush(any());
+	}
+
+	@Test
+	@DisplayName("미리 조회를 통과했어도 저장에서 활성 단축어 유니크 위반이 나면 TEMPLATE409_1이고, 예외 메시지에 겹친 단축어가 남지 않는다")
 	void duplicateShortcut() {
 		givenActiveCount(FREE, 0);
 		givenSaveFails("templates.uk_templates_user_active_shortcut");

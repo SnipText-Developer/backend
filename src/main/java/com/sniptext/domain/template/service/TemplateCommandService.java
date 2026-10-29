@@ -33,7 +33,7 @@ public class TemplateCommandService {
 	/**
 	 * 새 템플릿 저장. 회원 행을 먼저 잠가 같은 회원의 생성·복구·갤러리 저장을 한 줄로 세운 뒤 한도를 검사한다.
 	 * 두 탭에서 동시에 저장해도 한도를 넘지 않게 하기 위해서다.
-	 * 한도 도달이면 TEMPLATE403_1, 활성 단축어가 겹치면 TEMPLATE409_1.
+	 * 한도 도달이면 TEMPLATE403_1, 활성 단축어가 겹치면 TEMPLATE409_1 (둘 다 해당하면 한도가 먼저다).
 	 */
 	@Transactional
 	public TemplateCreateResult create(TemplateCreateCommand command) {
@@ -43,6 +43,8 @@ public class TemplateCommandService {
 		TemplateTitle title = TemplateTitle.create(command.title());
 		Shortcut shortcut = Shortcut.create(command.shortcut());
 		TemplateContent content = TemplateContent.create(command.content());
+		validateShortcutAvailable(command.userId(), shortcut);
+
 		Template template = Template.create(command.userId(), title, shortcut, content);
 		return TemplateCreateResult.from(save(template));
 	}
@@ -55,8 +57,17 @@ public class TemplateCommandService {
 		}
 	}
 
+	/** 활성 템플릿(휴지통 제외)에 같은 단축어 키가 있으면 저장을 시도하지 않는다 (실패한 INSERT는 겹친 단축어를 DB 에러 로그에 남긴다) */
+	private void validateShortcutAvailable(Long userId, Shortcut shortcut) {
+		if (templateRepository.existsByUserIdAndActiveShortcutKey(userId, shortcut.getKey())) {
+			throw new BusinessException(TemplateErrorCode.SHORTCUT_DUPLICATED);
+		}
+	}
+
 	/**
-	 * 단축어 중복은 미리 조회하지 않고 유니크 제약으로 판정한다 (조회와 저장 사이에 끼어드는 요청까지 막기 위해서다).
+	 * 미리 조회를 통과해도 유니크 제약 위반은 날 수 있다. 회원 잠금은 생성·복구·갤러리 저장끼리만 줄을 세우므로,
+	 * 잠금을 잡지 않는 수정 요청이 같은 단축어로 바꾸면 조회와 저장 사이에 끼어든다. 그 경우도 TEMPLATE409_1로 바꾼다.
+	 * 단축어 유니크가 아닌 무결성 위반은 코드 실수라 그대로 던진다 (500).
 	 * 위반 예외 메시지에는 겹친 단축어가 들어 있으므로 원인으로 붙이거나 로그에 남기지 않는다.
 	 */
 	private Template save(Template template) {

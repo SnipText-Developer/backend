@@ -17,7 +17,10 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -40,6 +43,7 @@ import tools.jackson.databind.json.JsonMapper;
 /** 명세 10번. 검증 순서, 한도, 단축어 중복, 응답 형식을 실제 필터·MySQL까지 거쳐 확인한다. */
 @Transactional
 @Import(MutableClockConfiguration.class)
+@ExtendWith(OutputCaptureExtension.class)
 class TemplateControllerTest extends IntegrationTestSupport {
 
 	private static final String PATH = "/api/v1/templates";
@@ -141,11 +145,12 @@ class TemplateControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("/Quote가 있으면 /quote는 TEMPLATE409_1")
-	void duplicateIgnoringCase() throws Exception {
+	@DisplayName("/Quote가 있으면 /quote는 TEMPLATE409_1이고, 저장을 시도하지 않아 DB 에러 로그(겹친 단축어 포함)가 남지 않는다")
+	void duplicateIgnoringCase(CapturedOutput output) throws Exception {
 		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/Quote"));
 
 		expectError(create(userId, TITLE, "/quote", CONTENT), 409, "TEMPLATE409_1", "이미 사용 중인 단축어예요.");
+		assertThat(output.getAll()).doesNotContain("Duplicate entry");
 	}
 
 	@Test

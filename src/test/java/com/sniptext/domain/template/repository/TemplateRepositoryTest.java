@@ -177,6 +177,20 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(otherUserId)).isEqualTo(1);
 	}
 
+	@Test
+	@DisplayName("활성 단축어 키 존재 여부는 비교 키로 찾고, 휴지통과 다른 회원의 템플릿은 보지 않는다")
+	void existsActiveShortcutKey() {
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/Quote"));
+		Template trashed = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/공지"));
+		trashed.moveToTrash(FIXED.plusHours(1));
+		templateRepository.saveAndFlush(TemplateFixture.template(otherUserId, "/감사"));
+		entityManager.clear();
+
+		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/quote")).isTrue();
+		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/공지")).isFalse();
+		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/감사")).isFalse();
+	}
+
 	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 BaseTimeEntityTest처럼 직접 저장한다
 	private Long saveUser(String email) {
 		User user = User.builder()
