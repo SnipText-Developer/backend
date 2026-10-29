@@ -117,7 +117,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 			.isInstanceOf(BusinessException.class)
 			.extracting("resultCode")
 			.isEqualTo(AiErrorCode.DAILY_LIMIT_EXCEEDED);
-		assertThat(aiToneDailyUsageRepository.findByUserIdAndUsageDate(userId, TODAY)).isEmpty();
+		assertThat(aiToneDailyUsageRepository.findUsedCount(userId, TODAY)).isEmpty();
 	}
 
 	@Test
@@ -165,11 +165,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		List<Outcome> outcomes = reserveConcurrently(2);
 
 		assertThat(outcomes).containsExactly(Outcome.RESERVED, Outcome.RESERVED);
-		assertThat(aiToneDailyUsageRepository.findAll())
-			.filteredOn(usage -> usage.getUserId().equals(userId) && usage.getUsageDate().equals(TODAY))
-			.singleElement()
-			.extracting(AiToneDailyUsage::getUsedCount)
-			.isEqualTo(2);
+		assertThat(usage(TODAY).getUsedCount()).isEqualTo(2);
 	}
 
 	@RepeatedTest(REPEATS)
@@ -178,11 +174,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		List<Outcome> outcomes = reserveConcurrently(LIMIT);
 
 		assertThat(outcomes).hasSize(LIMIT).containsOnly(Outcome.RESERVED);
-		assertThat(aiToneDailyUsageRepository.findAll())
-			.filteredOn(usage -> usage.getUserId().equals(userId) && usage.getUsageDate().equals(TODAY))
-			.singleElement()
-			.extracting(AiToneDailyUsage::getUsedCount)
-			.isEqualTo(LIMIT);
+		assertThat(usage(TODAY).getUsedCount()).isEqualTo(LIMIT);
 	}
 
 	@Test
@@ -206,7 +198,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		aiToneUsageCommandService.release(reservation);
 
 		assertThat(usedCount(TODAY)).isZero();
-		assertThat(aiToneDailyUsageRepository.findByUserIdAndUsageDate(userId, TODAY.plusDays(1))).isEmpty();
+		assertThat(aiToneDailyUsageRepository.findUsedCount(userId, TODAY.plusDays(1))).isEmpty();
 	}
 
 	@Test
@@ -225,7 +217,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	void releaseWithoutRow() {
 		aiToneUsageCommandService.release(new AiToneReserveResult(userId, TODAY, 1));
 
-		assertThat(aiToneDailyUsageRepository.findByUserIdAndUsageDate(userId, TODAY)).isEmpty();
+		assertThat(aiToneDailyUsageRepository.findUsedCount(userId, TODAY)).isEmpty();
 	}
 
 	@Test
@@ -261,7 +253,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 			status -> aiToneUsageCommandService.reserve(userId, LIMIT)))
 			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("AI 사용량 선점·반환은 호출자 트랜잭션 밖에서 불러야 한다");
-		assertThat(aiToneDailyUsageRepository.findByUserIdAndUsageDate(userId, TODAY)).isEmpty();
+		assertThat(aiToneDailyUsageRepository.findUsedCount(userId, TODAY)).isEmpty();
 	}
 
 	@Test
@@ -317,11 +309,16 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	}
 
 	private int usedCount(LocalDate date) {
-		return usage(date).getUsedCount();
+		return aiToneDailyUsageRepository.findUsedCount(userId, date).orElseThrow();
 	}
 
+	/** 레포지토리에 엔티티 단건 조회가 없어(운영 코드가 쓰지 않음) 전체에서 회원·날짜로 거른다. 한 행이 아니면 실패한다 */
 	private AiToneDailyUsage usage(LocalDate date) {
-		return aiToneDailyUsageRepository.findByUserIdAndUsageDate(userId, date).orElseThrow();
+		List<AiToneDailyUsage> rows = aiToneDailyUsageRepository.findAll().stream()
+			.filter(usage -> usage.getUserId().equals(userId) && usage.getUsageDate().equals(date))
+			.toList();
+		assertThat(rows).hasSize(1);
+		return rows.getFirst();
 	}
 
 	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 기존 테스트처럼 직접 저장한다

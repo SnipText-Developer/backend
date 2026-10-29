@@ -57,6 +57,4 @@ public interface AiToneDailyUsageRepository extends JpaRepository<AiToneDailyUsa
 	@Query("select u.usedCount from AiToneDailyUsage u where u.userId = :userId and u.usageDate = :usageDate")
 	Optional<Integer> findUsedCount(@Param("userId") Long userId, @Param("usageDate") LocalDate usageDate);
 
-	Optional<AiToneDailyUsage> findByUserIdAndUsageDate(Long userId, LocalDate usageDate);
-
 }
