@@ -26,7 +26,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.sniptext.domain.ai.entity.AiToneDailyUsage;
 import com.sniptext.domain.ai.exception.AiErrorCode;
 import com.sniptext.domain.ai.repository.AiToneDailyUsageRepository;
-import com.sniptext.domain.ai.service.dto.result.AiToneReservation;
+import com.sniptext.domain.ai.service.dto.result.AiToneReserveResult;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.domain.user.repository.UserRepository;
 import com.sniptext.global.exception.BusinessException;
@@ -81,9 +81,9 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("오늘 행이 없으면 0회로 만들고 1회를 잡는다")
 	void reserveFirst() {
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 
-		assertThat(reservation).isEqualTo(new AiToneReservation(userId, TODAY, 1));
+		assertThat(reservation).isEqualTo(new AiToneReserveResult(userId, TODAY, 1));
 		assertThat(usedCount(TODAY)).isEqualTo(1);
 	}
 
@@ -92,7 +92,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	void reserveUpToLimit() {
 		reserveTimes(9);
 
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 
 		assertThat(reservation.usedCountAfter()).isEqualTo(10);
 		assertThat(usedCount(TODAY)).isEqualTo(10);
@@ -126,9 +126,9 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		reserveTimes(10);
 		clock.setTo(NOW.plusDays(1));
 
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 
-		assertThat(reservation).isEqualTo(new AiToneReservation(userId, TODAY.plusDays(1), 1));
+		assertThat(reservation).isEqualTo(new AiToneReserveResult(userId, TODAY.plusDays(1), 1));
 		assertThat(usedCount(TODAY)).isEqualTo(10);
 	}
 
@@ -176,7 +176,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@DisplayName("반환하면 1 줄어든다")
 	void release() {
 		reserveTimes(3);
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 
 		aiToneUsageCommandService.release(reservation);
 
@@ -187,7 +187,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@DisplayName("23:59:59에 선점하고 다음 날 00:00:05에 반환하면 어제 행에서 뺀다")
 	void releaseAfterMidnight() {
 		clock.setTo(LocalDateTime.of(2026, 10, 25, 23, 59, 59));
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 		clock.setTo(LocalDateTime.of(2026, 10, 26, 0, 0, 5));
 
 		aiToneUsageCommandService.release(reservation);
@@ -199,7 +199,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("0회에서 반환해도 음수가 되지 않는다")
 	void releaseAtZero() {
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 		aiToneUsageCommandService.release(reservation);
 
 		aiToneUsageCommandService.release(reservation);
@@ -210,7 +210,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("행이 없는 날짜로 반환해도 예외 없이 아무것도 바뀌지 않는다")
 	void releaseWithoutRow() {
-		aiToneUsageCommandService.release(new AiToneReservation(userId, TODAY, 1));
+		aiToneUsageCommandService.release(new AiToneReserveResult(userId, TODAY, 1));
 
 		assertThat(aiToneDailyUsageRepository.findByUserIdAndUsageDate(userId, TODAY)).isEmpty();
 	}
@@ -218,7 +218,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("선점·반환은 updated_at을 그때의 Clock 시각으로 기록한다")
 	void updatedAtFromClock() {
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 		assertThat(usage(TODAY).getUpdatedAt()).isEqualTo(NOW);
 
 		clock.advance(Duration.ofMinutes(1));
@@ -255,7 +255,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@DisplayName("바깥 트랜잭션 안에서 반환하면 IllegalStateException이고 횟수는 그대로다")
 	void releaseInsideOuterTransaction() {
 		reserveTimes(3);
-		AiToneReservation reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
 
 		assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(
 			status -> aiToneUsageCommandService.release(reservation)))

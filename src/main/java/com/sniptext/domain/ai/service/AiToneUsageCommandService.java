@@ -10,7 +10,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.ai.exception.AiErrorCode;
 import com.sniptext.domain.ai.repository.AiToneDailyUsageRepository;
-import com.sniptext.domain.ai.service.dto.result.AiToneReservation;
+import com.sniptext.domain.ai.service.dto.result.AiToneReserveResult;
 import com.sniptext.global.exception.BusinessException;
 
 import lombok.RequiredArgsConstructor;
@@ -36,7 +36,7 @@ public class AiToneUsageCommandService {
 	 * 오늘(KST) 횟수를 한도 안에서 1 올려 잡는다. 이미 한도면 AI429_1.
 	 * 한도는 부르는 쪽이 현재 플랜 조회로 얻어 넘긴다 (회원 존재·플랜 검사도 부르는 쪽에서 먼저 한다).
 	 */
-	public AiToneReservation reserve(Long userId, int limit) {
+	public AiToneReserveResult reserve(Long userId, int limit) {
 		requireNoOuterTransaction();
 		return transactionTemplate.execute(status -> {
 			LocalDateTime now = LocalDateTime.now(clock);
@@ -48,12 +48,12 @@ public class AiToneUsageCommandService {
 			}
 			int usedCountAfter = aiToneDailyUsageRepository.findUsedCount(userId, usageDate)
 				.orElseThrow(() -> new IllegalStateException("선점한 사용량 행이 없다"));
-			return new AiToneReservation(userId, usageDate, usedCountAfter);
+			return new AiToneReserveResult(userId, usageDate, usedCountAfter);
 		});
 	}
 
 	/** 선점한 1회를 되돌린다. 지금 날짜가 아니라 선점한 날짜 행에서 뺀다. 0 아래로는 내려가지 않는다. */
-	public void release(AiToneReservation reservation) {
+	public void release(AiToneReserveResult reservation) {
 		requireNoOuterTransaction();
 		transactionTemplate.executeWithoutResult(status -> aiToneDailyUsageRepository.decrementIfPositive(
 			reservation.userId(), reservation.usageDate(), LocalDateTime.now(clock)));

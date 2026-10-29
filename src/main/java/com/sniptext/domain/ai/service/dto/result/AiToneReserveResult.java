@@ -8,5 +8,5 @@ import java.time.LocalDate;
  * @param usageDate      선점한 KST 날짜. 반환은 이 날짜 행에서 한다 (자정을 넘겨도 어제 행에서 뺀다)
  * @param usedCountAfter 선점 후 그날 사용 횟수
  */
-public record AiToneReservation(Long userId, LocalDate usageDate, int usedCountAfter) {
+public record AiToneReserveResult(Long userId, LocalDate usageDate, int usedCountAfter) {
 }
