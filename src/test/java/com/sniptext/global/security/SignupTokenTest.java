@@ -61,6 +61,18 @@ class SignupTokenTest {
 	}
 
 	@Test
+	@DisplayName("발급 30분이 되는 순간부터 빈 값이다 (만료 시각과 같으면 만료)")
+	void expiresAtExactly30Minutes() {
+		String token = provider.issueSignupToken(GOOGLE_ACCOUNT);
+
+		clock.advance(Duration.ofMinutes(30).minusSeconds(1));
+		assertThat(provider.parseSignupToken(token)).isPresent();
+
+		clock.advance(Duration.ofSeconds(1));
+		assertThat(provider.parseSignupToken(token)).isEmpty();
+	}
+
+	@Test
 	@DisplayName("접근 토큰은 가입용 토큰으로, 가입용 토큰은 접근 토큰으로 쓸 수 없다")
 	void typesAreNotInterchangeable() {
 		String accessToken = provider.issueAccessToken(7L);
