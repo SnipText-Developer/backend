@@ -62,4 +62,6 @@ tasks.named('test') {
 	systemProperty 'user.timezone', 'Asia/Seoul'
 	// 테스트 전용 서명 키. src/test/resources/application.yml은 운영 설정을 통째로 가리므로 만들지 않는다
 	environment 'JWT_SECRET', 'test-only-jwt-secret-do-not-use-anywhere-else'
+	// 테스트 전용 본문 암호화 키 (Base64로 인코딩한 32바이트)
+	environment 'CONTENT_ENCRYPTION_KEY', 'RipPBY6rYeoR+15yb9ooY0ghmKpl6XwA8XMoAslj0oA='
 }

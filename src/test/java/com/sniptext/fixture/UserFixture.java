@@ -37,7 +37,12 @@ public final class UserFixture {
 	}
 
 	public static User deletedUser(String email, LocalDateTime deletedAt) {
-		User user = user(email);
+		return deletedUser(email, null, deletedAt);
+	}
+
+	/** 플랜 지정값이 있는 탈퇴 회원. PRO여도 탈퇴했으면 회원을 찾지 못하는지 볼 때 쓴다 */
+	public static User deletedUser(String email, Plan planOverride, LocalDateTime deletedAt) {
+		User user = userWithPlanOverride(email, planOverride);
 		ReflectionTestUtils.setField(user, "deletedAt", deletedAt);
 		return user;
 	}
