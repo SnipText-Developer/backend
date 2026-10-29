@@ -1,5 +1,5 @@
 # 로컬 개발. DB는 도커 컴포즈가 연결한다.
-# 아래 서명 키 기본값은 로컬 전용이다. 개발 서버·운영에서는 절대 쓰지 않는다.
+# 아래 서명 키·본문 암호화 키 기본값은 로컬 전용이다. 개발 서버·운영에서는 절대 쓰지 않는다.
 spring:
   flyway:
     # 기본값을 통째로 덮어쓰므로 db/migration을 빼면 테이블 생성이 사라진다. db/seed는 개발용 시드 회원
@@ -8,3 +8,5 @@ spring:
 sniptext:
   jwt:
     secret: ${JWT_SECRET:local-only-jwt-secret-for-sniptext-dev}
+  crypto:
+    content-key: ${CONTENT_ENCRYPTION_KEY:Mg+PwFGfOYghWGhe9CBZQ7XC46d+ODvtlOAUugqKqWM=}

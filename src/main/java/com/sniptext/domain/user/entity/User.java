@@ -86,6 +86,12 @@ public class User extends BaseTimeEntity {
 			.build();
 	}
 
+	/** 로그인한 시각을 남긴다. 가입도 바로 로그인 처리되므로 가입과 로그인이 같이 부른다. */
+	public void recordLogin(LocalDateTime now) {
+		require(now != null, "로그인 시각이 없다");
+		this.lastLoginAt = now;
+	}
+
 	private static void require(boolean condition, String message) {
 		if (!condition) {
 			throw new IllegalArgumentException("회원 생성 규칙 위반: " + message);
