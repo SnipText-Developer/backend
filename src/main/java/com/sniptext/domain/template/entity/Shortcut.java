@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -78,7 +79,7 @@ public class Shortcut {
 	}
 
 	/**
-	 * 휴지통 복구·갤러리 저장에서 쓸 단축어를 고른다. usedKeys는 이미 쓰는 비교 키다 (휴지통 제외).
+	 * 휴지통 복구·갤러리 저장에서 쓸 단축어를 고른다. usedKeys는 candidateKeys로 조회한, 이미 쓰는 비교 키다 (휴지통 제외).
 	 * 원본 키가 비어 있으면 원본을, 겹치면 번호 후보 중 비어 있는 첫 번째를 돌려준다.
 	 * 2~99가 모두 차면 빈 값이다. TEMPLATE409_2로 바꾸는 건 서비스가 한다.
 	 */
@@ -92,12 +93,24 @@ public class Shortcut {
 	}
 
 	/**
-	 * 원본 뒤에 2~99를 붙인 후보를 번호 순서대로 돌려준다. 서비스가 후보 키로 한 번에 조회할 때 쓴다.
-	 * "/" 뒤가 10자를 넘으면 원본을 뒤에서 잘라 맞추고, 숫자로 끝나는 원본도 그대로 뒤에 붙인다 (/견적2 → /견적22).
-	 * 숫자로 끝나는 10자 원본은 잘라 붙인 후보가 원본과 같아질 수 있다 (/견적요청서작성안내2 + 2).
-	 * 원본 키는 이미 쓰는 키라 findAvailable에서 자연히 건너뛴다.
+	 * 이 단축어와 겹칠 수 있는 비교 키를 중복 없이 돌려준다. 원본 키가 먼저, 그다음 번호 후보 키가 번호 순서대로 온다.
+	 * 서비스는 이 키로 이미 쓰는 키(휴지통 제외)를 한 번에 조회해 findAvailable에 넘긴다.
 	 */
-	public List<Shortcut> numberedCandidates() {
+	public List<String> candidateKeys() {
+		return Stream.concat(Stream.of(this), numberedCandidates().stream())
+			.map(Shortcut::getKey)
+			.distinct()
+			.toList();
+	}
+
+	/**
+	 * 원본 뒤에 2~99를 붙인 후보를 번호 순서대로 돌려준다.
+	 * "/" 뒤가 10자를 넘으면 원본을 뒤에서 잘라 맞추고, 숫자로 끝나는 원본도 그대로 뒤에 붙인다 (/견적2 → /견적22).
+	 * "/" 뒤 9번째 글자가 숫자인 원본은 잘라 붙인 후보가 겹칠 수 있다. 같은 값을 다시 검사할 뿐이라 고르는 결과는 그대로다.
+	 * - 9자 원본: 12~19번이 2~9번과 같다 (/견적요청서작성안1 + 2 = /견적요청서작성안 + 12). 서로 다른 후보는 90개
+	 * - 10자 원본: 잘라 붙인 후보가 원본과 같아질 수 있다 (/견적요청서작성안내2 + 2). 원본 키는 이미 쓰는 키라 건너뛴다
+	 */
+	private List<Shortcut> numberedCandidates() {
 		String body = value.substring(PREFIX.length());
 		return IntStream.rangeClosed(MIN_NUMBER, MAX_NUMBER)
 			.mapToObj(String::valueOf)
