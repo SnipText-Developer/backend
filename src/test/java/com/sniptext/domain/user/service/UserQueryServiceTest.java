@@ -14,6 +14,7 @@ import com.sniptext.domain.user.entity.Plan;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.domain.user.exception.UserErrorCode;
 import com.sniptext.domain.user.repository.UserRepository;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.exception.BusinessException;
 import com.sniptext.support.IntegrationTestSupport;
 
@@ -29,8 +30,8 @@ class UserQueryServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("플랜 지정값이 있으면 그 값을, 없으면 빈 값을 돌려준다")
 	void findPlanOverride() {
-		User pro = userRepository.save(user("pro@sniptext.com", Plan.PRO, null));
-		User none = userRepository.save(user("none@sniptext.com", null, null));
+		User pro = userRepository.save(UserFixture.userWithPlanOverride("pro@sniptext.com", Plan.PRO));
+		User none = userRepository.save(UserFixture.user("none@sniptext.com"));
 
 		assertThat(userQueryService.findPlanOverride(pro.getId())).contains(Plan.PRO);
 		assertThat(userQueryService.findPlanOverride(none.getId())).isEmpty();
@@ -48,21 +49,13 @@ class UserQueryServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("탈퇴 회원의 플랜 지정값을 찾으면 USER404_1")
 	void deletedUser() {
-		User deleted = userRepository.save(user("deleted@sniptext.com", Plan.PRO, LocalDateTime.of(2026, 10, 1, 0, 0)));
+		User deleted = userRepository.save(
+			UserFixture.deletedUser("deleted@sniptext.com", LocalDateTime.of(2026, 10, 1, 0, 0)));
 
 		assertThatThrownBy(() -> userQueryService.findPlanOverride(deleted.getId()))
 			.isInstanceOf(BusinessException.class)
 			.extracting("resultCode")
 			.isEqualTo(UserErrorCode.USER_NOT_FOUND);
-	}
-
-	private User user(String email, Plan planOverride, LocalDateTime deletedAt) {
-		return User.builder()
-			.email(email)
-			.nickname("회원")
-			.planOverride(planOverride)
-			.deletedAt(deletedAt)
-			.build();
 	}
 
 }
