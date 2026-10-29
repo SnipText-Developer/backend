@@ -18,7 +18,7 @@ import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 
 /**
- * CLAUDE.md "패키지 구조"의 의존 규칙과 "인증"의 @LoginUser 타입 규칙. {루트}.domain.{도메인}을 도메인으로, {루트}.global을 공통 코드로 본다.
+ * CLAUDE.md "패키지 구조"·"도메인 내부"의 의존 규칙과 "인증"의 @LoginUser 타입 규칙. {루트}.domain.{도메인}을 도메인으로, {루트}.global을 공통 코드로 본다.
  * 도메인 코드가 아직 없어도 실패하지 않도록 allowEmptyShould(true)를 둔다.
  */
 final class ArchitectureRules {
@@ -77,6 +77,17 @@ final class ArchitectureRules {
 		return classes().that().resideInAPackage(domainRoot + "..")
 			.should(notDependOnOtherDomainRepositoriesOrEntities())
 			.because("다른 도메인은 그 도메인의 서비스만 부른다 (entity 패키지의 열거형은 허용)")
+			.allowEmptyShould(true);
+	}
+
+	/**
+	 * support는 다른 도메인이 써도 되는 순수 규칙만 둔다. 어느 도메인이든 service·repository·controller를 참조하면
+	 * 상태·DB·스프링 빈에 묶이고, 다른 도메인이 support를 통해 그 계층에 닿게 되므로 막는다.
+	 */
+	ArchRule supportHoldsOnlyPureRules() {
+		return noClasses().that().resideInAPackage(layer("support"))
+			.should().dependOnClassesThat().resideInAnyPackage(layer("service"), layer("repository"), layer("controller"))
+			.because("support에는 다른 도메인이 써도 되는 순수 규칙만 둔다 (어느 도메인의 service·repository·controller도 참조하지 않는다)")
 			.allowEmptyShould(true);
 	}
 

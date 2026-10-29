@@ -73,7 +73,8 @@ domain/{도메인}/
 │   └── dto/         # {도메인}{대상}Row (조회 전용, 성능 문제가 확인됐을 때만)
 ├── entity/
 ├── exception/       # {도메인}ErrorCode (에러 결과 코드 열거형)
-└── annotation/      # 요청 검증 어노테이션 · 검사 클래스 (예: @ValidShortcut)
+├── annotation/      # 요청 검증 어노테이션 · 검사 클래스 (예: @ValidShortcut)
+└── support/         # 다른 도메인이 써도 되는 순수 규칙 (예: TemplateVariableExtractor)
 ```
 
 - 변환: `request.toCommand()`, `Response.from(result)`, `Result.from(entity)`, 여러 개 조합은 `of()`
@@ -85,6 +86,7 @@ domain/{도메인}/
 - 성공 코드는 컨트롤러가, 에러 코드는 서비스가 쓴다. 서비스는 성공 코드를 모른다.
 - 버전 구분(`V2`)이 필요하면 컨트롤러의 요청·응답 객체에만 붙인다.
 - 엔티티의 규칙을 쓰는 요청 검증 어노테이션은 `annotation`에 둔다. `controller/dto`에 두면 컨트롤러가 엔티티를 쓰게 되어 ArchUnit에 걸린다. `annotation`은 `entity`·`exception`만 쓰고 `controller`·`service`는 부르지 않는다.
+- `support`에는 다른 도메인이 써도 되는 순수 규칙만 둔다 (상태·DB·스프링 빈 없음). `service`·`repository`·`controller`를 참조하지 않는다 (ArchUnit이 강제).
 - 값을 나타내는 열거형(정렬 기준, 플랜, 카테고리 등)은 그 값을 저장하는 엔티티의 도메인 `entity` 패키지에 둔다. 저장하지 않는 값은 그 값을 쓰는 도메인의 `entity` 패키지에 둔다.
 - `entity` 패키지의 열거형은 컨트롤러와 다른 도메인에서 직접 써도 된다. 엔티티 클래스는 안 된다.
 - 열거형 상수 이름은 API 값이 된다. 명세를 먼저 바꾸지 않고 상수 이름을 바꾸지 않는다.
@@ -157,15 +159,20 @@ domain/{도메인}/
 **단축어**
 - 형식 검사 **전에** 유니코드 NFC 정규화 (맥 자모 분리형 대응)
 - 형식: `^/[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9]{2,10}$`, 예약어 `/톤교정`
-- `shortcut`은 입력 그대로 저장, `shortcut_key`는 정규화 + 소문자로 저장해 비교에 쓴다.
+- `shortcut`은 NFC 정규화해 저장한다(대소문자는 입력 그대로). 자모 분리형을 그대로 두면 `VARCHAR(11)`을 넘는다. `shortcut_key`는 정규화 + 소문자로 저장해 비교에 쓴다.
+- 단축어 규칙은 값 객체 `Shortcut`(`template/entity`) 한 곳에 있다. 두 컬럼 값은 `Shortcut.create`로만 만든다 (갤러리 저장·휴지통 복구의 자동 번호 후보도 마찬가지).
+- 요청 객체 단축어 필드는 `@ValidShortcut`만 붙이고 `@NotBlank`는 붙이지 않는다 (공백만 입력이 `TEMPLATE400_4`가 아니라 `400_3`으로 바뀐다).
 - `active_shortcut_key`는 DB 생성 컬럼이다. 엔티티에서 `insertable = false, updatable = false`로 매핑하고 직접 값을 넣지 않는다.
 - 중복 판정은 휴지통을 제외한다. 저장 시 유니크 위반은 `TEMPLATE409_1`로 바꿔 응답한다.
 - 갤러리 저장·휴지통 복구에서 충돌하면 원본 뒤에 2~99를 붙인다. `/` 뒤가 10자를 넘으면 원본을 뒤에서 잘라 맞춘다. 숫자로 끝나는 원본도 뒤에 붙인다(`/견적2` → `/견적22`). 모두 차면 `TEMPLATE409_2`
 
 **본문·변수**
+- 이름·본문은 NFC 정규화한 뒤 저장하고 글자 수를 센다 (화면도 NFC 정규화 후 센다). 이름은 가운데 줄바꿈·탭을 공백 하나로 바꾸고 앞뒤 공백을 제거한다.
 - 저장 전 `CRLF` → `LF`, 그다음 글자 수 검사. 글자 수는 `String.length()` (화면과 같은 기준)
+- "공백만 입력"·"앞뒤 공백 제거"의 공백은 화면(JS `trim`)과 같은 범위다 (NBSP·BOM 포함). 자바 `isBlank`·`strip`을 직접 쓰지 않는다.
+- 이름·본문 규칙은 값 객체 `TemplateTitle`·`TemplateContent`(`template/entity`) 한 곳에 있다. 요청 객체 필드는 `@ValidTemplateTitle`·`@ValidTemplateContent`만 붙이고 `@NotBlank`·`@Size`는 붙이지 않는다 (공백 기준이 화면과 달라지고, 정규화 전 길이로 세게 된다).
 - 변수: `\{\{([가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9_]+)\}\}`만 변수. 형식이 틀린 중괄호는 일반 글자로 두고 저장을 막지 않는다.
-- 변수 목록은 저장하지 않는다. 조회 시 복호화한 본문에서 뽑아 첫 등장 순, 중복 제거로 내려준다.
+- 변수 목록은 저장하지 않는다. 조회 시 복호화한 본문에서 뽑아 첫 등장 순, 중복 제거로 내려준다. 목록은 `TemplateVariableExtractor.extract`(`template/support`)로만 만든다.
 
 **시각 컬럼의 의미** (섞지 말 것)
 - `last_used_at`: 사용 기록 API에서만 갱신 → 최근 사용순
