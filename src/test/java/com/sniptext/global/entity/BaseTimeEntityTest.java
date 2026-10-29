@@ -14,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.sniptext.domain.user.entity.User;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClock;
 import com.sniptext.support.MutableClockConfiguration;
@@ -83,10 +84,7 @@ class BaseTimeEntityTest extends IntegrationTestSupport {
 	}
 
 	private User saveUser(String email) {
-		User user = User.builder()
-			.email(email)
-			.nickname("닉네임")
-			.build();
+		User user = UserFixture.user(email);
 		entityManager.persist(user);
 		entityManager.flush();
 		return user;
