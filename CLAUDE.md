@@ -115,7 +115,7 @@ domain/{도메인}/
   - 화면에 보일 에러 코드는 지금처럼 서비스가 던진다
   - 엔티티 패키지에 생성 전용 객체를 두지 않는다. 계층별 이름(`{도메인}{행위}Command` 등)과 겹친다. 인자가 많으면 팩토리 안에서 빌더로 처리한다
   - 테스트에서는 픽스처로 만든다 (테스트 참고)
-  - 기존 `User`는 아직 공개 빌더다. 가입 이슈에서 `create`로 바꾸고 테스트도 픽스처로 옮긴다. 그 전까지 `User.builder()`를 새 코드의 예시로 삼지 않는다
+  - 회원은 `User.create(email, nickname, profileImageUrl)`로 만든다. 닉네임 정리(앞뒤 공백 제거, 50자 자르기, 비면 이메일 앞부분)는 가입 서비스가 하고, `create`는 길이·필수 값만 검사한다. 테스트에서는 `UserFixture`를 쓴다
 - 롬복 허용: `@Getter`, `@NoArgsConstructor(access = PROTECTED)`, `@Builder(access = PRIVATE)`(정적 팩토리 안에서만), `@RequiredArgsConstructor`, `@Slf4j`
 - 롬복 금지: `@Setter`, `@Data`, `@AllArgsConstructor`, 엔티티의 `@ToString`·`@EqualsAndHashCode`
 - 트랜잭션: 서비스 클래스에 `@Transactional(readOnly = true)`, 쓰기 메서드에만 `@Transactional`
