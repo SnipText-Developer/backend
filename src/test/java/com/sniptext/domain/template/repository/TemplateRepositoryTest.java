@@ -164,6 +164,19 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 		assertThat(found.getSourceGalleryTemplateId()).isNull();
 	}
 
+	@Test
+	@DisplayName("활성 개수는 휴지통과 다른 회원의 템플릿을 세지 않는다")
+	void countActive() {
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/견적"));
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/감사"));
+		Template trashed = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/공지"));
+		trashed.moveToTrash(FIXED.plusHours(1));
+		templateRepository.saveAndFlush(TemplateFixture.template(otherUserId, "/견적"));
+
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(2);
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(otherUserId)).isEqualTo(1);
+	}
+
 	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 BaseTimeEntityTest처럼 직접 저장한다
 	private Long saveUser(String email) {
 		User user = User.builder()
