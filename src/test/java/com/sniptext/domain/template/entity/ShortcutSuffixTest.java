@@ -158,24 +158,59 @@ class ShortcutSuffixTest {
 	}
 
 	@Test
-	@DisplayName("번호 후보는 2부터 99까지 순서대로 98개이고, 원본 대소문자를 유지한다")
-	void numberedCandidates() {
-		List<Shortcut> candidates = Shortcut.create("/Quote").numberedCandidates();
+	@DisplayName("숫자로 끝나는 9자 원본은 12~19번 후보가 2~9번과 같아 건너뛴다 (2~11 사용 중 → 20)")
+	void nineCharsEndingWithNumber() {
+		Set<String> used = usedWithNumbers("/견적요청서작성안1", 2, 9);
+		used.add("/견적요청서작성안10");
+		used.add("/견적요청서작성안11");
 
-		assertThat(candidates).hasSize(98);
-		assertThat(candidates.getFirst()).isEqualTo(Shortcut.create("/Quote2"));
-		assertThat(candidates.get(8)).isEqualTo(Shortcut.create("/Quote10"));
-		assertThat(candidates.getLast()).isEqualTo(Shortcut.create("/Quote99"));
-		assertThat(candidates).extracting(Shortcut::getKey).startsWith("/quote2", "/quote3");
+		Optional<Shortcut> available = Shortcut.create("/견적요청서작성안1").findAvailable(used);
+
+		assertThat(available).contains(Shortcut.create("/견적요청서작성안20"));
 	}
 
 	@Test
-	@DisplayName("번호 후보도 10자에 맞춰 자른다")
-	void numberedCandidatesTruncated() {
-		List<Shortcut> candidates = Shortcut.create("/견적요청서작성안내문").numberedCandidates();
+	@DisplayName("숫자로 끝나는 9자 원본은 서로 다른 후보 90개가 모두 차면 빈 값을 돌려준다")
+	void nineCharsEndingWithNumberAllUsed() {
+		Shortcut original = Shortcut.create("/견적요청서작성안1");
 
-		assertThat(candidates.getFirst()).isEqualTo(Shortcut.create("/견적요청서작성안내2"));
-		assertThat(candidates.getLast()).isEqualTo(Shortcut.create("/견적요청서작성안99"));
+		assertThat(original.findAvailable(Set.copyOf(original.candidateKeys()))).isEmpty();
+	}
+
+	@Test
+	@DisplayName("후보 키는 원본 키 다음에 2~99를 붙인 키를 번호 순서대로 담는다")
+	void candidateKeys() {
+		List<String> keys = Shortcut.create("/Quote").candidateKeys();
+
+		assertThat(keys).hasSize(99);
+		assertThat(keys).startsWith("/quote", "/quote2", "/quote3");
+		assertThat(keys.get(9)).isEqualTo("/quote10");
+		assertThat(keys.getLast()).isEqualTo("/quote99");
+	}
+
+	@Test
+	@DisplayName("후보 키도 10자에 맞춰 자른다")
+	void candidateKeysTruncated() {
+		List<String> keys = Shortcut.create("/견적요청서작성안내문").candidateKeys();
+
+		assertThat(keys).startsWith("/견적요청서작성안내문", "/견적요청서작성안내2");
+		assertThat(keys.getLast()).isEqualTo("/견적요청서작성안99");
+	}
+
+	@Test
+	@DisplayName("숫자로 끝나는 9자 원본은 겹치는 후보를 빼 후보 키가 원본 포함 91개다")
+	void candidateKeysWithoutOverlap() {
+		List<String> keys = Shortcut.create("/견적요청서작성안1").candidateKeys();
+
+		assertThat(keys).hasSize(91).doesNotHaveDuplicates();
+	}
+
+	@Test
+	@DisplayName("숫자로 끝나는 10자 원본은 원본과 같아지는 후보를 빼 후보 키가 원본 포함 98개다")
+	void candidateKeysWithoutOriginalDuplicate() {
+		List<String> keys = Shortcut.create("/견적요청서작성안내2").candidateKeys();
+
+		assertThat(keys).hasSize(98).doesNotHaveDuplicates();
 	}
 
 }
