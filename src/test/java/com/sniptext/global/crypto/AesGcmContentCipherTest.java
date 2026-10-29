@@ -78,7 +78,7 @@ class AesGcmContentCipherTest {
 		String stored = cipher.encrypt(PLAINTEXT);
 
 		assertThatThrownBy(() -> new AesGcmContentCipher(OTHER_KEY).decrypt(stored))
-			.isInstanceOf(IllegalStateException.class);
+			.isInstanceOf(ContentDecryptionException.class);
 	}
 
 	@ParameterizedTest
@@ -94,7 +94,7 @@ class AesGcmContentCipherTest {
 		body[index] ^= 0x01;
 		String tampered = "v1:" + Base64.getEncoder().encodeToString(body);
 
-		assertThatThrownBy(() -> cipher.decrypt(tampered)).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> cipher.decrypt(tampered)).isInstanceOf(ContentDecryptionException.class);
 	}
 
 	static Stream<Arguments> malformedValues() {
@@ -113,14 +113,14 @@ class AesGcmContentCipherTest {
 	@MethodSource("malformedValues")
 	@DisplayName("형식이 틀린 저장값은 복호화가 예외다")
 	void malformedFails(String description, String stored) {
-		assertThatThrownBy(() -> cipher.decrypt(stored)).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> cipher.decrypt(stored)).isInstanceOf(ContentDecryptionException.class);
 	}
 
 	@Test
 	@DisplayName("null은 암호화·복호화하지 않는다")
 	void nullRejected() {
 		assertThatThrownBy(() -> cipher.encrypt(null)).isInstanceOf(NullPointerException.class);
-		assertThatThrownBy(() -> cipher.decrypt(null)).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> cipher.decrypt(null)).isInstanceOf(ContentDecryptionException.class);
 	}
 
 	@Test

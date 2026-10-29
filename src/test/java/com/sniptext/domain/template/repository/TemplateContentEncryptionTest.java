@@ -1,9 +1,12 @@
 package com.sniptext.domain.template.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.metamodel.mapping.AttributeMapping;
@@ -20,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.fixture.TemplateFixture;
+import com.sniptext.global.crypto.AesGcmContentCipher;
 import com.sniptext.global.crypto.ContentCipher;
+import com.sniptext.global.crypto.ContentDecryptionException;
 import com.sniptext.global.crypto.EncryptedStringConverter;
 import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClock;
@@ -113,10 +118,36 @@ class TemplateContentEncryptionTest extends IntegrationTestSupport {
 		assertThat(templateRepository.findById(template.getId()).orElseThrow().getUpdatedAt()).isEqualTo(FIXED);
 	}
 
+	@Test
+	@DisplayName("다른 키로 암호화된 본문을 읽으면 원인 사슬에 복호화 실패 예외가 있고, 메시지에 저장값이 없다")
+	void otherKeyRowFailsWithDecryptionException() {
+		Template template = templateRepository.saveAndFlush(TemplateFixture.template(userId));
+		String otherKeyValue = new AesGcmContentCipher(new byte[32]).encrypt(TemplateFixture.CONTENT);
+		entityManager.createNativeQuery("update templates set content = :content where id = :id")
+			.setParameter("content", otherKeyValue)
+			.setParameter("id", template.getId())
+			.executeUpdate();
+		entityManager.clear();
+
+		Throwable thrown = catchThrowable(() -> templateRepository.findById(template.getId()));
+
+		assertThat(causeChain(thrown)).hasAtLeastOneElementOfType(ContentDecryptionException.class);
+		assertThat(causeChain(thrown)).allSatisfy(t ->
+			assertThat(String.valueOf(t.getMessage())).doesNotContain(otherKeyValue, TemplateFixture.CONTENT));
+	}
+
 	private String storedContent(Long templateId) {
 		return (String)entityManager.createNativeQuery("select content from templates where id = :id")
 			.setParameter("id", templateId)
 			.getSingleResult();
+	}
+
+	private static List<Throwable> causeChain(Throwable thrown) {
+		List<Throwable> chain = new ArrayList<>();
+		for (Throwable t = thrown; t != null; t = t.getCause()) {
+			chain.add(t);
+		}
+		return chain;
 	}
 
 	/** Hibernate 매핑 정보에서 Template.content.value에 붙은 변환기 인스턴스를 꺼낸다 */
