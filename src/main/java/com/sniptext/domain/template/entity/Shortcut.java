@@ -1,11 +1,13 @@
 package com.sniptext.domain.template.entity;
 
 import java.text.Normalizer;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -26,6 +28,11 @@ public class Shortcut {
 	private static final String PREFIX = "/";
 	private static final Pattern FORMAT = Pattern.compile("^/[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9]{2,10}$");
 	private static final Set<String> RESERVED_KEYS = Set.of("/톤교정");
+	/** "/" 뒤 최대 글자 수. FORMAT의 {2,10}과 같다 */
+	private static final int MAX_BODY_LENGTH = 10;
+	/** 겹칠 때 붙이는 번호 범위 */
+	private static final int MIN_NUMBER = 2;
+	private static final int MAX_NUMBER = 99;
 
 	/** 표시용 단축어. NFC 정규화, 대소문자는 입력 그대로 (/Quote) */
 	@Column(name = "shortcut", nullable = false, length = 11)
@@ -68,6 +75,37 @@ public class Shortcut {
 		}
 
 		return Optional.empty();
+	}
+
+	/**
+	 * 휴지통 복구·갤러리 저장에서 쓸 단축어를 고른다. usedKeys는 이미 쓰는 비교 키다 (휴지통 제외).
+	 * 원본 키가 비어 있으면 원본을, 겹치면 번호 후보 중 비어 있는 첫 번째를 돌려준다.
+	 * 2~99가 모두 차면 빈 값이다. TEMPLATE409_2로 바꾸는 건 서비스가 한다.
+	 */
+	public Optional<Shortcut> findAvailable(Set<String> usedKeys) {
+		if (!usedKeys.contains(key)) {
+			return Optional.of(this);
+		}
+		return numberedCandidates().stream()
+			.filter(candidate -> !usedKeys.contains(candidate.key))
+			.findFirst();
+	}
+
+	/**
+	 * 원본 뒤에 2~99를 붙인 후보를 번호 순서대로 돌려준다. 서비스가 후보 키로 한 번에 조회할 때 쓴다.
+	 * "/" 뒤가 10자를 넘으면 원본을 뒤에서 잘라 맞추고, 숫자로 끝나는 원본도 그대로 뒤에 붙인다 (/견적2 → /견적22).
+	 * 숫자로 끝나는 10자 원본은 잘라 붙인 후보가 원본과 같아질 수 있다 (/견적요청서작성안내2 + 2).
+	 * 원본 키는 이미 쓰는 키라 findAvailable에서 자연히 건너뛴다.
+	 */
+	public List<Shortcut> numberedCandidates() {
+		String body = value.substring(PREFIX.length());
+		return IntStream.rangeClosed(MIN_NUMBER, MAX_NUMBER)
+			.mapToObj(String::valueOf)
+			.map(number -> {
+				int bodyLength = Math.min(body.length(), MAX_BODY_LENGTH - number.length());
+				return create(PREFIX + body.substring(0, bodyLength) + number);
+			})
+			.toList();
 	}
 
 	/**
