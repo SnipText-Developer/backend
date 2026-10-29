@@ -22,7 +22,6 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class TemplateCommandService {
 
 	private static final String ACTIVE_SHORTCUT_UNIQUE = "uk_templates_user_active_shortcut";
@@ -43,13 +42,12 @@ public class TemplateCommandService {
 		validateTemplateLimit(command.userId());
 
 		TemplateTitle title = TemplateTitle.create(command.title());
-
 		Shortcut shortcut = Shortcut.create(command.shortcut());
 		validateShortcutAvailable(command.userId(), shortcut);
-
 		TemplateContent content = TemplateContent.create(command.content());
 
 		Template template = Template.create(command.userId(), title, shortcut, content);
+
 		return TemplateCreateResult.from(save(template));
 	}
 
