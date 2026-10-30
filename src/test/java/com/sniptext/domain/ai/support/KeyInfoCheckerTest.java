@@ -328,6 +328,50 @@ class KeyInfoCheckerTest {
 			assertThat(extracted(text)).isEmpty();
 		}
 
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"오후 2~4시|오후 2시부터 4시까지",
+			"오후 2~4시|오후 2시부터 오후 4시까지",
+			"오후 2~4시|14:00~16:00",
+			"10월 14~16일 휴무|10월 14일부터 16일까지 휴무",
+			"10월 14~16일 휴무|10월 14일부터 10월 16일까지 휴무",
+			"10월 14일~16일|10월 14일부터 10월 16일까지",
+			"오전 10시~2시|오전 10시부터 오후 2시까지",
+		})
+		@DisplayName("뒤쪽 값은 앞쪽의 연·월·오전오후를 물려받고, 부터…까지도 같은 범위다")
+		void backInheritsFromFront(String original, String corrected) {
+			assertNoDifference(KeyInfoChecker.compare(original, corrected));
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"오후 2~4시|오후 2시부터 5시까지|오후 4시|오후 5시",
+			"10월 14~16일|10월 14일부터 17일까지|10월 16일|10월 17일",
+		})
+		@DisplayName("물려받은 뒤쪽 값이 바뀌면 물려받은 표기로 빠진 값·새 값을 담는다")
+		void inheritedBackChanged(String original, String corrected, String missing, String added) {
+			KeyInfoDiff diff = KeyInfoChecker.compare(original, corrected);
+
+			assertThat(diff.missingValues()).containsExactly(missing);
+			assertThat(diff.addedValues()).containsExactly(added);
+		}
+
+		@Test
+		@DisplayName("부터와 뒤쪽 값 사이에 다른 말이 있으면 범위가 아니라 뒤쪽은 수량이다")
+		void untilWithWordsBetweenIsNotRange() {
+			String text = "10월 14일부터 접수하고 16일까지";
+
+			assertThat(extracted(text)).containsExactly("10월 14일", "16일");
+			assertSameValues(text, "10월 14일, 16일");
+		}
+
+		@Test
+		@DisplayName("월 없는 3일부터 5일까지는 수량 두 개다")
+		void untilWithoutMonthStaysQuantity() {
+			assertThat(extracted("3일부터 5일까지")).containsExactly("3일", "5일");
+			assertSameValues("3일부터 5일까지", "3~5일");
+		}
+
 	}
 
 	@Nested
