@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.fixture.TemplateFixture;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.crypto.AesGcmContentCipher;
 import com.sniptext.global.crypto.ContentCipher;
 import com.sniptext.global.crypto.ContentDecryptionException;
@@ -163,12 +164,8 @@ class TemplateContentEncryptionTest extends IntegrationTestSupport {
 		return (EncryptedStringConverter)converter.getConverterBean().getBeanInstance();
 	}
 
-	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 BaseTimeEntityTest처럼 직접 저장한다
 	private Long saveUser(String email) {
-		User user = User.builder()
-			.email(email)
-			.nickname("닉네임")
-			.build();
+		User user = UserFixture.user(email);
 		entityManager.persist(user);
 		entityManager.flush();
 		return user.getId();

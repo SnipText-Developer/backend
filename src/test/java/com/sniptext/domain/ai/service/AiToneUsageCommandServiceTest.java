@@ -27,8 +27,8 @@ import com.sniptext.domain.ai.entity.AiToneDailyUsage;
 import com.sniptext.domain.ai.exception.AiErrorCode;
 import com.sniptext.domain.ai.repository.AiToneDailyUsageRepository;
 import com.sniptext.domain.ai.service.dto.result.AiToneReserveResult;
-import com.sniptext.domain.user.entity.User;
 import com.sniptext.domain.user.repository.UserRepository;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.exception.BusinessException;
 import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClock;
@@ -321,12 +321,8 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 		return rows.getFirst();
 	}
 
-	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 기존 테스트처럼 직접 저장한다
 	private Long saveUser(String email) {
-		return userRepository.save(User.builder()
-			.email(email)
-			.nickname("닉네임")
-			.build()).getId();
+		return userRepository.save(UserFixture.user(email)).getId();
 	}
 
 	private static void await(CountDownLatch latch) {
