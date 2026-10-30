@@ -10,3 +10,6 @@ sniptext:
     secret: ${JWT_SECRET:local-only-jwt-secret-for-sniptext-dev}
   crypto:
     content-key: ${CONTENT_ENCRYPTION_KEY:Mg+PwFGfOYghWGhe9CBZQ7XC46d+ODvtlOAUugqKqWM=}
+  # 로컬은 외부를 부르지 않는 가짜 언어 모델이 기본이다
+  ai:
+    provider: ${AI_PROVIDER:fake}
