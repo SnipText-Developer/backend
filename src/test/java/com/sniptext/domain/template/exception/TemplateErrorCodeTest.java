@@ -22,6 +22,18 @@ class TemplateErrorCodeTest {
 		assertThat(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED.getMessage()).isEqualTo("사용할 수 있는 단축어 번호가 없어요.");
 	}
 
+	@Test
+	@DisplayName("템플릿 없음과 휴지통은 명세의 결과 코드와 문구다")
+	void notFound() {
+		assertThat(TemplateErrorCode.TEMPLATE_NOT_FOUND.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+		assertThat(TemplateErrorCode.TEMPLATE_NOT_FOUND.getCode()).isEqualTo("TEMPLATE404_1");
+		assertThat(TemplateErrorCode.TEMPLATE_NOT_FOUND.getMessage()).isEqualTo("템플릿을 찾을 수 없어요.");
+
+		assertThat(TemplateErrorCode.TEMPLATE_IN_TRASH.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+		assertThat(TemplateErrorCode.TEMPLATE_IN_TRASH.getCode()).isEqualTo("TEMPLATE404_2");
+		assertThat(TemplateErrorCode.TEMPLATE_IN_TRASH.getMessage()).isEqualTo("이미 삭제된 템플릿이에요.");
+	}
+
 	@ParameterizedTest
 	@CsvSource({
 		"EMPTY,          TEMPLATE400_3, 호출 단축어를 입력해주세요.",
