@@ -33,8 +33,10 @@ public class TemplateCommandService {
 	private static final String ACTIVE_SHORTCUT_UNIQUE = "uk_templates_user_active_shortcut";
 
 	private final TemplateRepository templateRepository;
+
 	private final UserCommandService userCommandService;
 	private final PlanQueryService planQueryService;
+
 	private final TransactionTemplate transactionTemplate;
 
 	/**
@@ -68,6 +70,7 @@ public class TemplateCommandService {
 	 */
 	public TemplateShortcutAssignResult createFromGallery(TemplateCreateFromGalleryCommand command) {
 		requireNoOuterTransaction();
+
 		return transactionTemplate.execute(status -> {
 			userCommandService.lockUser(command.userId());
 
@@ -78,8 +81,12 @@ public class TemplateCommandService {
 			Shortcut assigned = original.findAvailable(usedKeys)
 				.orElseThrow(() -> new BusinessException(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED));
 
-			Template template = Template.createFromGallery(command.userId(), command.galleryTemplateId(),
-				TemplateTitle.create(command.title()), assigned, TemplateContent.create(command.content()));
+			Template template = Template.createFromGallery(
+				command.userId(),
+				command.galleryTemplateId(),
+				TemplateTitle.create(command.title()),
+				assigned,
+				TemplateContent.create(command.content()));
 
 			return TemplateShortcutAssignResult.of(save(template), original);
 		});
