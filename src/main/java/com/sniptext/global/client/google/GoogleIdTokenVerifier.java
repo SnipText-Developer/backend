@@ -1,4 +1,4 @@
-package com.sniptext.global.client;
+package com.sniptext.global.client.google;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -8,7 +8,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -16,7 +15,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Component;
 
 /**
- * 프론트가 구글 로그인으로 받은 ID 토큰을 검증한다 (명세 1번 비고).
+ * 구글 ID 토큰을 검증한다 (명세 1번 비고). 인가 코드 방식에서는 서버가 코드 교환으로 받은 ID 토큰을 여기에 넘긴다.
  * 구글 공개키 서명, 발급자, 대상(우리 클라이언트 ID), 만료, 이메일 인증 여부를 모두 통과해야 계정 정보를 돌려준다.
  * 공개키는 처음 검증할 때 구글에서 받아 캐시하므로 기동할 때는 구글에 접속하지 않는다.
  * 실패 이유와 토큰 원문은 로그·예외 메시지에 남기지 않는다.
@@ -34,15 +33,12 @@ public class GoogleIdTokenVerifier {
 	private final NimbusJwtDecoder decoder;
 
 	@Autowired
-	public GoogleIdTokenVerifier(@Value("${sniptext.google.client-id}") String clientId, Clock clock) {
-		this(NimbusJwtDecoder.withJwkSetUri(JWK_SET_URI).build(), clientId, clock);
+	public GoogleIdTokenVerifier(GoogleProperties properties, Clock clock) {
+		this(NimbusJwtDecoder.withJwkSetUri(JWK_SET_URI).build(), properties.clientId(), clock);
 	}
 
-	/** 테스트에서 구글 대신 직접 만든 키로 서명한 토큰을 검증할 때 쓴다. */
+	/** 테스트에서 구글 대신 직접 만든 키로 서명한 토큰을 검증할 때 쓴다. 클라이언트 ID가 비었는지는 GoogleProperties가 기동 때 본다. */
 	GoogleIdTokenVerifier(NimbusJwtDecoder decoder, String clientId, Clock clock) {
-		if (clientId == null || clientId.isBlank()) {
-			throw new IllegalStateException("sniptext.google.client-id가 비어 있습니다");
-		}
 		decoder.setJwtValidator(jwt -> validate(jwt, clientId, clock));
 		this.decoder = decoder;
 	}

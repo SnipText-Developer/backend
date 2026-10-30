@@ -1,7 +1,6 @@
-package com.sniptext.global.client;
+package com.sniptext.global.client.google;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -19,7 +18,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -146,15 +144,10 @@ class GoogleIdTokenVerifierTest {
 		assertThat(verifier.verify(token)).isEmpty();
 	}
 
-	@ParameterizedTest
-	@NullAndEmptySource
-	@ValueSource(strings = {" "})
-	@DisplayName("클라이언트 ID 설정이 비어 있으면 생성에 실패한다")
-	void blankClientId(String clientId) {
-		NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey((RSAPublicKey)googleKey.getPublic()).build();
-
-		assertThatThrownBy(() -> new GoogleIdTokenVerifier(decoder, clientId, clock))
-			.isInstanceOf(IllegalStateException.class);
+	@Test
+	@DisplayName("구글 계정 고유값(sub)이 없으면 빈 값이다")
+	void withoutSubject() {
+		assertThat(verifier.verify(sign(googleKey, claims -> claims.claims(map -> map.remove("sub"))))).isEmpty();
 	}
 
 	/** 구글 ID 토큰과 같은 모양의 토큰. customizer로 클레임 하나씩 바꿔 실패 경우를 만든다. */
