@@ -2,10 +2,13 @@ package com.sniptext.domain.template.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+import org.hibernate.exception.ConstraintViolationException;
+import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -60,6 +63,23 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 		assertThatThrownBy(() -> templateRepository.saveAndFlush(TemplateFixture.template(userId, "/견적")))
 			.isInstanceOf(DataIntegrityViolationException.class)
 			.hasMessageContaining(ACTIVE_SHORTCUT_UNIQUE);
+	}
+
+	/**
+	 * 서비스는 저장 중 유니크 위반을 이 이름과 종류로 가려 TEMPLATE409_1로 바꾼다. 서비스 단위 테스트는 같은 모양의 가짜 예외를 쓰므로,
+	 * MySQL·하이버네이트를 올리며 모양이 바뀌면 여기서 먼저 깨진다.
+	 */
+	@Test
+	@DisplayName("단축어 유니크 위반은 하이버네이트가 테이블 접두어가 붙은 제약 이름과 UNIQUE 종류로 알려 준다")
+	void duplicateViolationShape() {
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/견적"));
+
+		Throwable thrown = catchThrowable(() -> templateRepository.saveAndFlush(TemplateFixture.template(userId, "/견적")));
+
+		assertThat(thrown).isInstanceOf(DataIntegrityViolationException.class);
+		ConstraintViolationException violation = findViolation(thrown);
+		assertThat(violation.getKind()).isEqualTo(ConstraintKind.UNIQUE);
+		assertThat(violation.getConstraintName()).isEqualTo("templates." + ACTIVE_SHORTCUT_UNIQUE);
 	}
 
 	@Test
@@ -165,11 +185,47 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 		assertThat(found.getSourceGalleryTemplateId()).isNull();
 	}
 
+	@Test
+	@DisplayName("활성 개수는 휴지통과 다른 회원의 템플릿을 세지 않는다")
+	void countActive() {
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/견적"));
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/감사"));
+		Template trashed = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/공지"));
+		trashed.moveToTrash(FIXED.plusHours(1));
+		templateRepository.saveAndFlush(TemplateFixture.template(otherUserId, "/견적"));
+
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(2);
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(otherUserId)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("활성 단축어 키 존재 여부는 비교 키로 찾고, 휴지통과 다른 회원의 템플릿은 보지 않는다")
+	void existsActiveShortcutKey() {
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/Quote"));
+		Template trashed = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/공지"));
+		trashed.moveToTrash(FIXED.plusHours(1));
+		templateRepository.saveAndFlush(TemplateFixture.template(otherUserId, "/감사"));
+		entityManager.clear();
+
+		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/quote")).isTrue();
+		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/공지")).isFalse();
+		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/감사")).isFalse();
+	}
+
 	private Long saveUser(String email) {
 		User user = UserFixture.user(email);
 		entityManager.persist(user);
 		entityManager.flush();
 		return user.getId();
+	}
+
+	private static ConstraintViolationException findViolation(Throwable thrown) {
+		for (Throwable cause = thrown; cause != null; cause = cause.getCause()) {
+			if (cause instanceof ConstraintViolationException violation) {
+				return violation;
+			}
+		}
+		throw new AssertionError("원인 사슬에 하이버네이트 ConstraintViolationException이 없다");
 	}
 
 	private Template reload(Template template) {
