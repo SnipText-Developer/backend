@@ -1,6 +1,11 @@
 package com.sniptext.domain.template.repository;
 
+import java.util.Collection;
+import java.util.Set;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.sniptext.domain.template.entity.Template;
 
@@ -14,5 +19,12 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 	 * 휴지통 조건을 따로 걸지 않아도 되고, 유니크 인덱스 uk_templates_user_active_shortcut을 그대로 탄다
 	 */
 	boolean existsByUserIdAndActiveShortcutKey(Long userId, String activeShortcutKey);
+
+	/**
+	 * 넘긴 비교 키 중 활성 템플릿(휴지통 제외)이 이미 쓰는 키. 자동 번호 후보를 한 번에 확인할 때 쓴다.
+	 * existsByUserIdAndActiveShortcutKey와 같이 생성 컬럼이라 휴지통 조건이 따로 없고, 유니크 인덱스를 그대로 탄다
+	 */
+	@Query("select t.activeShortcutKey from Template t where t.userId = :userId and t.activeShortcutKey in :keys")
+	Set<String> findActiveShortcutKeys(@Param("userId") Long userId, @Param("keys") Collection<String> keys);
 
 }

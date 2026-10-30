@@ -31,7 +31,9 @@ public enum TemplateErrorCode implements ResultCode {
 	/** 활성 템플릿 수가 플랜 한도 이상 (화면은 한도 모달) */
 	TEMPLATE_LIMIT_REACHED(HttpStatus.FORBIDDEN, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요."),
 	/** 내 템플릿(휴지통 제외)에 같은 단축어 키가 있음. 대소문자 무시 */
-	SHORTCUT_DUPLICATED(HttpStatus.CONFLICT, "TEMPLATE409_1", "이미 사용 중인 단축어예요.");
+	SHORTCUT_DUPLICATED(HttpStatus.CONFLICT, "TEMPLATE409_1", "이미 사용 중인 단축어예요."),
+	/** 자동 번호 2~99가 모두 사용 중 (갤러리 저장·휴지통 복구) */
+	SHORTCUT_NUMBER_EXHAUSTED(HttpStatus.CONFLICT, "TEMPLATE409_2", "사용할 수 있는 단축어 번호가 없어요.");
 
 	private final HttpStatus httpStatus;
 	private final String code;

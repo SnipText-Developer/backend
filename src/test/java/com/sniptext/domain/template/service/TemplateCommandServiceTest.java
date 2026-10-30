@@ -9,12 +9,16 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 
 import java.sql.SQLException;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -26,14 +30,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.plan.service.PlanQueryService;
 import com.sniptext.domain.plan.service.dto.result.PlanResult;
+import com.sniptext.domain.template.entity.Shortcut;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
+import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.user.entity.Plan;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.global.exception.BusinessException;
@@ -57,6 +66,9 @@ class TemplateCommandServiceTest {
 
 	@Mock
 	private PlanQueryService planQueryService;
+
+	@Mock
+	private TransactionTemplate transactionTemplate;
 
 	@InjectMocks
 	private TemplateCommandService templateCommandService;
@@ -158,6 +170,146 @@ class TemplateCommandServiceTest {
 
 		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
 			.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Nested
+	@DisplayName("갤러리에서 저장")
+	class CreateFromGallery {
+
+		private static final Long GALLERY_TEMPLATE_ID = 7L;
+		private static final String TITLE = "프리랜서 견적 안내";
+		private static final String SHORTCUT = "/견적";
+		private static final TemplateCreateFromGalleryCommand GALLERY_COMMAND =
+			new TemplateCreateFromGalleryCommand(USER_ID, GALLERY_TEMPLATE_ID, TITLE, SHORTCUT, CONTENT);
+
+		/** 트랜잭션 경계는 TemplateCreateFromGalleryTest가 실제로 검증한다. 여기서는 콜백만 실행한다 */
+		@BeforeEach
+		void setUp() {
+			given(transactionTemplate.execute(any())).willAnswer(invocation ->
+				invocation.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
+		}
+
+		@Test
+		@DisplayName("충돌이 없으면 원본 단축어로 출처와 함께 저장하고 shortcutChanged는 false다")
+		void noConflict() {
+			givenActiveCount(FREE, 0);
+			givenUsedKeys(GALLERY_COMMAND.shortcut());
+			givenSaveSucceeds();
+
+			TemplateShortcutAssignResult result = templateCommandService.createFromGallery(GALLERY_COMMAND);
+
+			ArgumentCaptor<Template> saved = ArgumentCaptor.forClass(Template.class);
+			then(templateRepository).should().saveAndFlush(saved.capture());
+			assertThat(saved.getValue().getUserId()).isEqualTo(USER_ID);
+			assertThat(saved.getValue().getSourceGalleryTemplateId()).isEqualTo(GALLERY_TEMPLATE_ID);
+			assertThat(saved.getValue().getContent().getValue()).isEqualTo(CONTENT);
+			assertThat(result).isEqualTo(new TemplateShortcutAssignResult(TEMPLATE_ID, TITLE, SHORTCUT, SHORTCUT, false));
+		}
+
+		@Test
+		@DisplayName("충돌이 있으면 비어 있는 첫 번호를 붙여 저장하고 shortcutChanged는 true다")
+		void conflict() {
+			givenActiveCount(FREE, 0);
+			givenUsedKeys(GALLERY_COMMAND.shortcut(), "/견적", "/견적2");
+			givenSaveSucceeds();
+
+			TemplateShortcutAssignResult result = templateCommandService.createFromGallery(GALLERY_COMMAND);
+
+			assertThat(result).isEqualTo(new TemplateShortcutAssignResult(TEMPLATE_ID, TITLE, "/견적3", SHORTCUT, true));
+		}
+
+		@Test
+		@DisplayName("자모 분리형 원본은 글자가 같으므로 충돌이 없으면 shortcutChanged가 false이고 원본도 NFC로 돌려준다")
+		void decomposedOriginalIsNotChanged() {
+			String decomposed = Normalizer.normalize(SHORTCUT, Normalizer.Form.NFD);
+			givenActiveCount(FREE, 0);
+			givenUsedKeys(decomposed);
+			givenSaveSucceeds();
+
+			TemplateShortcutAssignResult result = templateCommandService.createFromGallery(
+				new TemplateCreateFromGalleryCommand(USER_ID, GALLERY_TEMPLATE_ID, TITLE, decomposed, CONTENT));
+
+			assertThat(result.shortcut()).isEqualTo(SHORTCUT);
+			assertThat(result.originalShortcut()).isEqualTo(SHORTCUT);
+			assertThat(result.shortcutChanged()).isFalse();
+		}
+
+		@Test
+		@DisplayName("활성 개수가 한도에 도달했으면 TEMPLATE403_1이고 단축어 조회와 저장을 하지 않는다")
+		void limitReached() {
+			givenActiveCount(FREE, 5);
+
+			assertThatThrownBy(() -> templateCommandService.createFromGallery(GALLERY_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.extracting("resultCode")
+				.isEqualTo(TemplateErrorCode.TEMPLATE_LIMIT_REACHED);
+			then(templateRepository).should(never()).findActiveShortcutKeys(any(), any());
+			then(templateRepository).should(never()).saveAndFlush(any());
+		}
+
+		@Test
+		@DisplayName("후보가 모두 차면 TEMPLATE409_2이고 저장하지 않는다")
+		void numbersExhausted() {
+			givenActiveCount(FREE, 0);
+			givenUsedKeys(GALLERY_COMMAND.shortcut(),
+				Shortcut.create(GALLERY_COMMAND.shortcut()).candidateKeys().toArray(String[]::new));
+
+			assertThatThrownBy(() -> templateCommandService.createFromGallery(GALLERY_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.extracting("resultCode")
+				.isEqualTo(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED);
+			then(templateRepository).should(never()).saveAndFlush(any());
+		}
+
+		@Test
+		@DisplayName("회원 행을 잠근 뒤에 한도, 사용 중인 키를 확인하고 저장한다")
+		void locksBeforeLimitCheck() {
+			givenActiveCount(FREE, 0);
+			givenUsedKeys(GALLERY_COMMAND.shortcut());
+			givenSaveSucceeds();
+
+			templateCommandService.createFromGallery(GALLERY_COMMAND);
+
+			InOrder inOrder = inOrder(userCommandService, planQueryService, templateRepository);
+			inOrder.verify(userCommandService).lockUser(USER_ID);
+			inOrder.verify(planQueryService).getCurrentPlan(USER_ID);
+			inOrder.verify(templateRepository).countByUserIdAndDeletedAtIsNull(USER_ID);
+			inOrder.verify(templateRepository).findActiveShortcutKeys(any(), any());
+			inOrder.verify(templateRepository).saveAndFlush(any());
+		}
+
+		@Test
+		@DisplayName("미리 조회를 통과했어도 저장에서 활성 단축어 유니크 위반이 나면 TEMPLATE409_1이고, 예외 메시지에 겹친 단축어가 남지 않는다")
+		void duplicateShortcut() {
+			givenActiveCount(FREE, 0);
+			givenUsedKeys(GALLERY_COMMAND.shortcut());
+			givenSaveFails(ConstraintKind.UNIQUE, "templates.uk_templates_user_active_shortcut");
+
+			assertThatThrownBy(() -> templateCommandService.createFromGallery(GALLERY_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.hasMessage("TEMPLATE409_1")
+				.hasNoCause()
+				.extracting("resultCode")
+				.isEqualTo(TemplateErrorCode.SHORTCUT_DUPLICATED);
+		}
+
+		@Test
+		@DisplayName("단축어 유니크가 아닌 무결성 위반은 바꾸지 않고 그대로 던진다 (코드 실수라 500)")
+		void otherIntegrityViolation() {
+			givenActiveCount(FREE, 0);
+			givenUsedKeys(GALLERY_COMMAND.shortcut());
+			givenSaveFails(ConstraintKind.FOREIGN_KEY, "templates.fk_templates_gallery");
+
+			assertThatThrownBy(() -> templateCommandService.createFromGallery(GALLERY_COMMAND))
+				.isInstanceOf(DataIntegrityViolationException.class);
+		}
+
+		/** 원본의 후보 키 전체로 조회해야 이미 쓰는 키가 돌아온다 */
+		private void givenUsedKeys(String shortcut, String... usedKeys) {
+			given(templateRepository.findActiveShortcutKeys(USER_ID, Shortcut.create(shortcut).candidateKeys()))
+				.willReturn(Set.of(usedKeys));
+		}
+
 	}
 
 	private void givenActiveCount(PlanResult plan, long activeCount) {

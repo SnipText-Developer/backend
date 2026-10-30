@@ -97,7 +97,7 @@ domain/{도메인}/
 | 연결 | 메서드 | 만드는 쪽 → 부르는 쪽 |
 | --- | --- | --- |
 | 현재 플랜 조회 | `PlanResult getCurrentPlan(Long userId)` | plan → template, user, ai |
-| 갤러리에서 템플릿 생성 | `TemplateCreateResult createFromGallery(TemplateCreateFromGalleryCommand)` | template → gallery |
+| 갤러리에서 템플릿 생성 | `TemplateShortcutAssignResult createFromGallery(TemplateCreateFromGalleryCommand)` (호출자 트랜잭션 밖에서만) | template → gallery |
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
