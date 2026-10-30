@@ -2,6 +2,7 @@ package com.sniptext.domain.template.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.text.Normalizer;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -211,6 +212,34 @@ class ShortcutSuffixTest {
 		List<String> keys = Shortcut.create("/견적요청서작성안내2").candidateKeys();
 
 		assertThat(keys).hasSize(98).doesNotHaveDuplicates();
+	}
+
+	@Test
+	@DisplayName("자동 번호가 붙은 단축어는 원본에서 바뀐 것이다")
+	void changedFromOriginal() {
+		Shortcut original = Shortcut.create("/견적");
+
+		Shortcut assigned = original.findAvailable(Set.of("/견적")).orElseThrow();
+
+		assertThat(assigned.isChangedFrom(original)).isTrue();
+	}
+
+	@Test
+	@DisplayName("원본 그대로 쓴 단축어는 바뀌지 않은 것이다")
+	void notChangedFromOriginal() {
+		Shortcut original = Shortcut.create("/견적");
+
+		Shortcut assigned = original.findAvailable(Set.of()).orElseThrow();
+
+		assertThat(assigned.isChangedFrom(original)).isFalse();
+	}
+
+	@Test
+	@DisplayName("자모 분리형으로 만든 원본도 글자가 같으면 바뀌지 않은 것이다")
+	void decomposedNotChanged() {
+		Shortcut decomposed = Shortcut.create(Normalizer.normalize("/견적", Normalizer.Form.NFD));
+
+		assertThat(Shortcut.create("/견적").isChangedFrom(decomposed)).isFalse();
 	}
 
 }

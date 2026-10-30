@@ -6,7 +6,7 @@ import java.util.List;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.support.TemplateVariableExtractor;
 
-/** 저장한 템플릿. 새 템플릿 저장과 갤러리에서 저장(createFromGallery)이 같이 쓴다. 변수 목록은 저장하지 않고 본문에서 뽑는다. */
+/** 새로 저장한 템플릿. 변수 목록은 저장하지 않고 본문에서 뽑는다. */
 public record TemplateCreateResult(
 	Long templateId,
 	String title,

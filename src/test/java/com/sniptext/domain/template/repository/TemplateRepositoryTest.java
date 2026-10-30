@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
@@ -210,6 +211,22 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/quote")).isTrue();
 		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/공지")).isFalse();
 		assertThat(templateRepository.existsByUserIdAndActiveShortcutKey(userId, "/감사")).isFalse();
+	}
+
+	@Test
+	@DisplayName("활성 단축어 키 조회는 넘긴 키 중 이미 쓰는 것만 돌려주고, 휴지통과 다른 회원의 템플릿은 보지 않는다")
+	void findActiveShortcutKeys() {
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/Quote"));
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/quote2"));
+		templateRepository.saveAndFlush(TemplateFixture.template(userId, "/목록밖"));
+		Template trashed = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/quote3"));
+		trashed.moveToTrash(FIXED.plusHours(1));
+		templateRepository.saveAndFlush(TemplateFixture.template(otherUserId, "/quote4"));
+		entityManager.clear();
+
+		assertThat(templateRepository.findActiveShortcutKeys(userId,
+			List.of("/quote", "/quote2", "/quote3", "/quote4", "/quote5")))
+			.containsExactlyInAnyOrder("/quote", "/quote2");
 	}
 
 	private Long saveUser(String email) {
