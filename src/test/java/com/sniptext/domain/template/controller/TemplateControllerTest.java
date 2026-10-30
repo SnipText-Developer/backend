@@ -192,6 +192,14 @@ class TemplateControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("한도에 도달했고 단축어도 겹치면 한도 에러(TEMPLATE403_1)가 먼저다")
+	void limitBeforeDuplicate() throws Exception {
+		saveTemplates(userId, 5);
+
+		expectError(create(userId, TITLE, "/t1", CONTENT), 403, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요.");
+	}
+
+	@Test
 	@DisplayName("휴지통 템플릿은 한도 개수에 들어가지 않는다")
 	void trashNotCounted() throws Exception {
 		saveTemplates(userId, 5);
