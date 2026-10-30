@@ -235,8 +235,8 @@ class GoogleAuthCodeClientTest {
 	}
 
 	private static GoogleProperties properties(String tokenUri, Duration readTimeout) {
-		return new GoogleProperties(CLIENT_ID, CLIENT_SECRET, List.of(REDIRECT_URI), tokenUri, Duration.ofSeconds(2),
-			readTimeout);
+		return new GoogleProperties(CLIENT_ID, CLIENT_SECRET, List.of(REDIRECT_URI), tokenUri,
+			"https://www.googleapis.com/oauth2/v3/certs", Duration.ofSeconds(2), readTimeout);
 	}
 
 }

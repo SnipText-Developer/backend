@@ -17,7 +17,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * 재시도하지 않는다. 인가 코드는 한 번만 쓸 수 있어서, 시간 초과로 끝났어도 구글 쪽에서는 이미 교환됐을 수 있다.
  * <p>
  * 결과는 세 가지다. 검증된 계정 정보, 빈 값(잘못된·만료·재사용 코드, 허용 목록에 없는 redirectUri, ID 토큰 검증 실패),
- * {@link GoogleLoginException}(구글 장애·연결 실패·시간 초과, 우리 설정 오류).
+ * {@link GoogleLoginException}(구글 장애·연결 실패·시간 초과, 우리 설정 오류, 검증에 쓸 구글 공개키 조회 실패).
  * 요청 팩토리(연결·응답 시간 제한)는 넘겨받은 빌더에 이미 들어 있어야 한다 (테스트에서 가짜 서버를 묶을 수 있게).
  */
 public class GoogleAuthCodeClient {

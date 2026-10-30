@@ -19,7 +19,8 @@ import jakarta.validation.constraints.NotNull;
  * @param clientSecret   코드 교환에 쓴다 (웹 클라이언트는 PKCE를 써도 필요하다)
  * @param redirectUris   로그인 요청의 redirectUri가 이 목록에 있어야 교환한다 (환경 변수는 쉼표로 구분)
  * @param tokenUri       구글 토큰 엔드포인트
- * @param connectTimeout 연결 제한
+ * @param jwkSetUri      ID 토큰 서명을 확인할 구글 공개키 주소
+ * @param connectTimeout 연결 제한 (코드 교환과 공개키 조회에 같이 쓴다)
  * @param readTimeout    응답 제한. 로그인 화면이 오래 멈추지 않게 짧게 둔다
  */
 @Validated
@@ -34,6 +35,9 @@ public record GoogleProperties(
 	@NotBlank
 	@DefaultValue("https://oauth2.googleapis.com/token")
 	String tokenUri,
+	@NotBlank
+	@DefaultValue("https://www.googleapis.com/oauth2/v3/certs")
+	String jwkSetUri,
 	@NotNull
 	@DefaultValue("3s")
 	Duration connectTimeout,
@@ -44,8 +48,8 @@ public record GoogleProperties(
 
 	@Override
 	public String toString() {
-		return "GoogleProperties[clientId=%s, redirectUris=%s, tokenUri=%s, connectTimeout=%s, readTimeout=%s]"
-			.formatted(clientId, redirectUris, tokenUri, connectTimeout, readTimeout);
+		return ("GoogleProperties[clientId=%s, redirectUris=%s, tokenUri=%s, jwkSetUri=%s, connectTimeout=%s, "
+			+ "readTimeout=%s]").formatted(clientId, redirectUris, tokenUri, jwkSetUri, connectTimeout, readTimeout);
 	}
 
 }

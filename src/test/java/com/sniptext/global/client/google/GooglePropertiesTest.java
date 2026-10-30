@@ -61,6 +61,7 @@ class GooglePropertiesTest {
 			assertThat(properties.redirectUris()).containsExactly(
 				"https://sniptext.io/auth/google/callback", "http://localhost:5173/auth/google/callback");
 			assertThat(properties.tokenUri()).isEqualTo("https://oauth2.googleapis.com/token");
+			assertThat(properties.jwkSetUri()).isEqualTo("https://www.googleapis.com/oauth2/v3/certs");
 			assertThat(properties.connectTimeout()).isEqualTo(Duration.ofSeconds(3));
 			assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(5));
 		});
@@ -71,7 +72,7 @@ class GooglePropertiesTest {
 	void toStringHidesSecret() {
 		GoogleProperties properties = new GoogleProperties("client-id", "secret-value-1234",
 			List.of("https://sniptext.io/auth/google/callback"), "https://oauth2.googleapis.com/token",
-			Duration.ofSeconds(3), Duration.ofSeconds(5));
+			"https://www.googleapis.com/oauth2/v3/certs", Duration.ofSeconds(3), Duration.ofSeconds(5));
 
 		assertThat(properties.toString()).doesNotContain("secret-value-1234").contains("client-id");
 	}
