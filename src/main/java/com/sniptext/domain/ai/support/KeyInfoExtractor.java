@@ -15,7 +15,8 @@ import com.sniptext.domain.ai.support.KeyInfoValue.TimeValue;
  * 정규식 대신 앞으로만 읽는 방식이라 처리 시간이 글 길이에 비례한다 (3000자 입력에서 역추적 폭증이 없다).
  * 같은 위치에서는 긴 형식부터 맞추고(날짜 → 시각 → 범위 → 수량), 맞춘 구간은 다시 읽지 않는다.
  * 범위를 벗어난 날짜·시각(13월 5일, 25시)은 값 없이 구간만 소비해 안쪽 숫자가 따로 잡히지 않게 한다.
- * 범위(~, -, –)의 앞쪽 값은 뒤쪽 값의 자릿수·단위를 붙여 읽고, 뒤쪽이 범위를 벗어나면 범위 전체를 버린다.
+ * 범위(~, -, –, 부터…까지)의 앞쪽 값은 뒤쪽 값의 자릿수·단위를 붙여 읽고, 뒤쪽 값은 앞쪽의 연·월·오전오후를 물려받는다.
+ * 뒤쪽이 범위를 벗어나면 범위 전체를 버린다.
  */
 final class KeyInfoExtractor {
 
@@ -25,8 +26,8 @@ final class KeyInfoExtractor {
 	private record Num(BigDecimal value, int end) {
 	}
 
-	/** 형식만 맞춘 날짜. 일은 1~31만 본다. 월별 말일은 검사하지 않는다 */
-	private record DateMatch(Integer year, int month, Integer day, int end) {
+	/** 형식만 맞춘 날짜. 일은 1~31만 본다. 월별 말일은 검사하지 않는다. dayStart는 "10월 14일"의 14 위치(한글 날짜만, 아니면 -1) */
+	private record DateMatch(Integer year, int month, Integer day, int dayStart, int end) {
 
 		boolean valid() {
 			return month >= 1 && month <= 12 && (day == null || (day >= 1 && day <= 31));
@@ -36,6 +37,40 @@ final class KeyInfoExtractor {
 			return new DateValue(year, month, day);
 		}
 
+		/** 연도가 없으면 앞쪽 값의 연도를 물려받는다 */
+		DateMatch inherit(DateMatch front) {
+			return year == null ? new DateMatch(front.year(), month, day, dayStart, end) : this;
+		}
+
+	}
+
+	/** 형식만 맞춘 시각. colon은 15:30처럼 쌍점으로 썼는지 */
+	private record TimeMatch(String meridiem, int hour, int minute, boolean colon, int end) {
+
+		boolean valid() {
+			return validTime(hour, minute);
+		}
+
+		TimeValue toValue() {
+			return new TimeValue(hours(meridiem, hour), minute);
+		}
+
+		/** 오전·오후가 없는 1~12시는 앞쪽 값의 것을 물려받는다. 앞쪽보다 이른 시면 반대쪽으로 넘어간 것으로 본다 (오전 10시~2시의 2시는 오후) */
+		TimeMatch inherit(TimeMatch front) {
+			if (meridiem != null || front.meridiem() == null || hour == 0 || hour > 12) {
+				return this;
+			}
+			String inherited = front.meridiem();
+			if (hour % 12 < front.hour() % 12) {
+				inherited = MORNING.contains(inherited) ? "오후" : "오전";
+			}
+			return new TimeMatch(inherited, hour, minute, colon, end);
+		}
+
+	}
+
+	/** 범위 기호 뒤 값의 시작 위치. hyphen은 하이픈으로 이었는지, until은 뒤쪽 값 바로 뒤에 "까지"가 와야 하는지 */
+	private record Connector(int backStart, boolean hyphen, boolean until) {
 	}
 
 	/**
@@ -67,6 +102,9 @@ final class KeyInfoExtractor {
 	private static final List<String> NOT_AFTER_HOUR = List.of("간", "리즈", "즌");
 	private static final String TILDES = "~～∼";
 	private static final String HYPHENS = "-–";
+	/** "3시부터 5시까지"처럼 앞쪽 값 바로 뒤에 붙어 범위를 여는 말. 뒤쪽 값 바로 뒤에 UNTIL이 와야 범위다 */
+	private static final List<String> FROM = List.of("부터", "에서");
+	private static final String UNTIL = "까지";
 	private static final String DIGIT_RUN_SEPARATORS = ".,:/-";
 
 	/** 앞에 있는 단위부터 맞춘다. 겹치는 것은 긴 단위가 먼저다 (달러 → 달, 개월 → 개, 분기 → 분, 인분 → 인, kg → g) */
@@ -136,30 +174,65 @@ final class KeyInfoExtractor {
 		return !isDigit(i - 1) && !(isDigit(i - 2) && DIGIT_RUN_SEPARATORS.indexOf(charAt(i - 1)) >= 0);
 	}
 
-	/**
-	 * 숫자로만 쓴 날짜. 10/14-10/16처럼 하이픈 양쪽이 모두 완전한 날짜면 둘 다 뽑는다.
-	 * 뒤쪽이 범위를 벗어나면 둘 다 버린다.
-	 */
+	/** 숫자로만 쓴 날짜. 10/14-10/16처럼 하이픈 양쪽이 모두 완전한 날짜면 범위로 본다 */
 	private int fullDate(int i) {
 		DateMatch front = fullDateAt(i);
 		if (front == null) {
 			return -1;
 		}
-		if (isHyphen(front.end())) {
-			DateMatch back = fullDateAt(front.end() + 1);
-			if (back != null && !continuesDigitRun(back.end())) {
-				if (back.valid()) {
-					addDate(i, front);
-					addDate(front.end() + 1, back);
-				}
-				return back.end();
-			}
+		int rangeEnd = dateRange(i, front, true);
+		if (rangeEnd >= 0) {
+			return rangeEnd;
 		}
 		if (continuesDigitRun(front.end())) {
 			return -1;
 		}
 		addDate(i, front);
 		return front.end();
+	}
+
+	/**
+	 * 완전한 앞쪽 날짜 뒤의 범위(~, 부터…까지, 숫자 날짜끼리는 하이픈)를 읽어 둘 다 뽑는다. 범위가 아니면 -1.
+	 * 뒤쪽은 연도가 없으면 앞쪽 연도를, 한글 날짜 뒤에 일만 쓰면(10월 14일~16일) 연·월을 물려받는다. 뒤쪽이 범위를 벗어나면 둘 다 버린다.
+	 */
+	private int dateRange(int start, DateMatch front, boolean hyphenAllowed) {
+		Connector connector = connectorAt(front.end(), hyphenAllowed, true);
+		if (connector == null) {
+			return -1;
+		}
+		int backStart = connector.backStart();
+		DateMatch back = fullDateAt(backStart);
+		boolean dayOnly = false;
+		if (back != null) {
+			if (continuesDigitRun(back.end())) {
+				return -1;
+			}
+		} else if (!connector.hyphen()) {
+			back = koreanDateAt(backStart);
+			if (back == null && front.day() != null && front.dayStart() >= 0) {
+				back = dayAt(backStart, front);
+				dayOnly = true;
+			}
+		}
+		if (back == null || !closes(connector, back.end())) {
+			return -1;
+		}
+		back = back.inherit(front);
+		if (back.valid()) {
+			addDate(start, front);
+			String prefix = dayOnly ? text.substring(start, front.dayStart()) : "";
+			found.add(new Found(prefix + text.substring(backStart, back.end()), back.toValue()));
+		}
+		return back.end();
+	}
+
+	/** 뒤쪽에 일만 쓴 16일. 연·월은 앞쪽 값을 따른다 */
+	private DateMatch dayAt(int i, DateMatch front) {
+		int dayEnd = digitsEnd(i);
+		if (!within(i, dayEnd, 2) || charAt(dayEnd) != '일') {
+			return null;
+		}
+		return new DateMatch(front.year(), front.month(), parse(i, dayEnd), -1, dayEnd + 1);
 	}
 
 	private DateMatch fullDateAt(int i) {
@@ -182,7 +255,7 @@ final class KeyInfoExtractor {
 		if (!within(monthEnd + 1, dayEnd, 2)) {
 			return null;
 		}
-		return new DateMatch(parse(i, yearEnd), parse(yearEnd + 1, monthEnd), parse(monthEnd + 1, dayEnd), dayEnd);
+		return new DateMatch(parse(i, yearEnd), parse(yearEnd + 1, monthEnd), parse(monthEnd + 1, dayEnd), -1, dayEnd);
 	}
 
 	/** 연도 없는 10/14. 연도 없는 10.14는 소수와 구분할 수 없어 날짜로 보지 않는다 */
@@ -195,11 +268,28 @@ final class KeyInfoExtractor {
 		if (!within(monthEnd + 1, dayEnd, 2)) {
 			return null;
 		}
-		return new DateMatch(null, parse(i, monthEnd), parse(monthEnd + 1, dayEnd), dayEnd);
+		return new DateMatch(null, parse(i, monthEnd), parse(monthEnd + 1, dayEnd), -1, dayEnd);
+	}
+
+	/** 2026년 10월 14일, 2026년 10월, 10월 14일, 10월, 10월 14~16일, 10월 14일~16일 */
+	private int koreanDate(int i) {
+		DateMatch front = koreanDateAt(i);
+		if (front == null) {
+			return -1;
+		}
+		int rangeEnd = front.day() == null ? dayRange(i, front) : -1;
+		if (rangeEnd < 0) {
+			rangeEnd = dateRange(i, front, false);
+		}
+		if (rangeEnd >= 0) {
+			return rangeEnd;
+		}
+		addDate(i, front);
+		return front.end();
 	}
 
 	/** 2026년 10월 14일, 2026년 10월, 10월 14일, 10월. 따로 떨어진 2026년은 단위 "년"으로 넘긴다 */
-	private int koreanDate(int i) {
+	private DateMatch koreanDateAt(int i) {
 		int numberEnd = digitsEnd(i);
 		Integer year = null;
 		int monthStart = i;
@@ -209,38 +299,36 @@ final class KeyInfoExtractor {
 		}
 		int monthEnd = digitsEnd(monthStart);
 		if (!within(monthStart, monthEnd, 2) || charAt(monthEnd) != '월') {
-			return -1;
+			return null;
 		}
 		int month = parse(monthStart, monthEnd);
-		int end = monthEnd + 1;
-		Integer day = null;
-		int dayStart = skipSpaces(end);
+		int dayStart = skipSpaces(monthEnd + 1);
 		int dayEnd = digitsEnd(dayStart);
-		if (within(dayStart, dayEnd, 2)) {
-			if (charAt(dayEnd) == '일') {
-				day = parse(dayStart, dayEnd);
-				end = dayEnd + 1;
-			} else {
-				int rangeEnd = dayRange(i, year, month, dayStart, dayEnd);
-				if (rangeEnd >= 0) {
-					return rangeEnd;
-				}
-			}
+		if (within(dayStart, dayEnd, 2) && charAt(dayEnd) == '일') {
+			return new DateMatch(year, month, parse(dayStart, dayEnd), dayStart, dayEnd + 1);
 		}
-		addDate(i, new DateMatch(year, month, day, end));
-		return end;
+		return new DateMatch(year, month, null, dayStart, monthEnd + 1);
 	}
 
 	/** 10월 14~16일: 앞쪽 일에 뒤쪽의 "일"을 붙이고, 양쪽 모두 앞에 쓴 연·월로 읽는다. 뒤쪽이 범위를 벗어나면 월까지 모두 버린다 */
-	private int dayRange(int start, Integer year, int month, int dayStart, int dayEnd) {
-		int backStart = rangeBackStart(dayEnd, true);
-		int backEnd = backStart < 0 ? -1 : digitsEnd(backStart);
-		if (backStart < 0 || !within(backStart, backEnd, 2) || charAt(backEnd) != '일') {
+	private int dayRange(int start, DateMatch month) {
+		int dayStart = month.dayStart();
+		int dayEnd = digitsEnd(dayStart);
+		if (!within(dayStart, dayEnd, 2)) {
 			return -1;
 		}
-		DateMatch back = new DateMatch(year, month, parse(backStart, backEnd), backEnd + 1);
+		Connector connector = connectorAt(dayEnd, true, false);
+		if (connector == null) {
+			return -1;
+		}
+		int backStart = connector.backStart();
+		int backEnd = digitsEnd(backStart);
+		if (!within(backStart, backEnd, 2) || charAt(backEnd) != '일') {
+			return -1;
+		}
+		DateMatch back = new DateMatch(month.year(), month.month(), parse(backStart, backEnd), -1, backEnd + 1);
 		if (back.valid()) {
-			DateMatch front = new DateMatch(year, month, parse(dayStart, dayEnd), dayEnd);
+			DateMatch front = new DateMatch(month.year(), month.month(), parse(dayStart, dayEnd), dayStart, dayEnd);
 			if (front.valid()) {
 				found.add(new Found(text.substring(start, dayEnd) + "일", front.toValue()));
 			}
@@ -255,70 +343,99 @@ final class KeyInfoExtractor {
 		}
 	}
 
-	/** 오후 3시, 15시, 3시 30분, 3시 반, 15:30, 오후 3:30, 오후 2~4시, 09:00-18:00 */
+	/** 오후 3시, 15시, 3시 30분, 3시 반, 15:30, 오후 3:30, 오후 2~4시, 3시부터 5시까지, 09:00-18:00 */
 	private int time(int i) {
+		TimeMatch front = timeAt(i);
+		if (front == null) {
+			return meridiemTimeRange(i);
+		}
+		int rangeEnd = timeRange(i, front, text.substring(i, front.end()), false);
+		if (rangeEnd >= 0) {
+			return rangeEnd;
+		}
+		if (front.colon() && continuesDigitRun(front.end())) {
+			return -1;
+		}
+		if (front.valid()) {
+			add(i, front.end(), front.toValue());
+		}
+		return front.end();
+	}
+
+	/** [오전·오후] H시[ M분 | 반], [오전·오후] H:mm의 형식만 맞춘다. 맞지 않으면 null */
+	private TimeMatch timeAt(int i) {
 		String meridiem = meridiemAt(i);
 		int hourStart = meridiem == null ? i : skipSpaces(i + meridiem.length());
 		int hourEnd = digitsEnd(hourStart);
 		if (!within(hourStart, hourEnd, 2)) {
-			return -1;
+			return null;
 		}
 		int hour = parse(hourStart, hourEnd);
-		int minute = 0;
-		int end;
 		if (isColonMinute(hourEnd)) {
-			minute = parse(hourEnd + 1, hourEnd + 3);
-			end = hourEnd + 3;
-			int rangeEnd = colonTimeRange(i, meridiem, hour, minute, end);
-			if (rangeEnd >= 0) {
-				return rangeEnd;
-			}
-			if (continuesDigitRun(end)) {
-				return -1;
-			}
-		} else if (meridiem != null && !isHourMark(hourEnd)) {
-			int backStart = rangeBackStart(hourEnd, true);
-			return backStart < 0 ? -1 : timeRange(i, meridiem, hourStart, hourEnd, backStart);
-		} else if (isHourMark(hourEnd)) {
-			end = hourEnd + 1;
-			int minuteStart = skipSpaces(end);
-			int minuteEnd = digitsEnd(minuteStart);
-			if (within(minuteStart, minuteEnd, 2) && charAt(minuteEnd) == '분') {
-				minute = parse(minuteStart, minuteEnd);
-				end = minuteEnd + 1;
-			} else if (isHalf(minuteStart)) {
-				minute = 30;
-				end = minuteStart + 1;
-			}
-		} else {
-			return -1;
+			return new TimeMatch(meridiem, hour, parse(hourEnd + 1, hourEnd + 3), true, hourEnd + 3);
 		}
-		if (validTime(hour, minute)) {
-			add(i, end, new TimeValue(hours(meridiem, hour), minute));
+		if (!isHourMark(hourEnd)) {
+			return null;
 		}
-		return end;
+		int minuteStart = skipSpaces(hourEnd + 1);
+		int minuteEnd = digitsEnd(minuteStart);
+		if (within(minuteStart, minuteEnd, 2) && charAt(minuteEnd) == '분') {
+			return new TimeMatch(meridiem, hour, parse(minuteStart, minuteEnd), false, minuteEnd + 1);
+		}
+		if (isHalf(minuteStart)) {
+			return new TimeMatch(meridiem, hour, 30, false, minuteStart + 1);
+		}
+		return new TimeMatch(meridiem, hour, 0, false, hourEnd + 1);
 	}
 
-	/** 09:00-18:00. 하이픈은 양쪽이 모두 완전한 시각일 때만 범위로 본다. 뒤쪽이 범위를 벗어나면 둘 다 버린다 */
-	private int colonTimeRange(int start, String meridiem, int hour, int minute, int frontEnd) {
-		if (!isHyphen(frontEnd)) {
+	/** 오후 2~4시: 오전·오후 뒤 시가 없는 앞쪽 숫자에 "시"를 붙여 범위로 읽는다 */
+	private int meridiemTimeRange(int i) {
+		String meridiem = meridiemAt(i);
+		if (meridiem == null) {
 			return -1;
 		}
-		int backStart = frontEnd + 1;
-		int backHourEnd = digitsEnd(backStart);
-		if (!within(backStart, backHourEnd, 2) || !isColonMinute(backHourEnd) || continuesDigitRun(backHourEnd + 3)) {
+		int hourStart = skipSpaces(i + meridiem.length());
+		int hourEnd = digitsEnd(hourStart);
+		if (!within(hourStart, hourEnd, 2)) {
 			return -1;
 		}
-		int backEnd = backHourEnd + 3;
-		int backHour = parse(backStart, backHourEnd);
-		int backMinute = parse(backHourEnd + 1, backEnd);
-		if (validTime(backHour, backMinute)) {
-			if (validTime(hour, minute)) {
-				add(start, frontEnd, new TimeValue(hours(meridiem, hour), minute));
+		TimeMatch front = new TimeMatch(meridiem, parse(hourStart, hourEnd), 0, false, hourEnd);
+		return timeRange(i, front, text.substring(i, hourEnd) + "시", true);
+	}
+
+	/**
+	 * 앞쪽 시각 뒤의 범위(~, 부터…까지, H:mm끼리는 하이픈)를 읽어 둘 다 뽑는다. 범위가 아니면 -1.
+	 * shortFront는 "오후 2~4시"의 2처럼 시가 없는 앞쪽이다. 이때는 하이픈도 보고 부터…까지는 보지 않으며, 뒤쪽은 오전·오후 없는 H시여야 한다.
+	 * 뒤쪽은 오전·오후가 없으면 앞쪽 것을 물려받는다. 뒤쪽이 범위를 벗어나면(3~25시) 둘 다 버린다.
+	 */
+	private int timeRange(int start, TimeMatch front, String frontText, boolean shortFront) {
+		Connector connector = connectorAt(front.end(), shortFront || front.colon(), !shortFront);
+		if (connector == null) {
+			return -1;
+		}
+		int backStart = connector.backStart();
+		TimeMatch back = timeAt(backStart);
+		if (back == null || !closes(connector, back.end()) || (back.colon() && continuesDigitRun(back.end()))) {
+			return -1;
+		}
+		boolean shapeMatches = shortFront
+			? back.meridiem() == null && !back.colon()
+			: !connector.hyphen() || back.colon();
+		if (!shapeMatches) {
+			return -1;
+		}
+		TimeMatch inherited = back.inherit(front);
+		if (inherited.valid()) {
+			if (front.valid()) {
+				found.add(new Found(frontText, front.toValue()));
 			}
-			add(backStart, backEnd, new TimeValue(hours(null, backHour), backMinute));
+			String backText = text.substring(backStart, back.end());
+			if (back.meridiem() == null && inherited.meridiem() != null) {
+				backText = inherited.meridiem() + " " + backText;
+			}
+			found.add(new Found(backText, inherited.toValue()));
 		}
-		return backEnd;
+		return back.end();
 	}
 
 	private static boolean validTime(int hour, int minute) {
@@ -351,17 +468,22 @@ final class KeyInfoExtractor {
 			return -1;
 		}
 		boolean shortNumber = digitsEnd(i) == front.end() && front.end() - i <= 3;
-		int backStart = rangeBackStart(front.end(), shortNumber);
-		if (backStart < 0) {
+		Connector connector = connectorAt(front.end(), shortNumber, false);
+		if (connector == null) {
 			return -1;
 		}
-		boolean hyphen = backStart == front.end() + 1 && isHyphen(front.end());
+		int backStart = connector.backStart();
+		boolean hyphen = connector.hyphen();
 		int backDigitsEnd = digitsEnd(backStart);
 		if (backDigitsEnd == backStart || (hyphen && backDigitsEnd - backStart > 3)) {
 			return -1;
 		}
 		if (isHourMark(backDigitsEnd)) {
-			return shortNumber && front.end() - i <= 2 ? timeRange(i, null, i, front.end(), backStart) : -1;
+			if (!shortNumber || front.end() - i > 2) {
+				return -1;
+			}
+			TimeMatch frontTime = new TimeMatch(null, parse(i, front.end()), 0, false, front.end());
+			return timeRange(i, frontTime, text.substring(i, front.end()) + "시", true);
 		}
 		QuantityMatch back = quantityMatch(backStart);
 		if (back == null || !back.simple() || (hyphen && isSpace(back.number().numberEnd()))) {
@@ -387,28 +509,31 @@ final class KeyInfoExtractor {
 		return back.end();
 	}
 
-	/** 3~5시, 오후 2~4시: 앞쪽 시에 "시"를 붙이고 앞에 쓴 오전오후는 앞쪽에만 붙인다. 뒤쪽이 범위를 벗어나면(3~25시) 둘 다 버린다 */
-	private int timeRange(int start, String meridiem, int hourStart, int hourEnd, int backStart) {
-		int backEnd = digitsEnd(backStart);
-		if (!within(backStart, backEnd, 2) || !isHourMark(backEnd)) {
-			return -1;
-		}
-		int index = found.size();
-		int end = time(backStart);
-		int hour = parse(hourStart, hourEnd);
-		if (found.size() > index && hour <= 24) {
-			found.add(index, new Found(text.substring(start, hourEnd) + "시", new TimeValue(hours(meridiem, hour), 0)));
-		}
-		return end;
-	}
-
-	/** 앞쪽 값 끝(frontEnd) 다음의 범위 기호를 건너뛴 뒤쪽 시작 위치. 물결은 앞뒤 공백을 허용하고, 하이픈은 hyphenAllowed일 때 붙여 쓴 것만 본다. 범위가 아니면 -1 */
-	private int rangeBackStart(int frontEnd, boolean hyphenAllowed) {
+	/**
+	 * 앞쪽 값 끝(frontEnd) 다음의 범위 기호. 물결은 앞뒤 공백을 허용하고, 하이픈은 hyphenAllowed일 때 붙여 쓴 것만 본다.
+	 * untilAllowed면 앞쪽에 바로 붙은 부터·에서도 보며, 그 뒤에는 공백만 건너뛴다. 범위가 아니면 null
+	 */
+	private Connector connectorAt(int frontEnd, boolean hyphenAllowed, boolean untilAllowed) {
 		int separator = skipSpaces(frontEnd);
 		if (TILDES.indexOf(charAt(separator)) >= 0) {
-			return skipSpaces(separator + 1);
+			return new Connector(skipSpaces(separator + 1), false, false);
 		}
-		return hyphenAllowed && isHyphen(frontEnd) ? frontEnd + 1 : -1;
+		if (hyphenAllowed && isHyphen(frontEnd)) {
+			return new Connector(frontEnd + 1, true, false);
+		}
+		if (untilAllowed) {
+			for (String word : FROM) {
+				if (text.startsWith(word, frontEnd)) {
+					return new Connector(skipSpaces(frontEnd + word.length()), false, true);
+				}
+			}
+		}
+		return null;
+	}
+
+	/** 부터…까지로 연 범위는 뒤쪽 값 바로 뒤에 까지가 와야 닫힌다 */
+	private boolean closes(Connector connector, int backEnd) {
+		return !connector.until() || text.startsWith(UNTIL, backEnd);
 	}
 
 	/** ₩3,000,000, $50 */
