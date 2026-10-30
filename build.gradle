@@ -64,6 +64,8 @@ tasks.named('test') {
 	environment 'JWT_SECRET', 'test-only-jwt-secret-do-not-use-anywhere-else'
 	// 테스트 전용 본문 암호화 키 (Base64로 인코딩한 32바이트)
 	environment 'CONTENT_ENCRYPTION_KEY', 'RipPBY6rYeoR+15yb9ooY0ghmKpl6XwA8XMoAslj0oA='
+	// 테스트는 외부를 부르지 않는 가짜 언어 모델을 쓴다 (prod 프로필 테스트는 클래스에서 anthropic으로 덮어쓴다)
+	environment 'AI_PROVIDER', 'fake'
 	// 테스트 전용 구글 설정 (테스트는 구글에 접속하지 않는다)
 	environment 'GOOGLE_CLIENT_ID', 'test-google-client-id'
 	environment 'GOOGLE_CLIENT_SECRET', 'test-google-client-secret'

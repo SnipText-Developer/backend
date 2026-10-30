@@ -35,6 +35,12 @@ sniptext:
   # 가입 때 동의받는 약관의 현재 버전. 약관이 바뀌면 이 값만 올린다 (본문은 랜딩의 /terms/{버전} 정적 페이지)
   terms:
     current-version: v1
+  # 언어 모델 (AI 톤 교정). provider는 anthropic | fake이고 기본값이 없어 빠뜨리면 기동에 실패한다.
+  # anthropic이면 키와 모델이 필수이고, prod 프로필에서는 fake로 기동할 수 없다.
+  ai:
+    provider: ${AI_PROVIDER}
+    api-key: ${AI_API_KEY:}
+    model: ${AI_MODEL:}
   # 구글 로그인 (인가 코드 교환 + ID 토큰 검증). 아래 세 값은 기본값이 없어 빠뜨리면 기동에 실패한다.
   # redirect-uris는 로그인 뒤 돌아올 화면 주소 허용 목록이다 (쉼표로 구분). 요청의 redirectUri가 여기 없으면 거절한다.
   google:
