@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.sniptext.global.crypto.EncryptedStringConverter;
+import com.sniptext.global.text.TextWhitespace;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;

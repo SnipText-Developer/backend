@@ -3,14 +3,24 @@ package com.sniptext.domain.template.exception;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.http.HttpStatus;
 
 import com.sniptext.domain.template.entity.ShortcutViolation;
 import com.sniptext.domain.template.entity.TemplateContentViolation;
 import com.sniptext.domain.template.entity.TemplateTitleViolation;
 
 class TemplateErrorCodeTest {
+
+	@Test
+	@DisplayName("자동 번호 소진은 명세의 결과 코드와 문구다")
+	void shortcutNumberExhausted() {
+		assertThat(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+		assertThat(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED.getCode()).isEqualTo("TEMPLATE409_2");
+		assertThat(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED.getMessage()).isEqualTo("사용할 수 있는 단축어 번호가 없어요.");
+	}
 
 	@ParameterizedTest
 	@CsvSource({
