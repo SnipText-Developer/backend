@@ -15,6 +15,7 @@ import com.sniptext.domain.ai.support.KeyInfoValue.TimeValue;
  * 정규식 대신 앞으로만 읽는 방식이라 처리 시간이 글 길이에 비례한다 (3000자 입력에서 역추적 폭증이 없다).
  * 같은 위치에서는 긴 형식부터 맞추고(날짜 → 시각 → 범위 → 수량), 맞춘 구간은 다시 읽지 않는다.
  * 범위를 벗어난 날짜·시각(13월 5일, 25시)은 값 없이 구간만 소비해 안쪽 숫자가 따로 잡히지 않게 한다.
+ * 범위(~, -, –)의 앞쪽 값은 뒤쪽 값의 자릿수·단위를 붙여 읽고, 뒤쪽이 범위를 벗어나면 범위 전체를 버린다.
  */
 final class KeyInfoExtractor {
 
@@ -24,12 +25,29 @@ final class KeyInfoExtractor {
 	private record Num(BigDecimal value, int end) {
 	}
 
-	/** 숫자와 한글 자릿수를 읽은 값. scale은 마지막 자릿수 배율, simple은 숫자 하나로만 이루어졌는지 (범위 앞쪽에 배율을 옮겨 붙일 수 있는지) */
-	private record Amount(BigDecimal value, BigDecimal scale, boolean large, boolean simple, int numberEnd, int end) {
+	/** 형식만 맞춘 날짜. 일은 1~31만 본다. 월별 말일은 검사하지 않는다 */
+	private record DateMatch(Integer year, int month, Integer day, int end) {
+
+		boolean valid() {
+			return month >= 1 && month <= 12 && (day == null || (day >= 1 && day <= 31));
+		}
+
+		DateValue toValue() {
+			return new DateValue(year, month, day);
+		}
+
 	}
 
-	/** factor는 앞 숫자에 곱하면 정규형 값이 되는 배율 (15만 원이면 10,000, 3시간이면 60) */
-	private record QuantityMatch(String unit, BigDecimal amount, BigDecimal factor, boolean simple, int numberEnd, int end) {
+	/**
+	 * 숫자와 한글 자릿수를 읽은 값. scale은 마지막 자릿수 배율, simple은 숫자 하나로만 이루어졌는지 (범위 앞쪽에 배율을 옮겨 붙일 수 있는지).
+	 * largeScale은 마지막 만·억 배율(없으면 1), largeStart는 그 글자의 위치(없으면 end)다.
+	 */
+	private record Amount(BigDecimal value, BigDecimal scale, BigDecimal largeScale, boolean large, boolean simple,
+		int numberEnd, int largeStart, int end) {
+	}
+
+	/** multiplier는 단위 배율 (3시간이면 60), number는 단위 앞의 수 */
+	private record QuantityMatch(String unit, BigDecimal amount, BigDecimal multiplier, Amount number, boolean simple, int end) {
 	}
 
 	/** notFollowedBy로 시작하는 말이 바로 뒤에 붙으면 단위가 아니다 (번째, 번지, 인치 등) */
@@ -48,6 +66,7 @@ final class KeyInfoExtractor {
 	private static final List<String> AFTER_HALF = List.of("에", "까지", "부터", "쯤", "경", "정도", "으로", "이", "은", "입");
 	private static final List<String> NOT_AFTER_HOUR = List.of("간", "리즈", "즌");
 	private static final String TILDES = "~～∼";
+	private static final String HYPHENS = "-–";
 	private static final String DIGIT_RUN_SEPARATORS = ".,:/-";
 
 	/** 앞에 있는 단위부터 맞춘다. 겹치는 것은 긴 단위가 먼저다 (달러 → 달, 개월 → 개, 분기 → 분, 인분 → 인, kg → g) */
@@ -96,10 +115,7 @@ final class KeyInfoExtractor {
 		if (!isDigit(i) || !numberMayStart(i)) {
 			return -1;
 		}
-		int end = numericDate(i);
-		if (end < 0) {
-			end = slashDate(i);
-		}
+		int end = fullDate(i);
 		if (end < 0) {
 			end = koreanDate(i);
 		}
@@ -120,37 +136,66 @@ final class KeyInfoExtractor {
 		return !isDigit(i - 1) && !(isDigit(i - 2) && DIGIT_RUN_SEPARATORS.indexOf(charAt(i - 1)) >= 0);
 	}
 
+	/**
+	 * 숫자로만 쓴 날짜. 10/14-10/16처럼 하이픈 양쪽이 모두 완전한 날짜면 둘 다 뽑는다.
+	 * 뒤쪽이 범위를 벗어나면 둘 다 버린다.
+	 */
+	private int fullDate(int i) {
+		DateMatch front = fullDateAt(i);
+		if (front == null) {
+			return -1;
+		}
+		if (isHyphen(front.end())) {
+			DateMatch back = fullDateAt(front.end() + 1);
+			if (back != null && !continuesDigitRun(back.end())) {
+				if (back.valid()) {
+					addDate(i, front);
+					addDate(front.end() + 1, back);
+				}
+				return back.end();
+			}
+		}
+		if (continuesDigitRun(front.end())) {
+			return -1;
+		}
+		addDate(i, front);
+		return front.end();
+	}
+
+	private DateMatch fullDateAt(int i) {
+		DateMatch date = numericDateAt(i);
+		return date != null ? date : slashDateAt(i);
+	}
+
 	/** 2026-10-14, 2026.10.14, 2026/10/14 */
-	private int numericDate(int i) {
+	private DateMatch numericDateAt(int i) {
 		int yearEnd = digitsEnd(i);
 		char separator = charAt(yearEnd);
 		if (yearEnd - i != 4 || "-./".indexOf(separator) < 0) {
-			return -1;
+			return null;
 		}
 		int monthEnd = digitsEnd(yearEnd + 1);
 		if (!within(yearEnd + 1, monthEnd, 2) || charAt(monthEnd) != separator) {
-			return -1;
+			return null;
 		}
 		int dayEnd = digitsEnd(monthEnd + 1);
-		if (!within(monthEnd + 1, dayEnd, 2) || continuesDigitRun(dayEnd)) {
-			return -1;
+		if (!within(monthEnd + 1, dayEnd, 2)) {
+			return null;
 		}
-		addDate(i, dayEnd, parse(i, yearEnd), parse(yearEnd + 1, monthEnd), parse(monthEnd + 1, dayEnd));
-		return dayEnd;
+		return new DateMatch(parse(i, yearEnd), parse(yearEnd + 1, monthEnd), parse(monthEnd + 1, dayEnd), dayEnd);
 	}
 
 	/** 연도 없는 10/14. 연도 없는 10.14는 소수와 구분할 수 없어 날짜로 보지 않는다 */
-	private int slashDate(int i) {
+	private DateMatch slashDateAt(int i) {
 		int monthEnd = digitsEnd(i);
 		if (!within(i, monthEnd, 2) || charAt(monthEnd) != '/') {
-			return -1;
+			return null;
 		}
 		int dayEnd = digitsEnd(monthEnd + 1);
-		if (!within(monthEnd + 1, dayEnd, 2) || continuesDigitRun(dayEnd)) {
-			return -1;
+		if (!within(monthEnd + 1, dayEnd, 2)) {
+			return null;
 		}
-		addDate(i, dayEnd, null, parse(i, monthEnd), parse(monthEnd + 1, dayEnd));
-		return dayEnd;
+		return new DateMatch(null, parse(i, monthEnd), parse(monthEnd + 1, dayEnd), dayEnd);
 	}
 
 	/** 2026년 10월 14일, 2026년 10월, 10월 14일, 10월. 따로 떨어진 2026년은 단위 "년"으로 넘긴다 */
@@ -166,26 +211,51 @@ final class KeyInfoExtractor {
 		if (!within(monthStart, monthEnd, 2) || charAt(monthEnd) != '월') {
 			return -1;
 		}
+		int month = parse(monthStart, monthEnd);
 		int end = monthEnd + 1;
 		Integer day = null;
 		int dayStart = skipSpaces(end);
 		int dayEnd = digitsEnd(dayStart);
-		if (within(dayStart, dayEnd, 2) && charAt(dayEnd) == '일') {
-			day = parse(dayStart, dayEnd);
-			end = dayEnd + 1;
+		if (within(dayStart, dayEnd, 2)) {
+			if (charAt(dayEnd) == '일') {
+				day = parse(dayStart, dayEnd);
+				end = dayEnd + 1;
+			} else {
+				int rangeEnd = dayRange(i, year, month, dayStart, dayEnd);
+				if (rangeEnd >= 0) {
+					return rangeEnd;
+				}
+			}
 		}
-		addDate(i, end, year, parse(monthStart, monthEnd), day);
+		addDate(i, new DateMatch(year, month, day, end));
 		return end;
 	}
 
-	/** 일은 1~31만 본다. 월별 말일은 검사하지 않는다 */
-	private void addDate(int start, int end, Integer year, int month, Integer day) {
-		if (month >= 1 && month <= 12 && (day == null || (day >= 1 && day <= 31))) {
-			add(start, end, new DateValue(year, month, day));
+	/** 10월 14~16일: 앞쪽 일에 뒤쪽의 "일"을 붙이고, 양쪽 모두 앞에 쓴 연·월로 읽는다. 뒤쪽이 범위를 벗어나면 월까지 모두 버린다 */
+	private int dayRange(int start, Integer year, int month, int dayStart, int dayEnd) {
+		int backStart = rangeBackStart(dayEnd, true);
+		int backEnd = backStart < 0 ? -1 : digitsEnd(backStart);
+		if (backStart < 0 || !within(backStart, backEnd, 2) || charAt(backEnd) != '일') {
+			return -1;
+		}
+		DateMatch back = new DateMatch(year, month, parse(backStart, backEnd), backEnd + 1);
+		if (back.valid()) {
+			DateMatch front = new DateMatch(year, month, parse(dayStart, dayEnd), dayEnd);
+			if (front.valid()) {
+				found.add(new Found(text.substring(start, dayEnd) + "일", front.toValue()));
+			}
+			found.add(new Found(text.substring(start, dayStart) + text.substring(backStart, back.end()), back.toValue()));
+		}
+		return back.end();
+	}
+
+	private void addDate(int start, DateMatch date) {
+		if (date.valid()) {
+			add(start, date.end(), date.toValue());
 		}
 	}
 
-	/** 오후 3시, 15시, 3시 30분, 3시 반, 15:30, 오후 3:30 */
+	/** 오후 3시, 15시, 3시 30분, 3시 반, 15:30, 오후 3:30, 오후 2~4시, 09:00-18:00 */
 	private int time(int i) {
 		String meridiem = meridiemAt(i);
 		int hourStart = meridiem == null ? i : skipSpaces(i + meridiem.length());
@@ -193,11 +263,22 @@ final class KeyInfoExtractor {
 		if (!within(hourStart, hourEnd, 2)) {
 			return -1;
 		}
+		int hour = parse(hourStart, hourEnd);
 		int minute = 0;
 		int end;
-		if (charAt(hourEnd) == ':' && digitsEnd(hourEnd + 1) == hourEnd + 3 && !continuesDigitRun(hourEnd + 3)) {
+		if (isColonMinute(hourEnd)) {
 			minute = parse(hourEnd + 1, hourEnd + 3);
 			end = hourEnd + 3;
+			int rangeEnd = colonTimeRange(i, meridiem, hour, minute, end);
+			if (rangeEnd >= 0) {
+				return rangeEnd;
+			}
+			if (continuesDigitRun(end)) {
+				return -1;
+			}
+		} else if (meridiem != null && !isHourMark(hourEnd)) {
+			int backStart = rangeBackStart(hourEnd, true);
+			return backStart < 0 ? -1 : timeRange(i, meridiem, hourStart, hourEnd, backStart);
 		} else if (isHourMark(hourEnd)) {
 			end = hourEnd + 1;
 			int minuteStart = skipSpaces(end);
@@ -212,11 +293,36 @@ final class KeyInfoExtractor {
 		} else {
 			return -1;
 		}
-		int hour = parse(hourStart, hourEnd);
-		if (hour <= 24 && minute <= 59 && !(hour == 24 && minute > 0)) {
+		if (validTime(hour, minute)) {
 			add(i, end, new TimeValue(hours(meridiem, hour), minute));
 		}
 		return end;
+	}
+
+	/** 09:00-18:00. 하이픈은 양쪽이 모두 완전한 시각일 때만 범위로 본다. 뒤쪽이 범위를 벗어나면 둘 다 버린다 */
+	private int colonTimeRange(int start, String meridiem, int hour, int minute, int frontEnd) {
+		if (!isHyphen(frontEnd)) {
+			return -1;
+		}
+		int backStart = frontEnd + 1;
+		int backHourEnd = digitsEnd(backStart);
+		if (!within(backStart, backHourEnd, 2) || !isColonMinute(backHourEnd) || continuesDigitRun(backHourEnd + 3)) {
+			return -1;
+		}
+		int backEnd = backHourEnd + 3;
+		int backHour = parse(backStart, backHourEnd);
+		int backMinute = parse(backHourEnd + 1, backEnd);
+		if (validTime(backHour, backMinute)) {
+			if (validTime(hour, minute)) {
+				add(start, frontEnd, new TimeValue(hours(meridiem, hour), minute));
+			}
+			add(backStart, backEnd, new TimeValue(hours(null, backHour), backMinute));
+		}
+		return backEnd;
+	}
+
+	private static boolean validTime(int hour, int minute) {
+		return hour <= 24 && minute <= 59 && !(hour == 24 && minute > 0);
 	}
 
 	/** 오전·오후가 없으면 1~12시는 h시와 h+12시 둘 다 될 수 있다 (12시는 0시와 12시). 오후·낮 12시는 정오, 그 밖의 12시는 자정이다 */
@@ -234,50 +340,75 @@ final class KeyInfoExtractor {
 	}
 
 	/**
-	 * 2~3일, 10~15만 원, 3~5시, 3-5일: 앞쪽 숫자에 뒤쪽 자릿수·단위를 붙여 둘 다 뽑는다.
-	 * "-"는 양쪽이 세 자리 이하이고 뒤쪽 숫자 바로 뒤에 단위가 올 때만 범위로 본다 (전화번호와 구분).
+	 * 2~3일, 10~15만 원, 2천~3천만 원, 3~5시, 3-5일: 앞쪽 값에 뒤쪽 자릿수·단위를 붙여 둘 다 뽑는다.
+	 * 앞쪽이 숫자 하나면 뒤쪽 자릿수를 모두 붙이고(2~3천만 → 2천만), 천·백이 붙어 있으면 뒤쪽의 만·억만 붙인다.
+	 * 앞쪽의 천·백이 뒤쪽 것보다 크면(2천~3만) 자릿수는 붙이지 않고 단위만 붙인다.
+	 * 하이픈은 앞쪽이 세 자리 이하 숫자이고 뒤쪽이 세 자리 이하 숫자 바로 뒤 단위로 끝날 때만 범위로 본다 (전화번호와 구분).
 	 */
 	private int range(int i) {
-		Num front = number(i);
-		int separator = skipSpaces(front.end());
-		boolean hyphen = TILDES.indexOf(charAt(separator)) < 0;
-		int backStart;
-		if (!hyphen) {
-			backStart = skipSpaces(separator + 1);
-		} else if (charAt(front.end()) == '-' && digitsEnd(i) == front.end() && front.end() - i <= 3) {
-			backStart = front.end() + 1;
-		} else {
+		Amount front = amount(i);
+		if (front.large() || !front.simple()) {
 			return -1;
 		}
+		boolean shortNumber = digitsEnd(i) == front.end() && front.end() - i <= 3;
+		int backStart = rangeBackStart(front.end(), shortNumber);
+		if (backStart < 0) {
+			return -1;
+		}
+		boolean hyphen = backStart == front.end() + 1 && isHyphen(front.end());
 		int backDigitsEnd = digitsEnd(backStart);
 		if (backDigitsEnd == backStart || (hyphen && backDigitsEnd - backStart > 3)) {
 			return -1;
 		}
-		String frontNumber = text.substring(i, front.end());
 		if (isHourMark(backDigitsEnd)) {
-			return timeRange(i, frontNumber, backStart);
+			return shortNumber && front.end() - i <= 2 ? timeRange(i, null, i, front.end(), backStart) : -1;
 		}
 		QuantityMatch back = quantityMatch(backStart);
-		if (back == null || !back.simple() || (hyphen && isSpace(back.numberEnd()))) {
+		if (back == null || !back.simple() || (hyphen && isSpace(back.number().numberEnd()))) {
 			return -1;
 		}
-		String frontText = frontNumber + text.substring(back.numberEnd(), back.end());
-		found.add(new Found(frontText, new Quantity(back.unit(), front.value().multiply(back.factor()))));
+		Amount backNumber = back.number();
+		BigDecimal factor;
+		int suffixStart;
+		if (front.scale().compareTo(BigDecimal.ONE) == 0) {
+			factor = backNumber.scale();
+			suffixStart = backNumber.numberEnd();
+		} else if (front.scale().compareTo(backNumber.scale().divide(backNumber.largeScale())) <= 0) {
+			factor = backNumber.largeScale();
+			suffixStart = backNumber.largeStart();
+		} else {
+			factor = BigDecimal.ONE;
+			suffixStart = backNumber.end();
+		}
+		String frontText = text.substring(i, front.end()) + text.substring(suffixStart, back.end());
+		BigDecimal frontValue = front.value().multiply(factor).multiply(back.multiplier());
+		found.add(new Found(frontText, new Quantity(back.unit(), frontValue)));
 		add(backStart, back.end(), new Quantity(back.unit(), back.amount()));
 		return back.end();
 	}
 
-	private int timeRange(int i, String frontNumber, int backStart) {
-		if (digitsEnd(i) - i != frontNumber.length() || frontNumber.length() > 2) {
+	/** 3~5시, 오후 2~4시: 앞쪽 시에 "시"를 붙이고 앞에 쓴 오전오후는 앞쪽에만 붙인다. 뒤쪽이 범위를 벗어나면(3~25시) 둘 다 버린다 */
+	private int timeRange(int start, String meridiem, int hourStart, int hourEnd, int backStart) {
+		int backEnd = digitsEnd(backStart);
+		if (!within(backStart, backEnd, 2) || !isHourMark(backEnd)) {
 			return -1;
 		}
 		int index = found.size();
 		int end = time(backStart);
-		int hour = Integer.parseInt(frontNumber);
-		if (hour <= 24) {
-			found.add(index, new Found(frontNumber + "시", new TimeValue(hours(null, hour), 0)));
+		int hour = parse(hourStart, hourEnd);
+		if (found.size() > index && hour <= 24) {
+			found.add(index, new Found(text.substring(start, hourEnd) + "시", new TimeValue(hours(meridiem, hour), 0)));
 		}
 		return end;
+	}
+
+	/** 앞쪽 값 끝(frontEnd) 다음의 범위 기호를 건너뛴 뒤쪽 시작 위치. 물결은 앞뒤 공백을 허용하고, 하이픈은 hyphenAllowed일 때 붙여 쓴 것만 본다. 범위가 아니면 -1 */
+	private int rangeBackStart(int frontEnd, boolean hyphenAllowed) {
+		int separator = skipSpaces(frontEnd);
+		if (TILDES.indexOf(charAt(separator)) >= 0) {
+			return skipSpaces(separator + 1);
+		}
+		return hyphenAllowed && isHyphen(frontEnd) ? frontEnd + 1 : -1;
 	}
 
 	/** ₩3,000,000, $50 */
@@ -309,7 +440,7 @@ final class KeyInfoExtractor {
 		Unit unit = unitAt(unitStart);
 		if (unit == null) {
 			return amount.large()
-				? new QuantityMatch(null, amount.value(), amount.scale(), amount.simple(), amount.numberEnd(), amount.end())
+				? new QuantityMatch(null, amount.value(), BigDecimal.ONE, amount, amount.simple(), amount.end())
 				: null;
 		}
 		BigDecimal multiplier = BigDecimal.valueOf(unit.multiplier());
@@ -330,7 +461,7 @@ final class KeyInfoExtractor {
 				simple = false;
 			}
 		}
-		return new QuantityMatch(unit.canonical(), value, amount.scale().multiply(multiplier), simple, amount.numberEnd(), end);
+		return new QuantityMatch(unit.canonical(), value, multiplier, amount, simple, end);
 	}
 
 	/**
@@ -346,11 +477,15 @@ final class KeyInfoExtractor {
 		BigDecimal total = BigDecimal.ZERO;
 		BigDecimal small = BigDecimal.ZERO;
 		BigDecimal scale = BigDecimal.ONE;
+		BigDecimal lastLargeScale;
+		int largeStart;
 		boolean large = false;
 		int terms = 0;
 		int end;
 		while (true) {
 			terms++;
+			lastLargeScale = BigDecimal.ONE;
+			largeStart = -1;
 			int scaleAt = skipSpaces(num.end());
 			BigDecimal smallScale = smallScaleAt(scaleAt);
 			BigDecimal largeScale;
@@ -360,6 +495,7 @@ final class KeyInfoExtractor {
 				end = scaleAt + 1;
 				largeScale = largeScaleAt(end);
 				if (largeScale != null) {
+					largeStart = end;
 					end++;
 				}
 			} else {
@@ -372,12 +508,14 @@ final class KeyInfoExtractor {
 				}
 				small = small.add(num.value());
 				scale = BigDecimal.ONE;
+				largeStart = scaleAt;
 				end = scaleAt + 1;
 			}
 			if (largeScale != null) {
 				total = total.add(small.multiply(largeScale));
 				small = BigDecimal.ZERO;
 				scale = scale.multiply(largeScale);
+				lastLargeScale = largeScale;
 				large = true;
 			}
 			int next = skipSpaces(end);
@@ -386,7 +524,8 @@ final class KeyInfoExtractor {
 			}
 			num = number(next);
 		}
-		return new Amount(total.add(small), scale, large, terms == 1, numberEnd, end);
+		return new Amount(total.add(small), scale, lastLargeScale, large, terms == 1, numberEnd,
+			largeStart < 0 ? end : largeStart, end);
 	}
 
 	private boolean scaledNumberAt(int i) {
@@ -465,6 +604,15 @@ final class KeyInfoExtractor {
 		}
 		char next = charAt(i + 1);
 		return next < '가' || next > '힣' || startsWithAny(i + 1, AFTER_HALF);
+	}
+
+	/** 시 숫자 뒤에 ":분 두 자리"가 오는지 */
+	private boolean isColonMinute(int hourEnd) {
+		return charAt(hourEnd) == ':' && digitsEnd(hourEnd + 1) == hourEnd + 3;
+	}
+
+	private boolean isHyphen(int i) {
+		return HYPHENS.indexOf(charAt(i)) >= 0;
 	}
 
 	/** 날짜·시각 바로 뒤에 "-숫자", ":숫자"가 더 이어지면 더 긴 숫자열의 일부다 */
