@@ -16,9 +16,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.sniptext.domain.ai.repository.AiToneDailyUsageRepository;
 import com.sniptext.domain.ai.service.dto.result.AiToneUsageResult;
 import com.sniptext.domain.user.entity.Plan;
-import com.sniptext.domain.user.entity.User;
 import com.sniptext.domain.user.exception.UserErrorCode;
 import com.sniptext.domain.user.repository.UserRepository;
+import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.exception.BusinessException;
 import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClock;
@@ -144,12 +144,8 @@ class AiToneUsageQueryServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("탈퇴 회원이면 USER404_1")
 	void deletedUser() {
-		Long userId = userRepository.save(User.builder()
-			.email("deleted@sniptext.com")
-			.nickname("탈퇴회원")
-			.planOverride(Plan.PRO)
-			.deletedAt(LocalDateTime.of(2026, 10, 1, 0, 0))
-			.build()).getId();
+		Long userId = userRepository.save(
+			UserFixture.deletedUser("deleted@sniptext.com", Plan.PRO, LocalDateTime.of(2026, 10, 1, 0, 0))).getId();
 
 		assertThatThrownBy(() -> aiToneUsageQueryService.getTodayUsage(userId))
 			.isInstanceOf(BusinessException.class)
@@ -157,13 +153,8 @@ class AiToneUsageQueryServiceTest extends IntegrationTestSupport {
 			.isEqualTo(UserErrorCode.USER_NOT_FOUND);
 	}
 
-	// TODO : 회원 픽스처는 가입 이슈에서 User.create와 함께 만든다. 그 전까지 기존 테스트처럼 직접 저장한다
 	private Long saveUser(Plan planOverride) {
-		return userRepository.save(User.builder()
-			.email("usage@sniptext.com")
-			.nickname("닉네임")
-			.planOverride(planOverride)
-			.build()).getId();
+		return userRepository.save(UserFixture.userWithPlanOverride("usage@sniptext.com", planOverride)).getId();
 	}
 
 	/** User에는 플랜 지정값을 바꾸는 메서드가 없어(결제 도입 전에는 DB에서 바꾼다) 테스트도 SQL로 바꾼다 */
