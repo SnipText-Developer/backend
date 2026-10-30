@@ -245,6 +245,7 @@ class KeyInfoCheckerTest {
 			"3~5시|3시|5시",
 			"3-5일|3일|5일",
 			"2～3주|2주|3주",
+			"3–5일|3일|5일",
 		})
 		@DisplayName("앞쪽 숫자에 뒤쪽 단위를 붙여 둘 다 뽑는다")
 		void bothEnds(String text, String front, String back) {
@@ -264,6 +265,67 @@ class KeyInfoCheckerTest {
 		@DisplayName("범위를 풀어 쓴 표기와 같은 값이다")
 		void sameAsSpelledOut() {
 			assertSameValues("10~15만 원", "10만 원에서 15만 원 사이");
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"14:00-16:00|14:00|16:00",
+			"09:00-18:00|09:00|18:00",
+			"14:00~16:00|14:00|16:00",
+			"10/14-10/16|10/14|10/16",
+			"2026-10-14~2026-10-16|2026-10-14|2026-10-16",
+		})
+		@DisplayName("양쪽이 완전한 시각·날짜이면 하이픈·물결 범위에서 둘 다 뽑는다")
+		void completeEnds(String text, String front, String back) {
+			assertThat(extracted(text)).containsExactly(front, back);
+		}
+
+		@Test
+		@DisplayName("2026-10-14는 범위가 아니라 날짜 하나다")
+		void dateIsNotRange() {
+			assertThat(extracted("2026-10-14")).containsExactly("2026-10-14");
+		}
+
+		@Test
+		@DisplayName("근무 09:00-18:00이 09:00-17:00으로 바뀌면 빠진 값은 18:00, 새 값은 17:00이다")
+		void hyphenTimeRangeChanged() {
+			KeyInfoDiff diff = KeyInfoChecker.compare("근무 09:00-18:00", "근무 09:00-17:00");
+
+			assertThat(diff.missingValues()).containsExactly("18:00");
+			assertThat(diff.addedValues()).containsExactly("17:00");
+		}
+
+		@Test
+		@DisplayName("2천~3천만 원의 앞쪽은 뒤쪽 자릿수를 붙여 2천만 원으로 읽는다")
+		void frontTakesBackLargeScale() {
+			KeyInfoDiff diff = KeyInfoChecker.compare("2천~3천만 원", "3천만 원");
+
+			assertThat(diff.missingValues()).containsExactly("2천만 원");
+			assertThat(diff.addedValues()).isEmpty();
+		}
+
+		@Test
+		@DisplayName("2천~3만 원의 앞쪽은 뒤쪽 자릿수가 앞쪽보다 작아 2천 원으로 읽는다")
+		void frontKeepsOwnScale() {
+			assertThat(extracted("2천~3만 원")).containsExactly("2천 원", "3만 원");
+			assertSameValues("2천~3만 원", "2,000원에서 30,000원");
+		}
+
+		@ParameterizedTest
+		@CsvSource(delimiter = '|', value = {
+			"오후 2~4시|오후 2시부터 4시까지",
+			"10월 14~16일 휴무|10월 14일부터 10월 16일까지 휴무",
+		})
+		@DisplayName("앞에 붙은 오전오후·월은 범위 앞쪽 값에 붙여 읽는다")
+		void prefixAppliesToFront(String original, String corrected) {
+			assertNoDifference(KeyInfoChecker.compare(original, corrected));
+		}
+
+		@ParameterizedTest
+		@ValueSource(strings = {"3~25시", "10월 30~32일"})
+		@DisplayName("뒤쪽이 범위를 벗어나면 범위 전체를 버린다")
+		void invalidBackDropsRange(String text) {
+			assertThat(extracted(text)).isEmpty();
 		}
 
 	}
