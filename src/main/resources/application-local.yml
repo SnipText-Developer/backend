@@ -13,6 +13,9 @@ sniptext:
   # 로컬은 외부를 부르지 않는 가짜 언어 모델이 기본이다
   ai:
     provider: ${AI_PROVIDER:fake}
-  # 실제 구글 로그인을 확인하려면 GOOGLE_CLIENT_ID 환경 변수로 진짜 값을 넣는다
+  # 실제 구글 로그인을 확인하려면 GOOGLE_CLIENT_ID·GOOGLE_CLIENT_SECRET 환경 변수로 진짜 값을 넣는다.
+  # redirect-uris 기본값은 임시 주소다. 프론트 로컬 주소가 정해지면 바꾼다
   google:
     client-id: ${GOOGLE_CLIENT_ID:local-google-client-id}
+    client-secret: ${GOOGLE_CLIENT_SECRET:local-google-client-secret}
+    redirect-uris: ${GOOGLE_REDIRECT_URIS:http://localhost:5173/auth/google/callback}
