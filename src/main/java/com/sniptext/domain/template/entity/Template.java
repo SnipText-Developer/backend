@@ -2,6 +2,8 @@ package com.sniptext.domain.template.entity;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.DynamicUpdate;
+
 import com.sniptext.global.entity.BaseTimeEntity;
 
 import jakarta.persistence.Column;
@@ -22,9 +24,11 @@ import lombok.NoArgsConstructor;
  * edited_at은 이름·단축어·본문 수정, last_used_at은 사용 기록, deleted_at은 휴지통 이동에서만 바뀐다.
  * updated_at은 모든 변경에서 감사 기능이 기록한다 (확장 동기화 기준).
  * 이름·단축어·본문의 규칙은 각 값 객체가 갖고, 여기서는 필수 값만 검사한다.
+ * UPDATE는 바뀐 컬럼만 쓴다. 전체 컬럼을 쓰면 수정 요청이 읽은 뒤 기록된 휴지통 이동·사용 시각을 옛 값으로 되돌린다.
  */
 @Getter
 @Entity
+@DynamicUpdate
 @Table(name = "templates")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Template extends BaseTimeEntity {

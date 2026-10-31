@@ -24,6 +24,9 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 	 */
 	boolean existsByUserIdAndActiveShortcutKey(Long userId, String activeShortcutKey);
 
+	/** existsByUserIdAndActiveShortcutKey에서 한 템플릿을 뺀 것. 자기 자신의 단축어는 중복이 아니므로 수정이 쓴다 */
+	boolean existsByUserIdAndActiveShortcutKeyAndIdNot(Long userId, String activeShortcutKey, Long id);
+
 	/**
 	 * 넘긴 비교 키 중 활성 템플릿(휴지통 제외)이 이미 쓰는 키. 자동 번호 후보를 한 번에 확인할 때 쓴다.
 	 * existsByUserIdAndActiveShortcutKey와 같이 생성 컬럼이라 휴지통 조건이 따로 없고, 유니크 인덱스를 그대로 탄다

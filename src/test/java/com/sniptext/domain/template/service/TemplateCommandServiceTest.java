@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 
 import java.sql.SQLException;
 import java.text.Normalizer;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -23,10 +24,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -41,11 +44,15 @@ import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
+import com.sniptext.domain.template.service.dto.command.TemplateUpdateCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
+import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.domain.user.entity.Plan;
 import com.sniptext.domain.user.service.UserCommandService;
+import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.global.exception.BusinessException;
+import com.sniptext.support.MutableClock;
 
 @ExtendWith(MockitoExtension.class)
 class TemplateCommandServiceTest {
@@ -69,6 +76,12 @@ class TemplateCommandServiceTest {
 
 	@Mock
 	private TransactionTemplate transactionTemplate;
+
+	@Mock
+	private TemplateQueryService templateQueryService;
+
+	@Spy
+	private Clock clock = new MutableClock(NOW);
 
 	@InjectMocks
 	private TemplateCommandService templateCommandService;
@@ -308,6 +321,117 @@ class TemplateCommandServiceTest {
 		private void givenUsedKeys(String shortcut, String... usedKeys) {
 			given(templateRepository.findActiveShortcutKeys(USER_ID, Shortcut.create(shortcut).candidateKeys()))
 				.willReturn(Set.of(usedKeys));
+		}
+
+	}
+
+	@Nested
+	@DisplayName("수정")
+	class Update {
+
+		private static final String NEW_SHORTCUT = "/Offer";
+		private static final String NEW_SHORTCUT_KEY = "/offer";
+		private static final TemplateUpdateCommand UPDATE_COMMAND =
+			new TemplateUpdateCommand(USER_ID, TEMPLATE_ID, "  새 이름  ", NEW_SHORTCUT, CONTENT);
+
+		private Template template;
+
+		@BeforeEach
+		void setUp() {
+			template = TemplateFixture.template(USER_ID, "/Quote");
+			ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
+			ReflectionTestUtils.setField(template, "createdAt", NOW.minusDays(1));
+			ReflectionTestUtils.setField(template, "editedAt", NOW.minusDays(1));
+		}
+
+		@Test
+		@DisplayName("값 객체 규칙을 거쳐 고치고, Clock 시각을 수정 시각으로 쓴 결과를 돌려준다")
+		void update() {
+			givenActiveTemplate();
+			givenUpdateSaved();
+
+			TemplateUpdateResult result = templateCommandService.update(UPDATE_COMMAND);
+
+			assertThat(result).isEqualTo(new TemplateUpdateResult(TEMPLATE_ID, "새 이름", NEW_SHORTCUT, CONTENT,
+				List.of("고객명", "금액"), null, NOW.minusDays(1), NOW));
+		}
+
+		@Test
+		@DisplayName("본인 소유를 확인한 뒤 자기 자신을 뺀 중복을 확인하고 저장한다")
+		void checksOwnerThenDuplicateThenSaves() {
+			givenActiveTemplate();
+			givenUpdateSaved();
+
+			templateCommandService.update(UPDATE_COMMAND);
+
+			InOrder inOrder = inOrder(templateQueryService, templateRepository);
+			inOrder.verify(templateQueryService).getActiveTemplate(USER_ID, TEMPLATE_ID);
+			inOrder.verify(templateRepository)
+				.existsByUserIdAndActiveShortcutKeyAndIdNot(USER_ID, NEW_SHORTCUT_KEY, TEMPLATE_ID);
+			inOrder.verify(templateRepository).saveAndFlush(template);
+		}
+
+		@Test
+		@DisplayName("개수가 바뀌지 않으므로 회원 잠금과 플랜 한도를 쓰지 않는다")
+		void doesNotLockUser() {
+			givenActiveTemplate();
+			givenUpdateSaved();
+
+			templateCommandService.update(UPDATE_COMMAND);
+
+			then(userCommandService).shouldHaveNoInteractions();
+			then(planQueryService).shouldHaveNoInteractions();
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = TemplateErrorCode.class, names = {"TEMPLATE_NOT_FOUND", "TEMPLATE_IN_TRASH"})
+		@DisplayName("수정할 수 없는 템플릿이면 그 404를 그대로 던지고 단축어 조회와 저장을 하지 않는다")
+		void notEditable(TemplateErrorCode errorCode) {
+			given(templateQueryService.getActiveTemplate(USER_ID, TEMPLATE_ID))
+				.willThrow(new BusinessException(errorCode));
+
+			assertThatThrownBy(() -> templateCommandService.update(UPDATE_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.extracting("resultCode")
+				.isEqualTo(errorCode);
+			then(templateRepository).shouldHaveNoInteractions();
+		}
+
+		@Test
+		@DisplayName("내 다른 활성 템플릿에 같은 단축어 키가 있으면 TEMPLATE409_1이고 값을 고치거나 저장하지 않는다")
+		void duplicateShortcutBeforeSave() {
+			givenActiveTemplate();
+			given(templateRepository.existsByUserIdAndActiveShortcutKeyAndIdNot(USER_ID, NEW_SHORTCUT_KEY, TEMPLATE_ID))
+				.willReturn(true);
+
+			assertThatThrownBy(() -> templateCommandService.update(UPDATE_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.extracting("resultCode")
+				.isEqualTo(TemplateErrorCode.SHORTCUT_DUPLICATED);
+			assertThat(template.getShortcut().getValue()).isEqualTo("/Quote");
+			then(templateRepository).should(never()).saveAndFlush(any());
+		}
+
+		@Test
+		@DisplayName("미리 조회를 통과했어도 저장에서 활성 단축어 유니크 위반이 나면 TEMPLATE409_1이고, 예외 메시지에 겹친 단축어가 남지 않는다")
+		void duplicateShortcut() {
+			givenActiveTemplate();
+			givenSaveFails(ConstraintKind.UNIQUE, "templates.uk_templates_user_active_shortcut");
+
+			assertThatThrownBy(() -> templateCommandService.update(UPDATE_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.hasMessage("TEMPLATE409_1")
+				.hasNoCause()
+				.extracting("resultCode")
+				.isEqualTo(TemplateErrorCode.SHORTCUT_DUPLICATED);
+		}
+
+		private void givenActiveTemplate() {
+			given(templateQueryService.getActiveTemplate(USER_ID, TEMPLATE_ID)).willReturn(template);
+		}
+
+		private void givenUpdateSaved() {
+			given(templateRepository.saveAndFlush(template)).willReturn(template);
 		}
 
 	}

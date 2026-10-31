@@ -19,6 +19,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.sniptext.domain.template.entity.Template;
+import com.sniptext.domain.template.entity.TemplateTitle;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.fixture.UserFixture;
@@ -152,6 +153,25 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 		Template found = reload(template);
 		assertThat(found.getEditedAt()).isEqualTo(FIXED);
 		assertThat(found.getUpdatedAt()).isEqualTo(FIXED);
+	}
+
+	@Test
+	@DisplayName("수정 UPDATE는 바뀐 컬럼만 써서, 읽은 뒤 다른 요청이 기록한 사용 시각·휴지통 이동을 되돌리지 않는다")
+	void editKeepsColumnsChangedByOtherRequests() {
+		Template template = templateRepository.saveAndFlush(TemplateFixture.template(userId));
+		entityManager.createNativeQuery("update templates set last_used_at = :time, deleted_at = :time where id = :id")
+			.setParameter("time", FIXED.plusNanos(1_000))
+			.setParameter("id", template.getId())
+			.executeUpdate();
+
+		template.edit(TemplateTitle.create("새 이름"), template.getShortcut(), template.getContent(),
+			LocalDateTime.now(clock));
+		templateRepository.flush();
+
+		Template found = reload(template);
+		assertThat(found.getTitle().getValue()).isEqualTo("새 이름");
+		assertThat(found.getLastUsedAt()).isEqualTo(FIXED.plusNanos(1_000));
+		assertThat(found.getDeletedAt()).isEqualTo(FIXED.plusNanos(1_000));
 	}
 
 	@Test
