@@ -1,5 +1,7 @@
 package com.sniptext.fixture;
 
+import java.time.LocalDateTime;
+
 import com.sniptext.domain.template.entity.Shortcut;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.entity.TemplateContent;
@@ -27,6 +29,13 @@ public final class TemplateFixture {
 	public static Template templateFromGallery(Long userId, Long sourceGalleryTemplateId) {
 		return Template.createFromGallery(userId, sourceGalleryTemplateId, TemplateTitle.create(TITLE),
 			Shortcut.create(SHORTCUT), TemplateContent.create(CONTENT));
+	}
+
+	/** 휴지통에 있는 템플릿. 삭제 API를 거치지 않고 삭제 시각을 정해 만든다 */
+	public static Template trashedTemplate(Long userId, String shortcut, LocalDateTime deletedAt) {
+		Template template = template(userId, shortcut);
+		template.moveToTrash(deletedAt);
+		return template;
 	}
 
 }
