@@ -2,8 +2,9 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 버전 | v0.6 (2026-10-17, 갤러리 저장 정책 확정) |
-| v0.5 대비 | 같은 갤러리 템플릿 여러 번 저장 허용 → `source_gallery_template_id`는 출처 기록·집계용으로만 사용, 인덱스를 `(source_gallery_template_id)` 하나로 변경. 테이블·컬럼 변경 없음 |
+| 버전 | v0.7 (2026-10-31, 인증·회원 동작 반영) |
+| v0.6 대비 | 설명만 보강: `users.profile_image_url`(500자 초과 시 저장 안 함), `users.last_login_at`(가입도 로그인으로 기록), `refresh_tokens.revoked_at`(재사용 감지 시 계보 폐기), 설계 메모 "가입"(인가 코드 방식). 테이블·컬럼·인덱스 변경 없음 |
+| v0.5 → v0.6 | 같은 갤러리 템플릿 여러 번 저장 허용 → `source_gallery_template_id`는 출처 기록·집계용으로만 사용, 인덱스를 `(source_gallery_template_id)` 하나로 변경. 테이블·컬럼 변경 없음 |
 | v0.4 → v0.5 | `user_terms_agreements` 추가(약관 버전별 동의 기록), `users.terms_agreed_at` 삭제 |
 | DB | MySQL 8.4 / JPA |
 | 문자셋 | utf8mb4 |
@@ -113,10 +114,10 @@ erDiagram
 | `id` | BIGINT | N |  | PK | 회원 ID |
 | `email` | VARCHAR(255) | N |  | UK | 구글 계정 이메일 |
 | `nickname` | VARCHAR(50) | N |  |  | 구글 계정 이름 그대로 (앞뒤 공백 제거, 50자 초과 시 자름, 비어 있으면 이메일 앞부분) |
-| `profile_image_url` | VARCHAR(500) | Y |  |  | 구글 프로필 이미지. 없으면 닉네임 첫 글자 아바타 |
+| `profile_image_url` | VARCHAR(500) | Y |  |  | 구글 프로필 이미지. 없거나 500자를 넘으면 저장하지 않음(null) → 닉네임 첫 글자 아바타 |
 | `template_sort` | VARCHAR(20) | N | RECENT_USED |  | 내 템플릿 정렬 기억 (RECENT_USED / RECENT_EDITED) |
 | `plan_override` | VARCHAR(10) | Y |  |  | 결제 도입 전 임시: 값이 있으면 이 플랜(FREE/PRO)으로 판정. 테스트 계정을 Pro로 만들 때 사용 |
-| `last_login_at` | DATETIME(6) | Y |  |  | 마지막 로그인 시각 |
+| `last_login_at` | DATETIME(6) | Y |  |  | 마지막 로그인 시각 (가입도 로그인으로 기록) |
 | `created_at` | DATETIME(6) | N |  |  | 생성 시각 |
 | `updated_at` | DATETIME(6) | N |  |  | 수정 시각 |
 | `deleted_at` | DATETIME(6) | Y |  |  | 탈퇴 시각 (탈퇴 화면은 미정) |
@@ -149,7 +150,7 @@ erDiagram
 | `token_hash` | CHAR(64) | N |  | UK | 토큰 원문 대신 SHA-256 해시 저장 |
 | `family_id` | CHAR(36) | N |  |  | 재발급 계보. 이미 쓴 토큰이 다시 오면 계보 전체 폐기 |
 | `expires_at` | DATETIME(6) | N |  |  | 만료 시각 |
-| `revoked_at` | DATETIME(6) | Y |  |  | 폐기 시각 (로그아웃·교체) |
+| `revoked_at` | DATETIME(6) | Y |  |  | 폐기 시각 (로그아웃·교체·재사용 감지 시 계보 폐기) |
 | `created_at` | DATETIME(6) | N |  |  | 발급 시각 |
 
 - 유니크 `uk_refresh_token_hash` (token_hash)
@@ -247,7 +248,7 @@ erDiagram
 | 상단 통합 검색 (DSH-09) | DB 변경 없음. 화면이 내 템플릿 전체 + 갤러리 전체를 받아서 검색 (본문 암호화 때문에 서버 검색 불가) |
 | 카드 변수명 (MYT-05) | 컬럼 없음. 조회할 때 복호화한 본문에서 변수 정규식으로 뽑아 응답의 `variables`로 내려줌 |
 | 카드 표시 변경 (MYT-05) | 최근 사용 시각은 카드에서 빠졌지만 `last_used_at`은 최근 사용순 정렬 기준이라 유지 |
-| 가입 | 구글 로그인 → (처음 온 사용자) 약관 동의 화면 → 동의 시 회원 생성 + 약관 동의 기록 저장. 동의 전에는 회원 정보를 저장하지 않음 |
+| 가입 | 구글 로그인(인가 코드 교환 → ID 토큰 검증) → (처음 온 사용자) 약관 동의 화면 → 동의 시 회원 생성 + 소셜 계정 연결 + 약관 동의 기록 저장(한 트랜잭션). 동의 전에는 회원 정보를 저장하지 않음 |
 | 탈퇴 (화면 미정) | 템플릿·토큰·AI 사용량 삭제. 약관 동의 기록 보존 기간은 탈퇴 정책 정할 때 같이 결정. 결제 도입 후에는 결제 기록 보존을 위해 `users`를 익명화하는 방식으로 변경 |
 | 시간대 | KST로 저장하므로 서버(JVM)와 DB 접속 시간대를 `Asia/Seoul`로 고정해야 함 |
 | PostgreSQL로 바꾸면 | 단축어 유니크를 부분 인덱스(`WHERE deleted_at IS NULL`)로, `DATETIME(6)`→`TIMESTAMP`, `TINYINT(1)`→`BOOLEAN`. 나머지 구조 동일 |

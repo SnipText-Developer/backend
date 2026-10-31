@@ -47,7 +47,7 @@ Content-Type: application/json
 
 | 구분 | 웹 대시보드 | 확장 (S2) |
 | --- | --- | --- |
-| 로그인 | 프론트가 구글 ID 토큰을 받아 `POST /api/v1/auth/login` → 처음이면 약관 동의 후 `POST /api/v1/auth/signup` | 확장 전용 토큰 발급 방식은 S2에서 확정 (웹의 재발급 토큰은 HttpOnly라 확장에 넘길 수 없음) |
+| 로그인 | 프론트가 구글 인가 코드를 받아 `POST /api/v1/auth/login` (서버가 코드 교환) → 처음이면 약관 동의 후 `POST /api/v1/auth/signup` | 확장 전용 토큰 발급 방식은 S2에서 확정 (웹의 재발급 토큰은 HttpOnly라 확장에 넘길 수 없음) |
 | 접근 토큰 | 화면 메모리 보관, 30분 | 확장 로컬 저장소, 30분 |
 | 재발급 토큰 | HttpOnly 쿠키, 14일 | 확장 로컬 저장소, 14일 |
 | 재발급 | 쓸 때마다 새 토큰으로 교체, 이미 쓴 토큰이 다시 오면 계보 전체 폐기 | 동일 |
@@ -286,7 +286,9 @@ Content-Type: application/json
 
 | 필드 | 데이터 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| idToken | String | Y | 프론트가 구글 로그인으로 받은 ID 토큰 |
+| code | String | Y | 프론트가 구글 로그인으로 받은 인가 코드 |
+| codeVerifier | String | Y | 인가 요청 때 만든 PKCE 코드 검증값 (`code_challenge_method=S256`) |
+| redirectUri | String | Y | 인가 요청에 쓴 redirect URI. 서버 허용 목록과 정확히 같아야 함 |
 | provider | String | Y | GOOGLE (S1은 구글만) |
 
 ##### Example
@@ -295,7 +297,9 @@ Content-Type: application/json
 POST /api/v1/auth/login
 
 {
-  "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+  "code": "4/0AQSTgQ...",
+  "codeVerifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+  "redirectUri": "https://sniptext.io/auth/google/callback",
   "provider": "GOOGLE"
 }
 ```
@@ -371,12 +375,15 @@ POST /api/v1/auth/login
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
 | 400 | AUTH400_1 | 지원하지 않는 로그인 방식이에요. | provider 값 오류 (S1은 GOOGLE만) |
-| 401 | AUTH401_3 | 구글 로그인 정보를 확인할 수 없어요. 다시 시도해주세요. | ID 토큰 서명·발급자·대상·만료 검증 실패, 이메일 미인증 계정 |
+| 401 | AUTH401_3 | 구글 로그인 정보를 확인할 수 없어요. 다시 시도해주세요. | 인가 코드가 잘못됨·만료·이미 사용됨, 허용 목록에 없는 redirectUri, ID 토큰 검증 실패, 이메일 미인증 계정 |
+| 502 | AUTH502_1 | 일시적인 오류로 로그인하지 못했어요. 다시 시도해 주세요. | 구글 장애·연결 실패·시간 초과 |
 
 ##### 비고
 
-- 팀 기존 방식(소셜 ID 토큰을 서버가 검증)을 따릅니다. "가입 필요"도 202가 아니라 **200 + isCompletedSignUp=false**로 구분합니다.
+- 인가 코드 방식(PKCE)입니다(10/29 결정). 서버가 구글 토큰 엔드포인트에서 코드를 교환하고, 받은 ID 토큰을 검증합니다. state 검증은 프론트가 합니다. "가입 필요"는 202가 아니라 **200 + isCompletedSignUp=false**로 구분합니다.
 - 서버 검증 항목: 구글 공개키 서명, 발급자(accounts.google.com), 대상(우리 클라이언트 ID), 만료, 이메일 인증 여부.
+- code·codeVerifier·redirectUri가 비어 있으면 `COMMON400_1`입니다.
+- 인가 코드는 한 번만 쓸 수 있습니다. 시간 초과로 끝났어도 구글은 이미 교환했을 수 있으니, `AUTH502_1`을 받으면 같은 요청을 다시 보내지 말고 구글 로그인부터 다시 시작해 주세요.
 - 처음 온 사용자는 이 단계에서 회원을 만들지 않습니다. **약관 동의 전에는 개인정보를 저장하지 않기 위해서**입니다. 구글 계정 정보를 담은 가입용 토큰(30분)을 주고, 동의 API에서 회원을 만듭니다.
 - 웹: 재발급 토큰은 응답 본문이 아니라 `Set-Cookie`(HttpOnly, Secure, 14일)로 줍니다.
 - 로그인 화면은 랜딩(S3)에 생기며, 그 전까지 프론트는 대시보드에 임시 로그인 버튼을 둡니다.
@@ -475,6 +482,7 @@ POST /api/v1/auth/signup
 - 가입용 토큰 안의 구글 계정 정보로 `users`, `social_accounts`를 만들고, `user_terms_agreements`에 SERVICE(이용약관)·PRIVACY(개인정보 수집·이용) 두 줄을 **현재 약관 버전**으로 저장한 뒤 바로 로그인 처리합니다. 모두 한 트랜잭션입니다.
 - 현재 약관 버전은 서버 설정값입니다(예: v1). 약관 본문은 랜딩의 버전별 정적 페이지에 둡니다. 요청에 버전을 보내지 않습니다.
 - 닉네임은 구글 이름 그대로 저장합니다(앞뒤 공백 제거, 50자 초과 시 자름). 이름이 비어 있으면 이메일 앞부분을 씁니다. 화면의 말줄임은 DSH-05 기준.
+- 프로필 이미지 주소가 500자를 넘으면 저장하지 않고 가입은 계속합니다(`profileImageUrl`은 null, 화면은 닉네임 첫 글자 아바타).
 - 마케팅 수신 동의는 받지 않습니다(필요해지면 추가).
 - 개인정보처리방침 수집 항목: 구글 이름, 이메일, 프로필 이미지.
 - 분석 이벤트 `signup_completed`(signup_method=google)는 화면에서 성공 후 보냅니다.
