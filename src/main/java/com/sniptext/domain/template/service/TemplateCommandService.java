@@ -40,8 +40,8 @@ public class TemplateCommandService {
 
 	private final UserCommandService userCommandService;
 
-    private final TemplateQueryService templateQueryService;
-    private final PlanQueryService planQueryService;
+	private final TemplateQueryService templateQueryService;
+	private final PlanQueryService planQueryService;
 
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
