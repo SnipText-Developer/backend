@@ -113,10 +113,10 @@ erDiagram
 | `id` | BIGINT | N |  | PK | 회원 ID |
 | `email` | VARCHAR(255) | N |  | UK | 구글 계정 이메일 |
 | `nickname` | VARCHAR(50) | N |  |  | 구글 계정 이름 그대로 (앞뒤 공백 제거, 50자 초과 시 자름, 비어 있으면 이메일 앞부분) |
-| `profile_image_url` | VARCHAR(500) | Y |  |  | 구글 프로필 이미지. 없으면 닉네임 첫 글자 아바타 |
+| `profile_image_url` | VARCHAR(500) | Y |  |  | 구글 프로필 이미지. 없거나 500자를 넘으면 저장하지 않음(null) → 닉네임 첫 글자 아바타 |
 | `template_sort` | VARCHAR(20) | N | RECENT_USED |  | 내 템플릿 정렬 기억 (RECENT_USED / RECENT_EDITED) |
 | `plan_override` | VARCHAR(10) | Y |  |  | 결제 도입 전 임시: 값이 있으면 이 플랜(FREE/PRO)으로 판정. 테스트 계정을 Pro로 만들 때 사용 |
-| `last_login_at` | DATETIME(6) | Y |  |  | 마지막 로그인 시각 |
+| `last_login_at` | DATETIME(6) | Y |  |  | 마지막 로그인 시각 (가입도 로그인으로 기록) |
 | `created_at` | DATETIME(6) | N |  |  | 생성 시각 |
 | `updated_at` | DATETIME(6) | N |  |  | 수정 시각 |
 | `deleted_at` | DATETIME(6) | Y |  |  | 탈퇴 시각 (탈퇴 화면은 미정) |
@@ -149,7 +149,7 @@ erDiagram
 | `token_hash` | CHAR(64) | N |  | UK | 토큰 원문 대신 SHA-256 해시 저장 |
 | `family_id` | CHAR(36) | N |  |  | 재발급 계보. 이미 쓴 토큰이 다시 오면 계보 전체 폐기 |
 | `expires_at` | DATETIME(6) | N |  |  | 만료 시각 |
-| `revoked_at` | DATETIME(6) | Y |  |  | 폐기 시각 (로그아웃·교체) |
+| `revoked_at` | DATETIME(6) | Y |  |  | 폐기 시각 (로그아웃·교체·재사용 감지 시 계보 폐기) |
 | `created_at` | DATETIME(6) | N |  |  | 발급 시각 |
 
 - 유니크 `uk_refresh_token_hash` (token_hash)
