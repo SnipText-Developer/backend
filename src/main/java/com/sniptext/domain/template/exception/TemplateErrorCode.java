@@ -30,6 +30,10 @@ public enum TemplateErrorCode implements ResultCode {
 	CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "TEMPLATE400_7", "템플릿 내용은 3,000자까지 입력할 수 있어요."),
 	/** 활성 템플릿 수가 플랜 한도 이상 (화면은 한도 모달) */
 	TEMPLATE_LIMIT_REACHED(HttpStatus.FORBIDDEN, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요."),
+	/** 없는 템플릿, 다른 회원의 템플릿 (다른 회원의 휴지통 템플릿 포함) */
+	TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "TEMPLATE404_1", "템플릿을 찾을 수 없어요."),
+	/** 내 템플릿인데 휴지통에 있음 */
+	TEMPLATE_IN_TRASH(HttpStatus.NOT_FOUND, "TEMPLATE404_2", "이미 삭제된 템플릿이에요."),
 	/** 내 템플릿(휴지통 제외)에 같은 단축어 키가 있음. 대소문자 무시 */
 	SHORTCUT_DUPLICATED(HttpStatus.CONFLICT, "TEMPLATE409_1", "이미 사용 중인 단축어예요."),
 	/** 자동 번호 2~99가 모두 사용 중 (갤러리 저장·휴지통 복구) */

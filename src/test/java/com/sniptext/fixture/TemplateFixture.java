@@ -24,6 +24,11 @@ public final class TemplateFixture {
 			TemplateContent.create(CONTENT));
 	}
 
+	public static Template templateWithContent(Long userId, String content) {
+		return Template.create(userId, TemplateTitle.create(TITLE), Shortcut.create(SHORTCUT),
+			TemplateContent.create(content));
+	}
+
 	public static Template templateFromGallery(Long userId, Long sourceGalleryTemplateId) {
 		return Template.createFromGallery(userId, sourceGalleryTemplateId, TemplateTitle.create(TITLE),
 			Shortcut.create(SHORTCUT), TemplateContent.create(CONTENT));
