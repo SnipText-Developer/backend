@@ -41,3 +41,6 @@ sniptext:
     provider: ${AI_PROVIDER}
     api-key: ${AI_API_KEY:}
     model: ${AI_MODEL:}
+  # 구글 로그인 클라이언트 ID (ID 토큰의 대상 검사에 쓴다). 기본값이 없어 빠뜨리면 기동에 실패한다
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
