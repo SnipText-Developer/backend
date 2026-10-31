@@ -37,10 +37,11 @@ public class TemplateCommandService {
 	private static final String ACTIVE_SHORTCUT_UNIQUE = "uk_templates_user_active_shortcut";
 
 	private final TemplateRepository templateRepository;
-	private final TemplateQueryService templateQueryService;
 
 	private final UserCommandService userCommandService;
-	private final PlanQueryService planQueryService;
+
+    private final TemplateQueryService templateQueryService;
+    private final PlanQueryService planQueryService;
 
 	private final TransactionTemplate transactionTemplate;
 	private final Clock clock;
