@@ -1,5 +1,7 @@
 package com.sniptext.domain.template.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 import org.hibernate.exception.ConstraintViolationException;
@@ -19,8 +21,10 @@ import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
+import com.sniptext.domain.template.service.dto.command.TemplateUpdateCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
+import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.global.exception.BusinessException;
 
@@ -33,11 +37,13 @@ public class TemplateCommandService {
 	private static final String ACTIVE_SHORTCUT_UNIQUE = "uk_templates_user_active_shortcut";
 
 	private final TemplateRepository templateRepository;
+	private final TemplateQueryService templateQueryService;
 
 	private final UserCommandService userCommandService;
 	private final PlanQueryService planQueryService;
 
 	private final TransactionTemplate transactionTemplate;
+	private final Clock clock;
 
 	/**
 	 * 새 템플릿 저장. 회원 행을 먼저 잠가 같은 회원의 생성·복구·갤러리 저장을 한 줄로 세운 뒤 한도를 검사한다.
@@ -92,6 +98,24 @@ public class TemplateCommandService {
 		});
 	}
 
+	/**
+	 * 템플릿 수정. 없거나 다른 회원 것이면 TEMPLATE404_1, 휴지통에 있으면 TEMPLATE404_2, 내 다른 활성 템플릿과 단축어가 겹치면 TEMPLATE409_1.
+	 * 개수가 바뀌지 않으므로 회원을 잠그지 않고, 동시에 고치면 나중 저장이 덮어쓴다.
+	 */
+	@Transactional
+	public TemplateUpdateResult update(TemplateUpdateCommand command) {
+		Template template = templateQueryService.getActiveTemplate(command.userId(), command.templateId());
+
+		TemplateTitle title = TemplateTitle.create(command.title());
+		Shortcut shortcut = Shortcut.create(command.shortcut());
+		validateShortcutAvailable(command.userId(), shortcut, template.getId());
+		TemplateContent content = TemplateContent.create(command.content());
+
+		template.edit(title, shortcut, content, LocalDateTime.now(clock));
+
+		return TemplateUpdateResult.from(save(template));
+	}
+
 	private static void requireNoOuterTransaction() {
 		if (TransactionSynchronizationManager.isActualTransactionActive()) {
 			throw new IllegalStateException("갤러리 저장은 호출자 트랜잭션 밖에서 불러야 한다");
@@ -107,6 +131,12 @@ public class TemplateCommandService {
 
 	private void validateShortcutAvailable(Long userId, Shortcut shortcut) {
 		if (templateRepository.existsByUserIdAndActiveShortcutKey(userId, shortcut.getKey())) {
+			throw new BusinessException(TemplateErrorCode.SHORTCUT_DUPLICATED);
+		}
+	}
+
+	private void validateShortcutAvailable(Long userId, Shortcut shortcut, Long excludeTemplateId) {
+		if (templateRepository.existsByUserIdAndActiveShortcutKeyAndIdNot(userId, shortcut.getKey(), excludeTemplateId)) {
 			throw new BusinessException(TemplateErrorCode.SHORTCUT_DUPLICATED);
 		}
 	}
