@@ -23,14 +23,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.gallery.repository.GalleryTemplateRepository;
-import com.sniptext.domain.plan.service.PlanQueryService;
-import com.sniptext.domain.plan.service.dto.result.PlanResult;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
-import com.sniptext.domain.user.entity.Plan;
 import com.sniptext.domain.user.repository.UserRepository;
 import com.sniptext.fixture.GalleryTemplateFixture;
 import com.sniptext.fixture.TemplateFixture;
@@ -47,17 +44,12 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 	private static final String TITLE = "프리랜서 견적 안내";
 	private static final String CONTENT = "안녕하세요 {{고객명}}님";
 	private static final LocalDateTime TRASHED_AT = LocalDateTime.of(2026, 10, 25, 10, 0);
-	/** 2~99 전부를 채우려면 플랜 한도(PRO 50)보다 많은 행이 필요해 한도만 넓혀 둔다 */
-	private static final PlanResult WIDE_LIMIT = new PlanResult(Plan.PRO, 200, 10);
 
 	@Autowired
 	private TemplateCommandService templateCommandService;
 
 	@MockitoSpyBean
 	private TemplateRepository templateRepository;
-
-	@MockitoSpyBean
-	private PlanQueryService planQueryService;
 
 	@Autowired
 	private UserRepository userRepository;
@@ -74,7 +66,7 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 
 	@BeforeEach
 	void setUp() {
-		userId = saveFreeUser("gallery-save@sniptext.com");
+		userId = saveUser("gallery-save@sniptext.com");
 		galleryTemplateId = galleryTemplateRepository.save(GalleryTemplateFixture.published(1)).getId();
 	}
 
@@ -116,39 +108,39 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("FREE 4개에서 5개째는 저장된다")
+	@DisplayName("49개에서 50개째는 저장된다")
 	void belowLimit() {
-		saveTemplates(userId, "/t1", "/t2", "/t3", "/t4");
+		saveNumberedTemplates(49);
 
 		TemplateShortcutAssignResult result = save("/견적");
 
 		assertThat(result.templateId()).isNotNull();
-		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(5);
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(50);
 	}
 
 	@Test
-	@DisplayName("FREE 5개에서 6개째는 TEMPLATE403_1이고 행이 늘지 않는다")
+	@DisplayName("50개에서 51개째는 TEMPLATE403_1이고 행이 늘지 않는다")
 	void limitReached() {
-		saveTemplates(userId, "/t1", "/t2", "/t3", "/t4", "/t5");
+		saveNumberedTemplates(50);
 
 		assertErrorCode(() -> save("/견적"), TemplateErrorCode.TEMPLATE_LIMIT_REACHED);
 
-		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(5);
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(50);
 	}
 
 	@Test
 	@DisplayName("휴지통 템플릿은 한도에 세지 않는다")
 	void trashNotCountedInLimit() {
-		saveTemplates(userId, "/t1", "/t2", "/t3", "/t4");
-		saveTrashed(userId, "/t5");
+		saveNumberedTemplates(49);
+		saveTrashed(userId, "/휴지통");
 
 		assertThat(save("/견적").templateId()).isNotNull();
 	}
 
+	/** 2~99를 모두 채우면 활성 99개라 한도(50)도 이미 넘는다. 실제 행 그대로 한도가 먼저 걸린다 */
 	@Test
 	@DisplayName("한도와 자동 번호 소진이 겹치면 한도가 먼저다")
 	void limitBeforeExhausted() {
-		willReturn(new PlanResult(Plan.PRO, 99, 10)).given(planQueryService).getCurrentPlan(userId);
 		fillOriginalAndNumbersUpTo("/견적", 99);
 
 		assertErrorCode(() -> save("/견적"), TemplateErrorCode.TEMPLATE_LIMIT_REACHED);
@@ -197,7 +189,7 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("다른 회원의 같은 단축어는 영향이 없다")
 	void otherUserShortcutIgnored() {
-		Long otherUserId = saveFreeUser("gallery-other@sniptext.com");
+		Long otherUserId = saveUser("gallery-other@sniptext.com");
 		saveTemplates(otherUserId, "/견적");
 
 		TemplateShortcutAssignResult result = save("/견적");
@@ -226,13 +218,11 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("번호가 두 자리가 되면 원본을 한 글자 더 잘라 / 뒤 10자를 맞춘다")
 	void twoDigitNumberTruncates() {
-		Long proUserId = savePlanUser("gallery-pro@sniptext.com", Plan.PRO);
 		List<String> shortcuts = new ArrayList<>(List.of("/견적요청서작성안내문"));
 		IntStream.rangeClosed(2, 9).forEach(number -> shortcuts.add("/견적요청서작성안내" + number));
-		saveTemplates(proUserId, shortcuts.toArray(String[]::new));
+		saveTemplates(userId, shortcuts.toArray(String[]::new));
 
-		TemplateShortcutAssignResult result = templateCommandService.createFromGallery(
-			new TemplateCreateFromGalleryCommand(proUserId, galleryTemplateId, TITLE, "/견적요청서작성안내문", CONTENT));
+		TemplateShortcutAssignResult result = save("/견적요청서작성안내문");
 
 		assertThat(result.shortcut()).isEqualTo("/견적요청서작성안10");
 		assertThat(result.shortcutChanged()).isTrue();
@@ -241,8 +231,8 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("98번까지 차 있으면 마지막 번호 99를 쓴다")
 	void lastNumber() {
-		willReturn(WIDE_LIMIT).given(planQueryService).getCurrentPlan(userId);
 		fillOriginalAndNumbersUpTo("/견적", 98);
+		givenActiveCountBelowLimit();
 
 		assertThat(save("/견적").shortcut()).isEqualTo("/견적99");
 	}
@@ -250,12 +240,13 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("2~99가 모두 차면 TEMPLATE409_2이고 행이 늘지 않는다")
 	void numbersExhausted() {
-		willReturn(WIDE_LIMIT).given(planQueryService).getCurrentPlan(userId);
 		fillOriginalAndNumbersUpTo("/견적", 99);
+		givenActiveCountBelowLimit();
 
 		assertErrorCode(() -> save("/견적"), TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED);
 
-		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(99);
+		assertThat(templateRepository.findAll().stream().filter(template -> template.getUserId().equals(userId)))
+			.hasSize(99);
 	}
 
 	@Test
@@ -291,14 +282,23 @@ class TemplateCreateFromGalleryTest extends IntegrationTestSupport {
 			new TemplateCreateFromGalleryCommand(userId, galleryTemplateId, TITLE, shortcut, CONTENT));
 	}
 
-	private Long saveFreeUser(String email) {
-		return savePlanUser(email, null);
-	}
-
-	private Long savePlanUser(String email, Plan plan) {
-		Long id = userRepository.save(UserFixture.userWithPlanOverride(email, plan)).getId();
+	private Long saveUser(String email) {
+		Long id = userRepository.save(UserFixture.user(email)).getId();
 		userIds.add(id);
 		return id;
+	}
+
+	/**
+	 * 2~99를 실제 행으로 채우면 활성 개수가 한도(50)를 넘어 번호 규칙까지 가지 못한다.
+	 * 개수 조회만 0으로 바꿔 한도를 통과시키고, 사용 중인 키 조회와 저장은 실제 MySQL로 둔다.
+	 */
+	private void givenActiveCountBelowLimit() {
+		willReturn(0L).given(templateRepository).countByUserIdAndDeletedAtIsNull(userId);
+	}
+
+	/** 단축어 /t1, /t2 ... 로 활성 템플릿을 미리 채운다 */
+	private void saveNumberedTemplates(int count) {
+		IntStream.rangeClosed(1, count).forEach(number -> saveTemplates(userId, "/t" + number));
 	}
 
 	private void saveTemplates(Long ownerId, String... shortcuts) {

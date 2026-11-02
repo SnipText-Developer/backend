@@ -2,13 +2,15 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 버전 | v0.6 (2026-10-17, 갤러리 저장 정책 확정) |
-| v0.5 대비 | 같은 갤러리 템플릿 여러 번 저장 허용 → `source_gallery_template_id`는 출처 기록·집계용으로만 사용, 인덱스를 `(source_gallery_template_id)` 하나로 변경. 테이블·컬럼 변경 없음 |
+| 버전 | v0.8 (2026-11-01, PRO 결제 기능 제거·정렬 고정 반영) |
+| v0.7 대비 | `users.plan_override` 삭제(플랜 구분 없음). `users.template_sort` 삭제(내 템플릿 정렬을 생성 순으로 고정). 템플릿 한도 50개·AI 하루 5회로 설계 메모 수정, 결제·구독 관련 "나중에 추가할 것" 삭제. `social_accounts.provider_user_id`를 `VARCHAR(255)`·`ascii_bin`으로 변경(구글 `sub` 규격). 모두 새 마이그레이션으로 반영 (아래 "마이그레이션" 참고) |
+| v0.6 → v0.7 | 설명만 보강: `users.profile_image_url`(500자 초과 시 저장 안 함), `users.last_login_at`(가입도 로그인으로 기록), `refresh_tokens.revoked_at`(재사용 감지 시 계보 폐기), 설계 메모 "가입"(인가 코드 방식). 테이블·컬럼·인덱스 변경 없음 |
+| v0.5 → v0.6 | 같은 갤러리 템플릿 여러 번 저장 허용 → `source_gallery_template_id`는 출처 기록·집계용으로만 사용, 인덱스를 `(source_gallery_template_id)` 하나로 변경. 테이블·컬럼 변경 없음 |
 | v0.4 → v0.5 | `user_terms_agreements` 추가(약관 버전별 동의 기록), `users.terms_agreed_at` 삭제 |
 | DB | MySQL 8.4 / JPA |
 | 문자셋 | utf8mb4 |
 | 시간 | 모든 시각 컬럼은 KST 기준 `DATETIME(6)` |
-| 범위 | S1 대시보드. 결제·구독은 기획 정책 확정 후 추가 (6장) |
+| 범위 | S1 대시보드. 결제·구독은 기획에서 제거됨 (2026-10-31) |
 
 ## 1. 관계도
 
@@ -25,8 +27,6 @@ erDiagram
         VARCHAR email UK "구글 이메일"
         VARCHAR nickname "구글 이름"
         VARCHAR profile_image_url "프로필 이미지"
-        VARCHAR template_sort "정렬 기준 (최근 사용순 기본)"
-        VARCHAR plan_override "결제 전 플랜 지정 (없으면 FREE)"
         DATETIME last_login_at "마지막 로그인"
         DATETIME created_at
         DATETIME updated_at
@@ -65,8 +65,8 @@ erDiagram
         VARCHAR shortcut_key "비교용 (정규화 + 소문자)"
         VARCHAR active_shortcut_key "휴지통 아니면 shortcut_key (중복 검사용)"
         TEXT content "본문 (암호화)"
-        DATETIME last_used_at "최근 사용 (정렬 기준)"
-        DATETIME edited_at "최근 수정 (정렬 기준)"
+        DATETIME last_used_at "최근 사용 (확장 팝업 최근 5개)"
+        DATETIME edited_at "제목·단축어·본문 수정 시각"
         DATETIME deleted_at "휴지통 이동 시각"
         DATETIME created_at
         DATETIME updated_at "모든 변경 (확장 동기화용)"
@@ -87,7 +87,7 @@ erDiagram
         BIGINT id PK
         BIGINT user_id FK "회원"
         DATE usage_date "날짜 (KST)"
-        INT used_count "그날 사용 횟수 (최대 10)"
+        INT used_count "그날 사용 횟수 (최대 5)"
         DATETIME updated_at
     }
 ```
@@ -113,10 +113,8 @@ erDiagram
 | `id` | BIGINT | N |  | PK | 회원 ID |
 | `email` | VARCHAR(255) | N |  | UK | 구글 계정 이메일 |
 | `nickname` | VARCHAR(50) | N |  |  | 구글 계정 이름 그대로 (앞뒤 공백 제거, 50자 초과 시 자름, 비어 있으면 이메일 앞부분) |
-| `profile_image_url` | VARCHAR(500) | Y |  |  | 구글 프로필 이미지. 없으면 닉네임 첫 글자 아바타 |
-| `template_sort` | VARCHAR(20) | N | RECENT_USED |  | 내 템플릿 정렬 기억 (RECENT_USED / RECENT_EDITED) |
-| `plan_override` | VARCHAR(10) | Y |  |  | 결제 도입 전 임시: 값이 있으면 이 플랜(FREE/PRO)으로 판정. 테스트 계정을 Pro로 만들 때 사용 |
-| `last_login_at` | DATETIME(6) | Y |  |  | 마지막 로그인 시각 |
+| `profile_image_url` | VARCHAR(500) | Y |  |  | 구글 프로필 이미지. 없거나 500자를 넘으면 저장하지 않음(null) → 닉네임 첫 글자 아바타 |
+| `last_login_at` | DATETIME(6) | Y |  |  | 마지막 로그인 시각 (가입도 로그인으로 기록) |
 | `created_at` | DATETIME(6) | N |  |  | 생성 시각 |
 | `updated_at` | DATETIME(6) | N |  |  | 수정 시각 |
 | `deleted_at` | DATETIME(6) | Y |  |  | 탈퇴 시각 (탈퇴 화면은 미정) |
@@ -130,7 +128,7 @@ erDiagram
 | `id` | BIGINT | N |  | PK | ID |
 | `user_id` | BIGINT | N |  | FK | 회원 ID |
 | `provider` | VARCHAR(20) | N |  |  | GOOGLE |
-| `provider_user_id` | VARCHAR(100) | N |  |  | 구글 계정 고유값(ID 토큰의 sub) |
+| `provider_user_id` | VARCHAR(255) | N |  |  | 구글 계정 고유값(ID 토큰의 sub). 대소문자를 구분하는 ASCII라 `ascii_bin` |
 | `created_at` | DATETIME(6) | N |  |  | 연결 시각 |
 
 - 유니크 `uk_social_provider_user` (provider, provider_user_id)
@@ -149,7 +147,7 @@ erDiagram
 | `token_hash` | CHAR(64) | N |  | UK | 토큰 원문 대신 SHA-256 해시 저장 |
 | `family_id` | CHAR(36) | N |  |  | 재발급 계보. 이미 쓴 토큰이 다시 오면 계보 전체 폐기 |
 | `expires_at` | DATETIME(6) | N |  |  | 만료 시각 |
-| `revoked_at` | DATETIME(6) | Y |  |  | 폐기 시각 (로그아웃·교체) |
+| `revoked_at` | DATETIME(6) | Y |  |  | 폐기 시각 (로그아웃·교체·재사용 감지 시 계보 폐기) |
 | `created_at` | DATETIME(6) | N |  |  | 발급 시각 |
 
 - 유니크 `uk_refresh_token_hash` (token_hash)
@@ -189,8 +187,8 @@ erDiagram
 | `shortcut_key` | VARCHAR(11) | N |  |  | 비교용 단축어. NFC 정규화 + 소문자 (/quote) |
 | `active_shortcut_key` | VARCHAR(11) (생성 컬럼) | Y |  |  | 생성 컬럼. 휴지통이면 NULL → 단축어 점유 해제 |
 | `content` | TEXT | N |  |  | 본문 3000자. 서버에서 암호화해 저장 |
-| `last_used_at` | DATETIME(6) | Y |  |  | 최근 사용 시각 → 최근 사용순 정렬, 확장 팝업 최근 사용 5개 |
-| `edited_at` | DATETIME(6) | N |  |  | 제목·단축어·본문을 고친 시각 → 최근 수정순. 사용 기록으로는 안 바뀜 |
+| `last_used_at` | DATETIME(6) | Y |  |  | 최근 사용 시각 → 확장 팝업 최근 사용 5개 (S2) |
+| `edited_at` | DATETIME(6) | N |  |  | 제목·단축어·본문을 고친 시각. 사용 기록으로는 안 바뀜 |
 | `deleted_at` | DATETIME(6) | Y |  |  | 휴지통 이동 시각. 30일 뒤 배치로 영구 삭제 |
 | `created_at` | DATETIME(6) | N |  |  | 생성 시각 |
 | `updated_at` | DATETIME(6) | N |  |  | 모든 변경(사용 기록·삭제 포함) → 확장 동기화 기준 |
@@ -238,17 +236,17 @@ erDiagram
 | 주제 | 내용 |
 | --- | --- |
 | 단축어 중복 | `(user_id, active_shortcut_key)` 유니크. 휴지통이면 생성 컬럼이 NULL이 되어 점유 해제. 정규화(NFC + 소문자)는 앱에서 하고 컬럼은 이진 비교. JPA에서는 생성 컬럼을 `insertable = false, updatable = false`로 매핑 |
-| 정렬 | 최근 사용순(`last_used_at`, 미사용은 뒤에 생성순)과 최근 수정순(`edited_at`) 2개. 사용 기록은 `edited_at`을 바꾸지 않아 최근 수정순이 흔들리지 않음 |
+| 정렬 | 내 템플릿은 생성 순(오래된 것 먼저)으로 고정 (기획 확정 11/1). `ORDER BY id`로 처리하며, `idx_templates_user_deleted (user_id, deleted_at)` 인덱스 끝에 기본키가 붙어 있어 따로 정렬하지 않음. 복구한 템플릿은 원래 자리로 돌아감 |
 | 사용 기록 | 사용 횟수는 저장하지 않음(기획 확정). 복사·삽입 시 `last_used_at`만 갱신. 사용 통계는 분석 도구 이벤트로 확인 |
-| 한도 검사 | 휴지통 제외 개수로 셈 (Free 5 / Pro 50). 생성·복구·갤러리 저장은 회원 행을 잠그고 검사 후 저장 |
-| 현재 플랜 판정 | 결제 도입 전에는 `users.plan_override` 값, 없으면 FREE. 판정은 서비스 한 곳(현재 플랜 조회)에만 두고, 결제가 들어오면 그 안쪽만 구독 테이블 기준으로 바꿈 |
-| AI 사용량 | 요청 시 `used_count < 10` 조건으로 1 올려 선점, AI 실패·타임아웃이면 1 되돌림 |
+| 한도 검사 | 휴지통 제외 개수로 셈 (모든 사용자 50개). 생성·복구·갤러리 저장은 회원 행을 잠그고 검사 후 저장 |
+| 한도 숫자 | 템플릿 50개·AI 하루 5회. 플랜 구분이 없어 DB에 두지 않고 서버 한 곳에서 관리 |
+| AI 사용량 | 요청 시 `used_count < 5` 조건으로 1 올려 선점, AI 실패·타임아웃이면 1 되돌림 |
 | 본문 암호화 | `templates.content`만 AES-GCM 암호화(JPA 변환기). DB 본문 검색은 하지 않음 |
 | 상단 통합 검색 (DSH-09) | DB 변경 없음. 화면이 내 템플릿 전체 + 갤러리 전체를 받아서 검색 (본문 암호화 때문에 서버 검색 불가) |
 | 카드 변수명 (MYT-05) | 컬럼 없음. 조회할 때 복호화한 본문에서 변수 정규식으로 뽑아 응답의 `variables`로 내려줌 |
-| 카드 표시 변경 (MYT-05) | 최근 사용 시각은 카드에서 빠졌지만 `last_used_at`은 최근 사용순 정렬 기준이라 유지 |
-| 가입 | 구글 로그인 → (처음 온 사용자) 약관 동의 화면 → 동의 시 회원 생성 + 약관 동의 기록 저장. 동의 전에는 회원 정보를 저장하지 않음 |
-| 탈퇴 (화면 미정) | 템플릿·토큰·AI 사용량 삭제. 약관 동의 기록 보존 기간은 탈퇴 정책 정할 때 같이 결정. 결제 도입 후에는 결제 기록 보존을 위해 `users`를 익명화하는 방식으로 변경 |
+| 카드 표시 변경 (MYT-05) | 최근 사용 시각은 카드에서 빠졌지만 `last_used_at`은 확장 팝업 "최근 사용 5개"(S2) 기준이라 유지 |
+| 가입 | 구글 로그인(인가 코드 교환 → ID 토큰 검증) → (처음 온 사용자) 약관 동의 화면 → 동의 시 회원 생성 + 소셜 계정 연결 + 약관 동의 기록 저장(한 트랜잭션). 동의 전에는 회원 정보를 저장하지 않음 |
+| 탈퇴 (화면 미정) | 템플릿·토큰·AI 사용량 삭제. 약관 동의 기록 보존 기간은 탈퇴 정책 정할 때 같이 결정 |
 | 시간대 | KST로 저장하므로 서버(JVM)와 DB 접속 시간대를 `Asia/Seoul`로 고정해야 함 |
 | PostgreSQL로 바꾸면 | 단축어 유니크를 부분 인덱스(`WHERE deleted_at IS NULL`)로, `DATETIME(6)`→`TIMESTAMP`, `TINYINT(1)`→`BOOLEAN`. 나머지 구조 동일 |
 
@@ -272,14 +270,38 @@ erDiagram
 | 약관 본문·관리자 페이지 | 이번 범위 아님 | 본문은 랜딩의 버전별 정적 페이지(예: `/terms/v1`). 관리자 페이지가 생기면 그때 약관 테이블 추가 |
 | 갤러리 출처 | 유지 (출처 기록·집계용) | `templates.source_gallery_template_id`. 내용은 복사만 하고 동기화하지 않음. 저장 수는 이 컬럼으로 집계 (`save_count` 컬럼 두지 않음) |
 | 사용 횟수 | 제거 | `use_count` 없음, `last_used_at`만 유지 |
-| 결제·구독 | 기획 정책 확정 후 | 나중에 `subscriptions`, `payments` 추가. 기존 테이블 변경 없음 |
-| 해지 후 초과분 비활성 | 결제와 함께 | 나중에 `templates.status` 추가 (기본값 ACTIVE) |
+| 결제·구독 | 기획에서 제거 (2026-10-31) | 구독·결제 테이블 없음, `users.plan_override` 삭제 |
+| 템플릿 한도 | 모든 사용자 50개 | 컬럼 없음 (서버 설정값) |
+| AI 톤 교정 | 모든 사용자 하루 5회 | `ai_tone_daily_usages` 그대로 (한도 숫자만 변경) |
+| 내 템플릿 정렬 | 생성 순 고정 (정렬 드롭다운 삭제, 11/1) | `users.template_sort` 삭제 |
+
+### 마이그레이션
+
+`plan_override`·`template_sort`는 이미 병합된 초기 마이그레이션(`V202610241618__init_schema.sql`)에 있으므로 그 파일은 고치지 않고 새 파일로 삭제합니다.
+
+```sql
+-- V{yyyyMMddHHmm}__drop_users_plan_override_and_template_sort.sql
+ALTER TABLE users
+    DROP COLUMN plan_override,
+    DROP COLUMN template_sort;
+```
+
+- 개발용 시드(`R__dev_seed_users.sql`)에서 두 컬럼을 넣는 부분이 있으면 그것도 같이 지워야 합니다. 플라이웨이는 버전 마이그레이션(컬럼 삭제)을 모두 끝낸 뒤 반복 실행 시드를 돌리므로, 시드를 그대로 두면 새로 만드는 DB(테스트컨테이너 포함)에서 실패합니다. 같은 PR에서 함께 고칩니다.
+
+구글 `sub`는 대소문자를 구분하는 ASCII 최대 255자입니다. 초기 마이그레이션의 `VARCHAR(100)`과 기본 정렬 규칙(대소문자 구분 안 함)으로는 맞지 않아 새 파일로 바꿉니다.
+
+```sql
+-- V202610311700__widen_social_provider_user_id.sql
+ALTER TABLE social_accounts
+    MODIFY provider_user_id VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL
+        COMMENT '구글 계정 고유값(ID 토큰의 sub, 대소문자 구분)';
+```
 
 ## 부록. DDL (MySQL 8.4)
 
 ```sql
--- SNIPTEXT S1 ERD - MySQL 8.4 / v0.6 (2026-10-17, 갤러리 여러 번 저장 허용)
--- 시간 컬럼은 모두 KST 기준. 결제·구독 테이블은 PLN 정책 확정 후 추가
+-- SNIPTEXT S1 ERD - MySQL 8.4 / v0.8 (2026-11-01, plan_override·template_sort 삭제 반영한 최종 모양)
+-- 시간 컬럼은 모두 KST 기준. 결제·구독은 기획에서 제거됨
 
 -- 회원
 CREATE TABLE users (
@@ -287,8 +309,6 @@ CREATE TABLE users (
     email                        VARCHAR(255) NOT NULL COMMENT '구글 계정 이메일',
     nickname                     VARCHAR(50) NOT NULL COMMENT '구글 계정 이름 그대로 (앞뒤 공백 제거, 50자 초과 시 자름, 비어 있으면 이메일 앞부분)',
     profile_image_url            VARCHAR(500) NULL COMMENT '구글 프로필 이미지. 없으면 닉네임 첫 글자 아바타',
-    template_sort                VARCHAR(20) NOT NULL DEFAULT 'RECENT_USED' COMMENT '내 템플릿 정렬 기억 (RECENT_USED / RECENT_EDITED)',
-    plan_override                VARCHAR(10) NULL COMMENT '결제 도입 전 임시: 값이 있으면 이 플랜(FREE/PRO)으로 판정. 테스트 계정을 Pro로 만들 때 사용',
     last_login_at                DATETIME(6) NULL COMMENT '마지막 로그인 시각',
     created_at                   DATETIME(6) NOT NULL COMMENT '생성 시각',
     updated_at                   DATETIME(6) NOT NULL COMMENT '수정 시각',
@@ -302,7 +322,7 @@ CREATE TABLE social_accounts (
     id                           BIGINT NOT NULL AUTO_INCREMENT COMMENT 'ID',
     user_id                      BIGINT NOT NULL COMMENT '회원 ID',
     provider                     VARCHAR(20) NOT NULL COMMENT 'GOOGLE',
-    provider_user_id             VARCHAR(100) NOT NULL COMMENT '구글 계정 고유값(ID 토큰의 sub)',
+    provider_user_id             VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '구글 계정 고유값(ID 토큰의 sub, 대소문자 구분)',
     created_at                   DATETIME(6) NOT NULL COMMENT '연결 시각',
     PRIMARY KEY (id),
     UNIQUE KEY uk_social_provider_user (provider, provider_user_id),
@@ -366,8 +386,8 @@ CREATE TABLE templates (
     shortcut_key                 VARCHAR(11) COLLATE utf8mb4_bin NOT NULL COMMENT '비교용 단축어. NFC 정규화 + 소문자 (/quote)',
     active_shortcut_key          VARCHAR(11) COLLATE utf8mb4_bin GENERATED ALWAYS AS (IF(deleted_at IS NULL, shortcut_key, NULL)) STORED COMMENT '생성 컬럼. 휴지통이면 NULL → 단축어 점유 해제',
     content                      TEXT NOT NULL COMMENT '본문 3000자. 서버에서 암호화해 저장',
-    last_used_at                 DATETIME(6) NULL COMMENT '최근 사용 시각 → 최근 사용순 정렬, 확장 팝업 최근 사용 5개',
-    edited_at                    DATETIME(6) NOT NULL COMMENT '제목·단축어·본문을 고친 시각 → 최근 수정순. 사용 기록으로는 안 바뀜',
+    last_used_at                 DATETIME(6) NULL COMMENT '최근 사용 시각 → 확장 팝업 최근 사용 5개 (S2)',
+    edited_at                    DATETIME(6) NOT NULL COMMENT '제목·단축어·본문을 고친 시각. 사용 기록으로는 안 바뀜',
     deleted_at                   DATETIME(6) NULL COMMENT '휴지통 이동 시각. 30일 뒤 배치로 영구 삭제',
     created_at                   DATETIME(6) NOT NULL COMMENT '생성 시각',
     updated_at                   DATETIME(6) NOT NULL COMMENT '모든 변경(사용 기록·삭제 포함) → 확장 동기화 기준',

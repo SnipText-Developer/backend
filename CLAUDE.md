@@ -32,9 +32,9 @@ docker compose up -d                                   # 로컬 MySQL
 
 구현 전에 해당 부분을 먼저 읽는다. 문서와 코드가 다르면 임의로 고르지 말고 물어본다.
 
-- `docs/s1-api-spec.md`: S1(대시보드) API 명세 v0.7. 경로, 요청·응답 필드, 결과 코드와 에러 문구가 전부 여기 있다. 공통 규칙(응답 형식, 결과 코드, 시간, 입력 검증, 캐시)도 이 문서 앞부분에 있다.
+- `docs/s1-api-spec.md`: S1(대시보드) API 명세 v0.8. 경로, 요청·응답 필드, 결과 코드와 에러 문구가 전부 여기 있다. 공통 규칙(응답 형식, 결과 코드, 시간, 입력 검증, 캐시)도 이 문서 앞부분에 있다.
 - 이후 스프린트 명세는 `docs/s2-api-spec.md`처럼 추가된다. 작업 중인 API가 어느 문서에 있는지 먼저 확인한다.
-- `docs/erd.md`: ERD v0.6과 DDL. 컬럼 의미, 인덱스, 설계 메모
+- `docs/erd.md`: ERD v0.8과 DDL. 컬럼 의미, 인덱스, 설계 메모
 - 구현 후에는 스웨거가 기준이다. 명세와 달라지는 변경은 PR 설명에 적는다.
 
 ## 패키지 구조
@@ -43,18 +43,18 @@ docker compose up -d                                   # 로컬 MySQL
 com.sniptext
 ├── domain
 │   ├── auth         # 로그인·가입·재발급·로그아웃. SocialAccount, RefreshToken
-│   ├── user         # User, UserTermsAgreement. 내 정보·설정·사용량, 가입 시 회원 생성
+│   ├── user         # User, UserTermsAgreement. 내 정보·사용량, 가입 시 회원 생성
 │   ├── template     # 내 템플릿 + 휴지통 + 휴지통 정리 배치
 │   ├── gallery      # 갤러리 템플릿, 내 템플릿으로 저장
-│   ├── ai           # AI 톤 교정, 하루 사용량, 핵심 정보 검사
-│   └── plan         # 현재 플랜 조회 (PlanQueryService, 테이블 없음)
+│   └── ai           # AI 톤 교정, 하루 사용량, 핵심 정보 검사
 └── global
     ├── security     # 보안 설정, 토큰 필터·발급 도구, 로그인 회원 주입, 개발용 임시 토큰
-    ├── client       # 외부 호출 (구글 토큰 검증, 언어모델)
+    ├── client       # 외부 호출 (google: 코드 교환·ID 토큰 검증, llm: 언어모델)
     ├── config       # JPA, 출처 허용, 스케줄, 시각 직렬화
     ├── entity       # 공통 시각 부모 엔티티
     ├── exception    # 전역 예외 처리, 공통 에러 코드
     ├── response     # 공통 응답, 결과 코드 인터페이스
+    ├── policy       # 사용 한도 숫자 (UsageLimits)
     └── crypto       # 본문 암호화 변환기
 ```
 
@@ -87,7 +87,7 @@ domain/{도메인}/
 - 버전 구분(`V2`)이 필요하면 컨트롤러의 요청·응답 객체에만 붙인다.
 - 엔티티의 규칙을 쓰는 요청 검증 어노테이션은 `annotation`에 둔다. `controller/dto`에 두면 컨트롤러가 엔티티를 쓰게 되어 ArchUnit에 걸린다. `annotation`은 `entity`·`exception`만 쓰고 `controller`·`service`는 부르지 않는다.
 - `support`에는 다른 도메인이 써도 되는 순수 규칙만 둔다 (상태·DB·스프링 빈 없음). `service`·`repository`·`controller`를 참조하지 않는다 (ArchUnit이 강제).
-- 값을 나타내는 열거형(정렬 기준, 플랜, 카테고리 등)은 그 값을 저장하는 엔티티의 도메인 `entity` 패키지에 둔다. 저장하지 않는 값은 그 값을 쓰는 도메인의 `entity` 패키지에 둔다.
+- 값을 나타내는 열거형(카테고리, 약관 종류 등)은 그 값을 저장하는 엔티티의 도메인 `entity` 패키지에 둔다. 저장하지 않는 값은 그 값을 쓰는 도메인의 `entity` 패키지에 둔다.
 - `entity` 패키지의 열거형은 컨트롤러와 다른 도메인에서 직접 써도 된다. 엔티티 클래스는 안 된다.
 - 열거형 상수 이름은 API 값이 된다. 명세를 먼저 바꾸지 않고 상수 이름을 바꾸지 않는다.
 - 의존 규칙은 ArchUnit 테스트가 강제한다. 테스트가 깨지면 구조를 고치고, 테스트를 고치지 않는다.
@@ -96,16 +96,14 @@ domain/{도메인}/
 
 | 연결 | 메서드 | 만드는 쪽 → 부르는 쪽 |
 | --- | --- | --- |
-| 현재 플랜 조회 | `PlanResult getCurrentPlan(Long userId)` | plan → template, user, ai |
 | 갤러리에서 템플릿 생성 | `TemplateShortcutAssignResult createFromGallery(TemplateCreateFromGalleryCommand)` (호출자 트랜잭션 밖에서만) | template → gallery |
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
-| 플랜 지정값 조회 | `Optional<Plan> findPlanOverride(Long userId)` (`UserQueryService`) | user → plan |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
 
 - **다른 도메인 서비스를 조합하는 조회는 별도 서비스로 분리한다.** 예: 사용량 API는 `UserUsageQueryService`
-  - 순환 참조를 막기 위해서다. plan → `UserQueryService`인데 사용량 때문에 `UserQueryService` → plan을 넣으면 생성자 주입 순환으로 앱이 뜨지 않는다
+  - 순환 참조를 막기 위해서다. 사용량 조합(template·ai 서비스 호출)을 `UserQueryService`에 넣으면, template·ai가 `UserQueryService`를 부르게 될 때 생성자 주입 순환으로 앱이 뜨지 않는다
 
 ## 코드 규칙
 
@@ -183,27 +181,28 @@ domain/{도메인}/
   - `updated_at`은 확장 동기화 기준이라 빠지면 S2에서 동기화가 조용히 틀어진다
 - 사용 횟수는 저장하지 않는다.
 
-**한도와 플랜**
-- 템플릿 한도는 휴지통 제외 개수 기준 (FREE 5 / PRO 50)
+**한도** (플랜 구분 없음, 모든 사용자 동일)
+- 템플릿 한도는 휴지통 제외 개수 기준 50개
 - 생성·복구·갤러리 저장은 같은 트랜잭션에서 회원 행을 비관적 잠금으로 잡은 뒤 개수 검사 → 저장
 - 한도 검사는 `lockUser`를 먼저 부른 같은 트랜잭션 안에서 한다
 - `lockUser`는 그 트랜잭션의 첫 조회여야 한다. 대상 조회는 잠금 뒤에 한다 (MySQL 기본 격리 수준은 첫 일반 조회 시점의 스냅샷을 쓰므로, 먼저 읽으면 잠금 뒤 개수 검사가 옛 값을 봐서 한도를 넘는다)
-- 현재 플랜 판정과 한도 숫자(템플릿 5/50, AI 하루 10)는 `plan` 도메인의 `PlanQueryService` 한 곳에서만 한다. 지금은 `users.plan_override` 값, 없으면 FREE. 다른 곳에서 플랜이나 한도 숫자를 직접 쓰지 않는다.
+- 한도 숫자(템플릿 50, AI 하루 5)는 `global/policy/UsageLimits` 한 곳에만 둔다. 다른 곳에서 한도 숫자를 직접 쓰지 않는다.
 
 **AI 톤 교정**
-- PRO 전용, 하루 10회 (KST 날짜별 1행)
-- 요청 시 `used_count < 10` 조건부 증가로 1회를 먼저 잡고, 외부 AI 오류·20초 타임아웃·혐오 표현 차단이면 되돌린다.
+- 모든 사용자 하루 5회 (KST 날짜별 1행)
+- 요청 시 `used_count < 한도` 조건부 증가로 1회를 먼저 잡고, 외부 AI 오류·20초 타임아웃·혐오 표현 차단이면 되돌린다.
 - 출력 토큰 상한 4000을 반드시 설정한다.
 - **원문과 결과는 저장하지도, 로그에 남기지도 않는다.** 예외 로그에도 넣지 않는다.
 
 **인증**
-- 웹 로그인은 프론트가 보낸 구글 ID 토큰을 서버가 검증한다 (서명, 발급자, 대상, 만료, 이메일 인증 여부).
+- 웹 로그인은 인가 코드 방식(PKCE)이다. 프론트가 보낸 인가 코드를 서버가 구글 토큰 엔드포인트에서 교환하고, 받은 ID 토큰을 검증한다 (서명, 발급자, 대상, 만료, 이메일 인증 여부). redirectUri는 설정의 허용 목록과 비교한다.
+- 구글 호출(코드 교환·공개키 조회)은 시간 제한을 걸고, 사용자 실패(잘못된·만료 코드)는 `AUTH401_3`, 구글 장애·시간 초과는 `AUTH502_1`로 나눈다. 인가 코드는 한 번만 쓸 수 있어 재시도하지 않는다.
 - 처음 온 사용자는 약관 동의 전까지 회원을 만들지 않는다. 가입용 토큰(30분)을 주고, 가입 API에서 회원·소셜 계정·약관 동의 2건을 한 트랜잭션으로 저장한다.
 - 재발급 토큰은 원문 대신 SHA-256 해시를 저장한다. 쓸 때마다 교체하고, 폐기된 토큰이 다시 오면 같은 `family_id` 전체를 폐기한다.
 - 웹의 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다.
 - 로그아웃은 접근 토큰 없이 쿠키만으로 처리하고, 쿠키가 없거나 이미 폐기돼도 성공으로 응답한다.
 - 개발용 임시 토큰 발급 경로는 `local`·`dev` 프로필에서만 켠다. 프로필 지정은 나열 방식(`@Profile({"local", "dev"})`)으로 쓰고 `"!prod"`는 금지 (프로필을 빠뜨린 서버에서 `!prod`가 참이 되어 운영에 열린다)
-- 로컬에서 인증 API 확인: `local` 프로필로 실행 → `POST /api/v1/auth/dev-token` `{"userId":1}` → 받은 토큰을 스웨거 Authorize에 입력. 시드 회원 1번은 FREE, 2번은 PRO
+- 로컬에서 인증 API 확인: `local` 프로필로 실행 → `POST /api/v1/auth/dev-token` `{"userId":1}` → 받은 토큰을 스웨거 Authorize에 입력. 시드 회원 1번·2번 모두 일반 회원(한도 동일)
 - 컨트롤러에서 로그인 회원은 `@LoginUser Long userId`로 받는다. 인증 정보(`SecurityContextHolder`)에서 직접 꺼내지 않는다. Long만 허용한다 (ArchUnit이 강제). 다른 타입으로 쓰면 쿼리 값이 들어가는 구멍이 생긴다.
 - 접근 토큰이 없거나 만료되면 `COMMON401_1`, 위조·형식 오류·종류가 다른 토큰이면 `COMMON401_2`다. 필터는 사유만 요청 속성에 남기고, 응답은 진입점이 한다.
 - 통합 테스트에서 인증된 요청은 `IntegrationTestSupport.bearer(userId)`로 만든다 (실제 발급 도구 사용). `@WithMockUser`로는 `@LoginUser`가 채워지지 않는다.
@@ -234,7 +233,7 @@ domain/{도메인}/
 - 테스트 이름은 `@DisplayName`에 한국어로 쓴다.
 - 서비스 단위 테스트는 모키토, 레포지토리·통합 테스트는 테스트컨테이너 MySQL (H2 쓰지 않음. 생성 컬럼·잠금 동작이 다르다)
 - 테스트에서 엔티티는 `src/test/.../fixture/{엔티티}Fixture`로 만든다. 생성 인자가 바뀌어도 테스트가 한꺼번에 깨지지 않게 하기 위해서다
-- 반드시 검증할 것: 본인 소유가 아니면 404, 한도 경계(4→5, 5→6), 단축어 정규화·대소문자 중복, 동시 요청 시 한도 초과 방지
+- 반드시 검증할 것: 본인 소유가 아니면 404, 한도 경계(49→50, 50→51), 단축어 정규화·대소문자 중복, 동시 요청 시 한도 초과 방지
 
 ## 깃·PR
 

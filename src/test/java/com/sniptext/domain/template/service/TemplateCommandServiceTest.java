@@ -36,8 +36,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.sniptext.domain.plan.service.PlanQueryService;
-import com.sniptext.domain.plan.service.dto.result.PlanResult;
 import com.sniptext.domain.template.entity.Shortcut;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.exception.TemplateErrorCode;
@@ -48,10 +46,10 @@ import com.sniptext.domain.template.service.dto.command.TemplateUpdateCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
-import com.sniptext.domain.user.entity.Plan;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.global.exception.BusinessException;
+import com.sniptext.global.policy.UsageLimits;
 import com.sniptext.support.MutableClock;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,7 +58,6 @@ class TemplateCommandServiceTest {
 	private static final Long USER_ID = 1L;
 	private static final Long TEMPLATE_ID = 12L;
 	private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 7, 10, 30);
-	private static final PlanResult FREE = new PlanResult(Plan.FREE, 5, 0);
 	private static final String CONTENT = "안녕하세요 {{고객명}}님,\n견적은 {{금액}}원입니다. {{고객명}}님 {{고객 명}}";
 	private static final TemplateCreateCommand COMMAND =
 		new TemplateCreateCommand(USER_ID, "  견적 안내  ", "/Quote", CONTENT);
@@ -70,9 +67,6 @@ class TemplateCommandServiceTest {
 
 	@Mock
 	private UserCommandService userCommandService;
-
-	@Mock
-	private PlanQueryService planQueryService;
 
 	@Mock
 	private TransactionTemplate transactionTemplate;
@@ -89,7 +83,7 @@ class TemplateCommandServiceTest {
 	@Test
 	@DisplayName("값 객체 규칙을 거쳐 저장하고, 저장된 값과 첫 등장 순·중복 제거한 변수를 돌려준다")
 	void create() {
-		givenActiveCount(FREE, 0);
+		givenActiveCount(0);
 		givenSaveSucceeds();
 
 		TemplateCreateResult result = templateCommandService.create(COMMAND);
@@ -102,11 +96,10 @@ class TemplateCommandServiceTest {
 			List.of("고객명", "금액"), null, NOW, NOW));
 	}
 
-	@ParameterizedTest
-	@CsvSource({"FREE, 5, 4", "PRO, 50, 49"})
-	@DisplayName("활성 개수가 한도보다 하나 적으면 저장한다")
-	void belowLimit(Plan plan, int limit, long activeCount) {
-		givenActiveCount(new PlanResult(plan, limit, 0), activeCount);
+	@Test
+	@DisplayName("활성 개수가 49개면 50번째를 저장한다")
+	void belowLimit() {
+		givenActiveCount(49);
 		givenSaveSucceeds();
 
 		TemplateCreateResult result = templateCommandService.create(COMMAND);
@@ -114,11 +107,10 @@ class TemplateCommandServiceTest {
 		assertThat(result.templateId()).isEqualTo(TEMPLATE_ID);
 	}
 
-	@ParameterizedTest
-	@CsvSource({"FREE, 5, 5", "PRO, 50, 50"})
-	@DisplayName("활성 개수가 한도에 도달했으면 TEMPLATE403_1이고 저장하지 않는다")
-	void limitReached(Plan plan, int limit, long activeCount) {
-		givenActiveCount(new PlanResult(plan, limit, 0), activeCount);
+	@Test
+	@DisplayName("활성 개수가 한도(50개)에 도달했으면 TEMPLATE403_1이고 저장하지 않는다")
+	void limitReached() {
+		givenActiveCount(50);
 
 		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
 			.isInstanceOf(BusinessException.class)
@@ -128,16 +120,15 @@ class TemplateCommandServiceTest {
 	}
 
 	@Test
-	@DisplayName("회원 행을 잠근 뒤에 플랜 한도와 개수, 단축어 중복을 확인하고 저장한다")
+	@DisplayName("회원 행을 잠근 뒤에 한도 개수, 단축어 중복을 확인하고 저장한다")
 	void locksBeforeLimitCheck() {
-		givenActiveCount(FREE, 0);
+		givenActiveCount(0);
 		givenSaveSucceeds();
 
 		templateCommandService.create(COMMAND);
 
-		InOrder inOrder = inOrder(userCommandService, planQueryService, templateRepository);
+		InOrder inOrder = inOrder(userCommandService, templateRepository);
 		inOrder.verify(userCommandService).lockUser(USER_ID);
-		inOrder.verify(planQueryService).getCurrentPlan(USER_ID);
 		inOrder.verify(templateRepository).countByUserIdAndDeletedAtIsNull(USER_ID);
 		inOrder.verify(templateRepository).existsByUserIdAndActiveShortcutKey(USER_ID, "/quote");
 		inOrder.verify(templateRepository).saveAndFlush(any());
@@ -146,7 +137,7 @@ class TemplateCommandServiceTest {
 	@Test
 	@DisplayName("활성 템플릿에 같은 단축어 키가 있으면 저장 전에 TEMPLATE409_1이고 저장하지 않는다")
 	void duplicateShortcutBeforeSave() {
-		givenActiveCount(FREE, 0);
+		givenActiveCount(0);
 		given(templateRepository.existsByUserIdAndActiveShortcutKey(USER_ID, "/quote")).willReturn(true);
 
 		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
@@ -159,7 +150,7 @@ class TemplateCommandServiceTest {
 	@Test
 	@DisplayName("미리 조회를 통과했어도 저장에서 활성 단축어 유니크 위반이 나면 TEMPLATE409_1이고, 예외 메시지에 겹친 단축어가 남지 않는다")
 	void duplicateShortcut() {
-		givenActiveCount(FREE, 0);
+		givenActiveCount(0);
 		givenSaveFails(ConstraintKind.UNIQUE, "templates.uk_templates_user_active_shortcut");
 
 		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
@@ -178,7 +169,7 @@ class TemplateCommandServiceTest {
 	})
 	@DisplayName("단축어 유니크(종류 UNIQUE, 이름 정확히 일치)가 아닌 무결성 위반은 바꾸지 않고 그대로 던진다 (코드 실수라 500)")
 	void otherIntegrityViolation(ConstraintKind kind, String constraintName) {
-		givenActiveCount(FREE, 0);
+		givenActiveCount(0);
 		givenSaveFails(kind, constraintName);
 
 		assertThatThrownBy(() -> templateCommandService.create(COMMAND))
@@ -205,7 +196,7 @@ class TemplateCommandServiceTest {
 		@Test
 		@DisplayName("충돌이 없으면 원본 단축어로 출처와 함께 저장하고 shortcutChanged는 false다")
 		void noConflict() {
-			givenActiveCount(FREE, 0);
+			givenActiveCount(0);
 			givenUsedKeys(GALLERY_COMMAND.shortcut());
 			givenSaveSucceeds();
 
@@ -222,7 +213,7 @@ class TemplateCommandServiceTest {
 		@Test
 		@DisplayName("충돌이 있으면 비어 있는 첫 번호를 붙여 저장하고 shortcutChanged는 true다")
 		void conflict() {
-			givenActiveCount(FREE, 0);
+			givenActiveCount(0);
 			givenUsedKeys(GALLERY_COMMAND.shortcut(), "/견적", "/견적2");
 			givenSaveSucceeds();
 
@@ -235,7 +226,7 @@ class TemplateCommandServiceTest {
 		@DisplayName("자모 분리형 원본은 글자가 같으므로 충돌이 없으면 shortcutChanged가 false이고 원본도 NFC로 돌려준다")
 		void decomposedOriginalIsNotChanged() {
 			String decomposed = Normalizer.normalize(SHORTCUT, Normalizer.Form.NFD);
-			givenActiveCount(FREE, 0);
+			givenActiveCount(0);
 			givenUsedKeys(decomposed);
 			givenSaveSucceeds();
 
@@ -250,7 +241,7 @@ class TemplateCommandServiceTest {
 		@Test
 		@DisplayName("활성 개수가 한도에 도달했으면 TEMPLATE403_1이고 단축어 조회와 저장을 하지 않는다")
 		void limitReached() {
-			givenActiveCount(FREE, 5);
+			givenActiveCount(UsageLimits.TEMPLATE_LIMIT);
 
 			assertThatThrownBy(() -> templateCommandService.createFromGallery(GALLERY_COMMAND))
 				.isInstanceOf(BusinessException.class)
@@ -263,7 +254,7 @@ class TemplateCommandServiceTest {
 		@Test
 		@DisplayName("후보가 모두 차면 TEMPLATE409_2이고 저장하지 않는다")
 		void numbersExhausted() {
-			givenActiveCount(FREE, 0);
+			givenActiveCount(0);
 			givenUsedKeys(GALLERY_COMMAND.shortcut(),
 				Shortcut.create(GALLERY_COMMAND.shortcut()).candidateKeys().toArray(String[]::new));
 
@@ -277,15 +268,14 @@ class TemplateCommandServiceTest {
 		@Test
 		@DisplayName("회원 행을 잠근 뒤에 한도, 사용 중인 키를 확인하고 저장한다")
 		void locksBeforeLimitCheck() {
-			givenActiveCount(FREE, 0);
+			givenActiveCount(0);
 			givenUsedKeys(GALLERY_COMMAND.shortcut());
 			givenSaveSucceeds();
 
 			templateCommandService.createFromGallery(GALLERY_COMMAND);
 
-			InOrder inOrder = inOrder(userCommandService, planQueryService, templateRepository);
+			InOrder inOrder = inOrder(userCommandService, templateRepository);
 			inOrder.verify(userCommandService).lockUser(USER_ID);
-			inOrder.verify(planQueryService).getCurrentPlan(USER_ID);
 			inOrder.verify(templateRepository).countByUserIdAndDeletedAtIsNull(USER_ID);
 			inOrder.verify(templateRepository).findActiveShortcutKeys(any(), any());
 			inOrder.verify(templateRepository).saveAndFlush(any());
@@ -294,7 +284,7 @@ class TemplateCommandServiceTest {
 		@Test
 		@DisplayName("미리 조회를 통과했어도 저장에서 활성 단축어 유니크 위반이 나면 TEMPLATE409_1이고, 예외 메시지에 겹친 단축어가 남지 않는다")
 		void duplicateShortcut() {
-			givenActiveCount(FREE, 0);
+			givenActiveCount(0);
 			givenUsedKeys(GALLERY_COMMAND.shortcut());
 			givenSaveFails(ConstraintKind.UNIQUE, "templates.uk_templates_user_active_shortcut");
 
@@ -309,7 +299,7 @@ class TemplateCommandServiceTest {
 		@Test
 		@DisplayName("단축어 유니크가 아닌 무결성 위반은 바꾸지 않고 그대로 던진다 (코드 실수라 500)")
 		void otherIntegrityViolation() {
-			givenActiveCount(FREE, 0);
+			givenActiveCount(0);
 			givenUsedKeys(GALLERY_COMMAND.shortcut());
 			givenSaveFails(ConstraintKind.FOREIGN_KEY, "templates.fk_templates_gallery");
 
@@ -372,7 +362,7 @@ class TemplateCommandServiceTest {
 		}
 
 		@Test
-		@DisplayName("개수가 바뀌지 않으므로 회원 잠금과 플랜 한도를 쓰지 않는다")
+		@DisplayName("개수가 바뀌지 않으므로 회원을 잠그지 않는다")
 		void doesNotLockUser() {
 			givenActiveTemplate();
 			givenUpdateSaved();
@@ -380,7 +370,6 @@ class TemplateCommandServiceTest {
 			templateCommandService.update(UPDATE_COMMAND);
 
 			then(userCommandService).shouldHaveNoInteractions();
-			then(planQueryService).shouldHaveNoInteractions();
 		}
 
 		@ParameterizedTest
@@ -436,8 +425,7 @@ class TemplateCommandServiceTest {
 
 	}
 
-	private void givenActiveCount(PlanResult plan, long activeCount) {
-		given(planQueryService.getCurrentPlan(USER_ID)).willReturn(plan);
+	private void givenActiveCount(long activeCount) {
 		given(templateRepository.countByUserIdAndDeletedAtIsNull(USER_ID)).willReturn(activeCount);
 	}
 

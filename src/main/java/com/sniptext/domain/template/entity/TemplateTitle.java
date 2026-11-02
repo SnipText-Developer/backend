@@ -5,6 +5,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
+import com.sniptext.global.text.TextWhitespace;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import lombok.AccessLevel;
