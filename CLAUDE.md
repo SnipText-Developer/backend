@@ -43,7 +43,7 @@ docker compose up -d                                   # 로컬 MySQL
 com.sniptext
 ├── domain
 │   ├── auth         # 로그인·가입·재발급·로그아웃. SocialAccount, RefreshToken
-│   ├── user         # User, UserTermsAgreement. 내 정보·설정·사용량, 가입 시 회원 생성
+│   ├── user         # User, UserTermsAgreement. 내 정보·사용량, 가입 시 회원 생성
 │   ├── template     # 내 템플릿 + 휴지통 + 휴지통 정리 배치
 │   ├── gallery      # 갤러리 템플릿, 내 템플릿으로 저장
 │   └── ai           # AI 톤 교정, 하루 사용량, 핵심 정보 검사
