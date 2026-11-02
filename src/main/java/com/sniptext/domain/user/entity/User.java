@@ -6,8 +6,6 @@ import com.sniptext.global.entity.BaseTimeEntity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -17,10 +15,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * 회원. 가입 완료 시점에만 만든다 (약관 동의 전에는 회원을 저장하지 않는다).
- * 정렬 기준은 RECENT_USED, 플랜 지정값은 없음(FREE 판정)으로 시작한다.
- */
+/** 회원. 가입 완료 시점에만 만든다 (약관 동의 전에는 회원을 저장하지 않는다). */
 @Getter
 @Entity
 @Table(name = "users")
@@ -44,14 +39,6 @@ public class User extends BaseTimeEntity {
 	@Column(name = "profile_image_url", length = PROFILE_IMAGE_URL_MAX_LENGTH)
 	private String profileImageUrl;
 
-	@Enumerated(EnumType.STRING)
-	@Column(name = "template_sort", nullable = false, length = 20)
-	private TemplateSort templateSort;
-
-	@Enumerated(EnumType.STRING)
-	@Column(name = "plan_override", length = 10)
-	private Plan planOverride;
-
 	@Column(name = "last_login_at")
 	private LocalDateTime lastLoginAt;
 
@@ -63,7 +50,6 @@ public class User extends BaseTimeEntity {
 		this.email = email;
 		this.nickname = nickname;
 		this.profileImageUrl = profileImageUrl;
-		this.templateSort = TemplateSort.RECENT_USED;
 	}
 
 	/**

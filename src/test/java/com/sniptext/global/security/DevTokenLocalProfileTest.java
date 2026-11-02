@@ -31,14 +31,14 @@ class DevTokenLocalProfileTest extends IntegrationTestSupport {
 	private JdbcTemplate jdbcTemplate;
 
 	@Test
-	@DisplayName("시드 회원 2명이 들어간다: 1번은 플랜 지정 없음(FREE), 2번은 PRO")
+	@DisplayName("시드 회원 2명이 들어간다: 1번·2번 모두 일반 회원")
 	void seedUsers() {
 		List<Map<String, Object>> users = jdbcTemplate.queryForList(
-			"SELECT id, email, plan_override FROM users WHERE email LIKE '%@sniptext.local' ORDER BY id");
+			"SELECT id, email FROM users WHERE email LIKE '%@sniptext.local' ORDER BY id");
 
 		assertThat(users).hasSize(2);
-		assertThat(users.get(0)).containsEntry("id", 1L).containsEntry("plan_override", null);
-		assertThat(users.get(1)).containsEntry("id", 2L).containsEntry("plan_override", "PRO");
+		assertThat(users.get(0)).containsEntry("id", 1L).containsEntry("email", "user1@sniptext.local");
+		assertThat(users.get(1)).containsEntry("id", 2L).containsEntry("email", "user2@sniptext.local");
 	}
 
 	@Test

@@ -18,15 +18,13 @@ class UserTest {
 	private static final String PROFILE = "https://lh3.googleusercontent.com/a/sample";
 
 	@Test
-	@DisplayName("회원을 만들면 받은 값이 그대로 들어가고 정렬은 최근 사용순, 플랜 지정값·탈퇴 시각은 없다")
+	@DisplayName("회원을 만들면 받은 값이 그대로 들어가고 로그인 시각·탈퇴 시각은 없다")
 	void create() {
 		User user = User.create(EMAIL, NICKNAME, PROFILE);
 
 		assertThat(user.getEmail()).isEqualTo(EMAIL);
 		assertThat(user.getNickname()).isEqualTo(NICKNAME);
 		assertThat(user.getProfileImageUrl()).isEqualTo(PROFILE);
-		assertThat(user.getTemplateSort()).isEqualTo(TemplateSort.RECENT_USED);
-		assertThat(user.getPlanOverride()).isNull();
 		assertThat(user.getLastLoginAt()).isNull();
 		assertThat(user.getDeletedAt()).isNull();
 	}
