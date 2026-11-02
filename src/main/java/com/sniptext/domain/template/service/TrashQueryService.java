@@ -12,7 +12,6 @@ import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.query.TrashListQuery;
 import com.sniptext.domain.template.service.dto.result.TrashListResult;
 import com.sniptext.domain.template.service.dto.result.TrashTemplateResult;
-import com.sniptext.domain.template.support.TrashCursor;
 import com.sniptext.global.exception.BusinessException;
 
 import lombok.RequiredArgsConstructor;

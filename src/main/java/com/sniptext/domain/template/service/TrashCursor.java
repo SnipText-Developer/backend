@@ -1,4 +1,4 @@
-package com.sniptext.domain.template.support;
+package com.sniptext.domain.template.service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  * 같은 초 안에서도 순서가 갈리므로 시각은 DATETIME(6)과 같은 마이크로초까지 넣는다.
  * 해석할 때 자릿수를 고정해 DB가 받지 못하는 연도(+12026)가 쿼리까지 가지 않게 한다.
  */
-public record TrashCursor(LocalDateTime deletedAt, Long id) {
+record TrashCursor(LocalDateTime deletedAt, Long id) {
 
 	private static final String SEPARATOR = "_";
 	private static final DateTimeFormatter DELETED_AT_FORMAT = DateTimeFormatter.ofPattern(

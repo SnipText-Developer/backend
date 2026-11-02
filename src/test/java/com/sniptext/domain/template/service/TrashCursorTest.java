@@ -1,4 +1,4 @@
-package com.sniptext.domain.template.support;
+package com.sniptext.domain.template.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
