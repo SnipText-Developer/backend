@@ -17,15 +17,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Limit;
-import org.springframework.test.util.ReflectionTestUtils;
 
-import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.exception.TrashErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
+import com.sniptext.domain.template.repository.dto.TrashTemplateRow;
 import com.sniptext.domain.template.service.dto.query.TrashListQuery;
 import com.sniptext.domain.template.service.dto.result.TrashListResult;
 import com.sniptext.domain.template.service.dto.result.TrashTemplateResult;
-import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.global.exception.BusinessException;
 
 @ExtendWith(MockitoExtension.class)
@@ -132,10 +130,8 @@ class TrashQueryServiceTest {
 		verify(templateRepository, never()).findTrashAfter(any(), any(), any(), any());
 	}
 
-	private static Template trashed(Long id, String shortcut) {
-		Template template = TemplateFixture.trashedTemplate(USER_ID, shortcut, DELETED_AT);
-		ReflectionTestUtils.setField(template, "id", id);
-		return template;
+	private static TrashTemplateRow trashed(Long id, String shortcut) {
+		return new TrashTemplateRow(id, "견적 안내", shortcut, DELETED_AT);
 	}
 
 }

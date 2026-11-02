@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Limit;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.sniptext.domain.template.entity.Template;
+import com.sniptext.domain.template.repository.dto.TrashTemplateRow;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.fixture.UserFixture;
@@ -60,6 +60,15 @@ class TrashTemplateRepositoryTest extends IntegrationTestSupport {
 
 		assertThat(idsOf(templateRepository.findTrashFirstPage(userId, LIMIT)))
 			.containsExactly(newer, tiedSecond, tiedFirst, older);
+	}
+
+	@Test
+	@DisplayName("목록에 필요한 값을 그대로 읽고, 삭제 시각은 마이크로초까지 유지한다")
+	void rowValues() {
+		Long id = saveTrashed(userId, "/회의", DELETED_AT);
+
+		assertThat(templateRepository.findTrashFirstPage(userId, LIMIT))
+			.containsExactly(new TrashTemplateRow(id, TemplateFixture.TITLE, "/회의", DELETED_AT));
 	}
 
 	@Test
@@ -121,8 +130,8 @@ class TrashTemplateRepositoryTest extends IntegrationTestSupport {
 		return templateRepository.saveAndFlush(TemplateFixture.trashedTemplate(ownerId, shortcut, deletedAt)).getId();
 	}
 
-	private List<Long> idsOf(List<Template> templates) {
-		return templates.stream().map(Template::getId).toList();
+	private List<Long> idsOf(List<TrashTemplateRow> rows) {
+		return rows.stream().map(TrashTemplateRow::id).toList();
 	}
 
 	private Long saveUser(String email) {

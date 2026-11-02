@@ -294,6 +294,20 @@ class TrashControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("본문을 복호화할 수 없는 행이 있어도 본문을 내보내지 않는 목록은 그대로 보인다")
+	void undecryptableContent() throws Exception {
+		Long broken = saveTrashed(userId, "/깨짐", DELETED_AT);
+		entityManager.createNativeQuery("update templates set content = 'not-encrypted' where id = :id")
+			.setParameter("id", broken)
+			.executeUpdate();
+		entityManager.clear();
+
+		list(userId)
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.result.templates[*].templateId", contains(broken.intValue())));
+	}
+
+	@Test
 	@DisplayName("토큰이 없으면 COMMON401_1, 캐시 금지")
 	void unauthenticated() throws Exception {
 		expectError(mockMvc.perform(get(PATH)), 401, "COMMON401_1", "로그인이 필요해요.");
