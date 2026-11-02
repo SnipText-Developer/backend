@@ -30,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.repository.TemplateRepository;
-import com.sniptext.domain.user.entity.Plan;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.fixture.UserFixture;
@@ -72,7 +71,7 @@ class TemplateControllerTest extends IntegrationTestSupport {
 	@BeforeEach
 	void setUp() {
 		clock.setTo(FIXED);
-		userId = saveUser("free@sniptext.com", null);
+		userId = saveUser("owner@sniptext.com");
 	}
 
 	@Test
@@ -176,25 +175,25 @@ class TemplateControllerTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("다른 회원이 쓰는 단축어로는 저장할 수 있다")
 	void otherUsersShortcut() throws Exception {
-		Long otherUserId = saveUser("other@sniptext.com", null);
+		Long otherUserId = saveUser("other@sniptext.com");
 		templateRepository.saveAndFlush(TemplateFixture.template(otherUserId, "/견적"));
 
 		create(userId, TITLE, "/견적", CONTENT).andExpect(status().isCreated());
 	}
 
 	@Test
-	@DisplayName("FREE는 4개에서 5번째를 저장하고, 6번째는 TEMPLATE403_1")
-	void freeLimit() throws Exception {
-		saveTemplates(userId, 4);
+	@DisplayName("49개에서 50번째를 저장하고, 51번째는 TEMPLATE403_1")
+	void limit() throws Exception {
+		saveTemplates(userId, 49);
 
-		create(userId, TITLE, "/다섯째", CONTENT).andExpect(status().isCreated());
-		expectError(create(userId, TITLE, "/여섯째", CONTENT), 403, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요.");
+		create(userId, TITLE, "/쉰째", CONTENT).andExpect(status().isCreated());
+		expectError(create(userId, TITLE, "/쉰한째", CONTENT), 403, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요.");
 	}
 
 	@Test
 	@DisplayName("한도에 도달했고 단축어도 겹치면 한도 에러(TEMPLATE403_1)가 먼저다")
 	void limitBeforeDuplicate() throws Exception {
-		saveTemplates(userId, 5);
+		saveTemplates(userId, 50);
 
 		expectError(create(userId, TITLE, "/t1", CONTENT), 403, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요.");
 	}
@@ -202,7 +201,7 @@ class TemplateControllerTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("휴지통 템플릿은 한도 개수에 들어가지 않는다")
 	void trashNotCounted() throws Exception {
-		saveTemplates(userId, 5);
+		saveTemplates(userId, 50);
 		templateRepository.findAll().stream()
 			.filter(template -> template.getUserId().equals(userId))
 			.findFirst()
@@ -210,17 +209,7 @@ class TemplateControllerTest extends IntegrationTestSupport {
 			.moveToTrash(FIXED);
 		templateRepository.flush();
 
-		create(userId, TITLE, "/다섯째", CONTENT).andExpect(status().isCreated());
-	}
-
-	@Test
-	@DisplayName("PRO(plan_override)는 49개에서 50번째를 저장하고, 51번째는 TEMPLATE403_1")
-	void proLimit() throws Exception {
-		Long proUserId = saveUser("pro@sniptext.com", Plan.PRO);
-		saveTemplates(proUserId, 49);
-
-		create(proUserId, TITLE, "/쉰째", CONTENT).andExpect(status().isCreated());
-		expectError(create(proUserId, TITLE, "/쉰한째", CONTENT), 403, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요.");
+		create(userId, TITLE, "/쉰째", CONTENT).andExpect(status().isCreated());
 	}
 
 	@Test
@@ -264,8 +253,8 @@ class TemplateControllerTest extends IntegrationTestSupport {
 		templateRepository.flush();
 	}
 
-	private Long saveUser(String email, Plan planOverride) {
-		User user = UserFixture.userWithPlanOverride(email, planOverride);
+	private Long saveUser(String email) {
+		User user = UserFixture.user(email);
 		entityManager.persist(user);
 		entityManager.flush();
 		return user.getId();

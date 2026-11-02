@@ -30,6 +30,7 @@ import com.sniptext.domain.ai.service.dto.result.AiToneReserveResult;
 import com.sniptext.domain.user.repository.UserRepository;
 import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.exception.BusinessException;
+import com.sniptext.global.policy.UsageLimits;
 import com.sniptext.support.IntegrationTestSupport;
 import com.sniptext.support.MutableClock;
 import com.sniptext.support.MutableClockConfiguration;
@@ -42,7 +43,7 @@ import com.sniptext.support.MutableClockConfiguration;
 @Import(MutableClockConfiguration.class)
 class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 
-	private static final int LIMIT = 10;
+	private static final int LIMIT = UsageLimits.AI_TONE_DAILY_LIMIT;
 	/** 동시 선점 테스트 반복 횟수 */
 	private static final int REPEATS = 10;
 	/** DATETIME(6)과 같은 마이크로초 정밀도 */
@@ -81,66 +82,56 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("오늘 행이 없으면 0회로 만들고 1회를 잡는다")
 	void reserveFirst() {
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 
 		assertThat(reservation).isEqualTo(new AiToneReserveResult(userId, TODAY, 1));
 		assertThat(usedCount(TODAY)).isEqualTo(1);
 	}
 
 	@Test
-	@DisplayName("9회 사용 상태에서 선점하면 10회가 된다")
+	@DisplayName("4회 사용 상태에서 선점하면 한도인 5회가 된다")
 	void reserveUpToLimit() {
-		reserveTimes(9);
+		reserveTimes(LIMIT - 1);
 
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 
-		assertThat(reservation.usedCountAfter()).isEqualTo(10);
-		assertThat(usedCount(TODAY)).isEqualTo(10);
+		assertThat(reservation.usedCountAfter()).isEqualTo(5);
+		assertThat(usedCount(TODAY)).isEqualTo(5);
 	}
 
 	@Test
-	@DisplayName("10회 사용 상태에서 선점하면 AI429_1이고 횟수는 그대로다")
+	@DisplayName("5회 사용 상태에서 선점하면 AI429_1이고 횟수는 그대로다")
 	void reserveOverLimit() {
-		reserveTimes(10);
+		reserveTimes(LIMIT);
 
-		assertThatThrownBy(() -> aiToneUsageCommandService.reserve(userId, LIMIT))
+		assertThatThrownBy(() -> aiToneUsageCommandService.reserve(userId))
 			.isInstanceOf(BusinessException.class)
 			.extracting("resultCode")
 			.isEqualTo(AiErrorCode.DAILY_LIMIT_EXCEEDED);
-		assertThat(usedCount(TODAY)).isEqualTo(10);
-	}
-
-	@Test
-	@DisplayName("한도가 0이면 첫 선점부터 AI429_1이고 행도 남지 않는다")
-	void reserveWithZeroLimit() {
-		assertThatThrownBy(() -> aiToneUsageCommandService.reserve(userId, 0))
-			.isInstanceOf(BusinessException.class)
-			.extracting("resultCode")
-			.isEqualTo(AiErrorCode.DAILY_LIMIT_EXCEEDED);
-		assertThat(aiToneDailyUsageRepository.findUsedCount(userId, TODAY)).isEmpty();
+		assertThat(usedCount(TODAY)).isEqualTo(5);
 	}
 
 	@Test
 	@DisplayName("다음 날 선점은 새 행에 잡히고 어제 행은 그대로다")
 	void reserveOnNextDay() {
-		reserveTimes(10);
+		reserveTimes(LIMIT);
 		clock.setTo(NOW.plusDays(1));
 
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 
 		assertThat(reservation).isEqualTo(new AiToneReserveResult(userId, TODAY.plusDays(1), 1));
-		assertThat(usedCount(TODAY)).isEqualTo(10);
+		assertThat(usedCount(TODAY)).isEqualTo(LIMIT);
 	}
 
 	@Test
 	@DisplayName("다른 회원의 사용량은 내 선점에 영향을 주지 않는다")
 	void otherUserIndependent() {
 		Long otherUserId = saveUser("other@sniptext.com");
-		for (int i = 0; i < 10; i++) {
-			aiToneUsageCommandService.reserve(otherUserId, LIMIT);
+		for (int i = 0; i < LIMIT; i++) {
+			aiToneUsageCommandService.reserve(otherUserId);
 		}
 
-		assertThat(aiToneUsageCommandService.reserve(userId, LIMIT).usedCountAfter()).isEqualTo(1);
+		assertThat(aiToneUsageCommandService.reserve(userId).usedCountAfter()).isEqualTo(1);
 	}
 
 	/**
@@ -149,14 +140,14 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	 * 한 번이라도 실패하면 잠금 순서를 의심한다.
 	 */
 	@RepeatedTest(REPEATS)
-	@DisplayName("9회 사용 상태에서 두 요청이 동시에 선점하면 1건만 성공하고 최종 10회다")
+	@DisplayName("4회 사용 상태에서 두 요청이 동시에 선점하면 1건만 성공하고 최종 5회다")
 	void concurrentReserve() throws Exception {
-		reserveTimes(9);
+		reserveTimes(LIMIT - 1);
 
 		List<Outcome> outcomes = reserveConcurrently(2);
 
 		assertThat(outcomes).containsExactlyInAnyOrder(Outcome.RESERVED, Outcome.LIMIT_EXCEEDED);
-		assertThat(usedCount(TODAY)).isEqualTo(10);
+		assertThat(usedCount(TODAY)).isEqualTo(LIMIT);
 	}
 
 	@RepeatedTest(REPEATS)
@@ -169,7 +160,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	}
 
 	@RepeatedTest(REPEATS)
-	@DisplayName("오늘 행이 없을 때 10건이 동시에 선점하면 모두 성공하고 행은 1개, 10회다")
+	@DisplayName("오늘 행이 없을 때 한도만큼(5건) 동시에 선점하면 모두 성공하고 행은 1개, 5회다")
 	void concurrentReserveUpToLimitWithoutRow() throws Exception {
 		List<Outcome> outcomes = reserveConcurrently(LIMIT);
 
@@ -181,7 +172,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@DisplayName("반환하면 1 줄어든다")
 	void release() {
 		reserveTimes(3);
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 
 		aiToneUsageCommandService.release(reservation);
 
@@ -192,7 +183,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@DisplayName("23:59:59에 선점하고 다음 날 00:00:05에 반환하면 어제 행에서 뺀다")
 	void releaseAfterMidnight() {
 		clock.setTo(LocalDateTime.of(2026, 10, 25, 23, 59, 59));
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 		clock.setTo(LocalDateTime.of(2026, 10, 26, 0, 0, 5));
 
 		aiToneUsageCommandService.release(reservation);
@@ -204,7 +195,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("0회에서 반환해도 음수가 되지 않는다")
 	void releaseAtZero() {
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 		aiToneUsageCommandService.release(reservation);
 
 		aiToneUsageCommandService.release(reservation);
@@ -223,11 +214,11 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("선점·반환은 updated_at을 그때의 Clock 시각으로 기록한다")
 	void updatedAtFromClock() {
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 		assertThat(usage(TODAY).getUpdatedAt()).isEqualTo(NOW);
 
 		clock.advance(Duration.ofMinutes(1));
-		aiToneUsageCommandService.reserve(userId, LIMIT);
+		aiToneUsageCommandService.reserve(userId);
 		assertThat(usage(TODAY).getUpdatedAt()).isEqualTo(NOW.plusMinutes(1));
 
 		clock.advance(Duration.ofMinutes(1));
@@ -238,10 +229,10 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("한도에 걸린 선점은 updated_at을 바꾸지 않는다")
 	void updatedAtUnchangedOnLimit() {
-		reserveTimes(10);
+		reserveTimes(LIMIT);
 		clock.advance(Duration.ofMinutes(1));
 
-		assertThatThrownBy(() -> aiToneUsageCommandService.reserve(userId, LIMIT))
+		assertThatThrownBy(() -> aiToneUsageCommandService.reserve(userId))
 			.isInstanceOf(BusinessException.class);
 		assertThat(usage(TODAY).getUpdatedAt()).isEqualTo(NOW);
 	}
@@ -250,7 +241,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@DisplayName("바깥 트랜잭션 안에서 선점하면 IllegalStateException이고 행이 생기지 않는다")
 	void reserveInsideOuterTransaction() {
 		assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(
-			status -> aiToneUsageCommandService.reserve(userId, LIMIT)))
+			status -> aiToneUsageCommandService.reserve(userId)))
 			.isInstanceOf(IllegalStateException.class)
 			.hasMessage("AI 사용량 선점·반환은 호출자 트랜잭션 밖에서 불러야 한다");
 		assertThat(aiToneDailyUsageRepository.findUsedCount(userId, TODAY)).isEmpty();
@@ -260,7 +251,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 	@DisplayName("바깥 트랜잭션 안에서 반환하면 IllegalStateException이고 횟수는 그대로다")
 	void releaseInsideOuterTransaction() {
 		reserveTimes(3);
-		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId, LIMIT);
+		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(userId);
 
 		assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(
 			status -> aiToneUsageCommandService.release(reservation)))
@@ -271,7 +262,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 
 	private void reserveTimes(int times) {
 		for (int i = 0; i < times; i++) {
-			aiToneUsageCommandService.reserve(userId, LIMIT);
+			aiToneUsageCommandService.reserve(userId);
 		}
 	}
 
@@ -288,7 +279,7 @@ class AiToneUsageCommandServiceTest extends IntegrationTestSupport {
 					ready.countDown();
 					await(start);
 					try {
-						aiToneUsageCommandService.reserve(userId, LIMIT);
+						aiToneUsageCommandService.reserve(userId);
 						return Outcome.RESERVED;
 					} catch (BusinessException e) {
 						return e.getResultCode() == AiErrorCode.DAILY_LIMIT_EXCEEDED ? Outcome.LIMIT_EXCEEDED : Outcome.OTHER;

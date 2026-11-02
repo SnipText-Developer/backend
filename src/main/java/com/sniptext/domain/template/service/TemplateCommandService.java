@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.sniptext.domain.plan.service.PlanQueryService;
 import com.sniptext.domain.template.entity.Shortcut;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.entity.TemplateContent;
@@ -23,6 +22,7 @@ import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.global.exception.BusinessException;
+import com.sniptext.global.policy.UsageLimits;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,7 +35,6 @@ public class TemplateCommandService {
 	private final TemplateRepository templateRepository;
 
 	private final UserCommandService userCommandService;
-	private final PlanQueryService planQueryService;
 
 	private final TransactionTemplate transactionTemplate;
 
@@ -99,8 +98,7 @@ public class TemplateCommandService {
 	}
 
 	private void validateTemplateLimit(Long userId) {
-		int templateLimit = planQueryService.getCurrentPlan(userId).templateLimit();
-		if (templateRepository.countByUserIdAndDeletedAtIsNull(userId) >= templateLimit) {
+		if (templateRepository.countByUserIdAndDeletedAtIsNull(userId) >= UsageLimits.TEMPLATE_LIMIT) {
 			throw new BusinessException(TemplateErrorCode.TEMPLATE_LIMIT_REACHED);
 		}
 	}
