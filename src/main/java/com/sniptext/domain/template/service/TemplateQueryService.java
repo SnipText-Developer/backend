@@ -31,9 +31,9 @@ public class TemplateQueryService {
 
 	/**
 	 * 휴지통에 없는 본인 템플릿. 수정·사용 기록도 같은 404 구분을 쓴다.
-	 * 엔티티를 돌려주므로 template 도메인 안에서만 부른다 (ArchUnit이 다른 도메인의 사용을 막는다).
+	 * 엔티티를 돌려주므로 template 도메인 안에서만 부른다 (패키지 범위라 service 패키지 밖에서는 부를 수 없다).
 	 */
-	public Template getActiveTemplate(Long userId, Long templateId) {
+	Template getActiveTemplate(Long userId, Long templateId) {
 		Template template = templateRepository.findByIdAndUserId(templateId, userId)
 			.orElseThrow(() -> new BusinessException(TemplateErrorCode.TEMPLATE_NOT_FOUND));
 		if (template.isInTrash()) {
