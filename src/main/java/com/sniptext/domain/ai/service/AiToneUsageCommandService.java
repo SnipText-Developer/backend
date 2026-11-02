@@ -12,6 +12,7 @@ import com.sniptext.domain.ai.exception.AiErrorCode;
 import com.sniptext.domain.ai.repository.AiToneDailyUsageRepository;
 import com.sniptext.domain.ai.service.dto.result.AiToneReserveResult;
 import com.sniptext.global.exception.BusinessException;
+import com.sniptext.global.policy.UsageLimits;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,17 +34,17 @@ public class AiToneUsageCommandService {
 	private final TransactionTemplate transactionTemplate;
 
 	/**
-	 * 오늘(KST) 횟수를 한도 안에서 1 올려 잡는다. 이미 한도면 AI429_1.
-	 * 한도는 부르는 쪽이 현재 플랜 조회로 얻어 넘긴다 (회원 존재·플랜 검사도 부르는 쪽에서 먼저 한다).
+	 * 오늘(KST) 횟수를 하루 한도(UsageLimits) 안에서 1 올려 잡는다. 이미 한도면 AI429_1.
+	 * 회원 존재 검사는 부르는 쪽에서 먼저 한다.
 	 */
-	public AiToneReserveResult reserve(Long userId, int limit) {
+	public AiToneReserveResult reserve(Long userId) {
 		requireNoOuterTransaction();
 		return transactionTemplate.execute(status -> {
 			LocalDateTime now = LocalDateTime.now(clock);
 			LocalDate usageDate = now.toLocalDate();
 
 			aiToneDailyUsageRepository.insertIfAbsent(userId, usageDate, now);
-			if (aiToneDailyUsageRepository.incrementIfBelow(userId, usageDate, limit, now) == 0) {
+			if (aiToneDailyUsageRepository.incrementIfBelow(userId, usageDate, UsageLimits.AI_TONE_DAILY_LIMIT, now) == 0) {
 				throw new BusinessException(AiErrorCode.DAILY_LIMIT_EXCEEDED);
 			}
 			int usedCountAfter = aiToneDailyUsageRepository.findUsedCount(userId, usageDate)

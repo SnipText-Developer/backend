@@ -81,48 +81,42 @@ class TemplateCreateConcurrencyTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("FREE 4개 상태에서 다른 단축어로 동시에 2건이면 1건만 저장되고 1건은 TEMPLATE403_1, 최종 5개")
+	@DisplayName("49개 상태에서 다른 단축어로 동시에 2건이면 1건만 저장되고 1건은 TEMPLATE403_1, 최종 50개")
 	void limitAtOnce() throws Exception {
-		for (int i = 1; i <= 4; i++) {
-			templateRepository.save(TemplateFixture.template(userId, "/t" + i));
-		}
+		saveTemplates(49);
 
 		List<String> results = runAtOnce(
 			() -> create("/다섯째"),
 			() -> create("/여섯째"));
 
 		assertThat(results).containsExactlyInAnyOrder(SUCCESS, "TEMPLATE403_1");
-		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(5);
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(50);
 	}
 
 	@Test
-	@DisplayName("FREE 4개 상태에서 갤러리 저장이 동시에 2건이면 1건만 저장되고 1건은 TEMPLATE403_1, 최종 5개")
+	@DisplayName("49개 상태에서 갤러리 저장이 동시에 2건이면 1건만 저장되고 1건은 TEMPLATE403_1, 최종 50개")
 	void galleryLimitAtOnce() throws Exception {
-		for (int i = 1; i <= 4; i++) {
-			templateRepository.save(TemplateFixture.template(userId, "/t" + i));
-		}
+		saveTemplates(49);
 
 		List<String> results = runAtOnce(
 			() -> saveFromGallery("/다섯째"),
 			() -> saveFromGallery("/여섯째"));
 
 		assertThat(results).containsExactlyInAnyOrder(SUCCESS, "TEMPLATE403_1");
-		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(5);
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(50);
 	}
 
 	@Test
-	@DisplayName("FREE 4개 상태에서 새 템플릿 저장과 갤러리 저장이 동시에 오면 1건만 저장되고 1건은 TEMPLATE403_1, 최종 5개")
+	@DisplayName("49개 상태에서 새 템플릿 저장과 갤러리 저장이 동시에 오면 1건만 저장되고 1건은 TEMPLATE403_1, 최종 50개")
 	void createAndGalleryLimitAtOnce() throws Exception {
-		for (int i = 1; i <= 4; i++) {
-			templateRepository.save(TemplateFixture.template(userId, "/t" + i));
-		}
+		saveTemplates(49);
 
 		List<String> results = runAtOnce(
 			() -> create("/다섯째"),
 			() -> saveFromGallery("/여섯째"));
 
 		assertThat(results).containsExactlyInAnyOrder(SUCCESS, "TEMPLATE403_1");
-		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(5);
+		assertThat(templateRepository.countByUserIdAndDeletedAtIsNull(userId)).isEqualTo(50);
 	}
 
 	@Test
@@ -135,6 +129,13 @@ class TemplateCreateConcurrencyTest extends IntegrationTestSupport {
 		assertThat(results).containsExactly(SUCCESS, SUCCESS);
 		assertThat(templateRepository.findActiveShortcutKeys(userId, Shortcut.create("/견적").candidateKeys()))
 			.containsExactlyInAnyOrder("/견적", "/견적2");
+	}
+
+	/** 단축어 /t1, /t2 ... 로 활성 템플릿을 미리 채운다 */
+	private void saveTemplates(int count) {
+		for (int i = 1; i <= count; i++) {
+			templateRepository.save(TemplateFixture.template(userId, "/t" + i));
+		}
 	}
 
 	private String create(String shortcut) {
