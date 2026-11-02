@@ -19,7 +19,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.sniptext.TestcontainersConfiguration;
 
 // 운영 설정 파일을 그대로 읽는다. DB 접속은 테스트컨테이너가 덮어쓰므로 환경 변수는 아무 값이나 넣는다.
-@SpringBootTest(properties = {"DB_URL=jdbc:mysql://unused", "DB_USERNAME=unused", "DB_PASSWORD=unused"})
+// 운영에서는 가짜 언어 모델로 기동할 수 없으므로 anthropic으로 둔다 (호출하지 않으니 키·모델은 아무 값이나).
+@SpringBootTest(properties = {"DB_URL=jdbc:mysql://unused", "DB_USERNAME=unused", "DB_PASSWORD=unused",
+	"AI_PROVIDER=anthropic", "AI_API_KEY=unused", "AI_MODEL=unused"})
 @AutoConfigureMockMvc
 @ActiveProfiles("prod")
 @Import(TestcontainersConfiguration.class)

@@ -1,11 +1,12 @@
-# SNIPTEXT API 명세 (S1 대시보드) v0.7
+# SNIPTEXT API 명세 (S1 대시보드) v0.8
 
 | 항목 | 내용 |
 | --- | --- |
-| 버전 | v0.7 (2026-10-17, 팀 결정 반영) |
-| v0.6 대비 변경 | 모든 시각에 `+09:00` 시간대 표시 추가(공통 규칙 4장), 패키지 컨벤션 확정(10장). API 개수·필드 변경 없음 |
+| 버전 | v0.8 (2026-11-01, PRO 결제 기능 제거·정렬 고정 반영) |
+| v0.7 대비 변경 | 플랜 구분 삭제. 템플릿 한도는 모든 사용자 50개, AI 톤 교정은 모든 사용자 하루 5회 (기능명세서 COM-03·05). 6번 사용량 응답에서 `plan`·`aiTone.available` 삭제, 22번 `AI403_1` 삭제, 공통 규칙 3·6·7·9장 정리. **내 템플릿 정렬을 생성 순(오래된 것 먼저)으로 고정**(기능명세서 MYT-03 삭제): 7번 정렬 저장 API 삭제, 5번 `templateSort`·8번 `sort` 파라미터와 응답 필드·`TEMPLATE400_8` 삭제. API는 21개 (번호는 그대로 두고 7번을 비움) |
+| v0.6 → v0.7 | 모든 시각에 `+09:00` 시간대 표시 추가(공통 규칙 4장), 패키지 컨벤션 확정(10장) |
 | 기본 경로 | `/api/v1` |
-| API 수 | 22개 |
+| API 수 | 21개 (7번 삭제) |
 
 ## 목록
 
@@ -16,8 +17,7 @@
 | 3 | 인증 | POST | `/api/v1/auth/reissue` | 접근 토큰 재발급 (재발급 토큰 교체) | 불필요 | 금지 |
 | 4 | 인증 | POST | `/api/v1/auth/logout` | 로그아웃 (웹·확장 세션 모두 무효화) | 불필요 | 금지 |
 | 5 | 회원 | GET | `/api/v1/users/me` | 내 정보 조회 (사이드바 프로필, 계정 팝오버) | 필요 | 금지 |
-| 6 | 회원 | GET | `/api/v1/users/me/usage` | 플랜 사용량 조회 (사이드바 개수 뱃지, 플랜 카드, AI 남은 횟수) | 필요 | 금지 |
-| 7 | 회원 | PATCH | `/api/v1/users/me/settings` | 내 템플릿 정렬 기준 저장 (다음 접속 시 유지) | 필요 | 금지 |
+| 6 | 회원 | GET | `/api/v1/users/me/usage` | 사용량 조회 (사이드바 개수 뱃지, AI 남은 횟수) | 필요 | 금지 |
 | 8 | 내 템플릿 | GET | `/api/v1/templates` | 내 템플릿 목록 조회 (휴지통 제외 전체) | 필요 | 금지 |
 | 9 | 내 템플릿 | GET | `/api/v1/templates/{templateId}` | 내 템플릿 상세 조회 (미리보기 패널, 편집 모드 진입) | 필요 | 금지 |
 | 10 | 내 템플릿 | POST | `/api/v1/templates` | 새 템플릿 저장 | 필요 | 금지 |
@@ -32,9 +32,9 @@
 | 19 | 갤러리 | GET | `/api/v1/gallery/templates` | 갤러리 템플릿 전체 조회 | 불필요 | 공개 5분 |
 | 20 | 갤러리 | GET | `/api/v1/gallery/templates/{galleryTemplateId}` | 갤러리 템플릿 상세 조회 (미리보기 패널) | 불필요 | 공개 5분 |
 | 21 | 갤러리 | POST | `/api/v1/gallery/templates/{galleryTemplateId}/save` | 갤러리 템플릿을 내 템플릿으로 복사 저장 | 필요 | 금지 |
-| 22 | AI 톤 교정 | POST | `/api/v1/ai/tone-corrections` | AI 톤 교정 실행 (Pro 전용, 하루 10회) | 필요 | 금지 |
+| 22 | AI 톤 교정 | POST | `/api/v1/ai/tone-corrections` | AI 톤 교정 실행 (모든 사용자 하루 5회) | 필요 | 금지 |
 
-**이번 범위에 없는 것**: 결제·구독(기획 정책 확정 후), 확장 동기화·확장용 토큰 발급(S2), 탈퇴(화면 명세 없음)
+**이번 범위에 없는 것**: 확장 동기화·확장용 토큰 발급(S2), 탈퇴(화면 명세 없음). 결제·구독은 기획에서 제거됨 (2026-10-31)
 
 ## 공통 규칙
 
@@ -47,7 +47,7 @@ Content-Type: application/json
 
 | 구분 | 웹 대시보드 | 확장 (S2) |
 | --- | --- | --- |
-| 로그인 | 프론트가 구글 ID 토큰을 받아 `POST /api/v1/auth/login` → 처음이면 약관 동의 후 `POST /api/v1/auth/signup` | 확장 전용 토큰 발급 방식은 S2에서 확정 (웹의 재발급 토큰은 HttpOnly라 확장에 넘길 수 없음) |
+| 로그인 | 프론트가 구글 인가 코드를 받아 `POST /api/v1/auth/login` (서버가 코드 교환) → 처음이면 약관 동의 후 `POST /api/v1/auth/signup` | 확장 전용 토큰 발급 방식은 S2에서 확정 (웹의 재발급 토큰은 HttpOnly라 확장에 넘길 수 없음) |
 | 접근 토큰 | 화면 메모리 보관, 30분 | 확장 로컬 저장소, 30분 |
 | 재발급 토큰 | HttpOnly 쿠키, 14일 | 확장 로컬 저장소, 14일 |
 | 재발급 | 쓸 때마다 새 토큰으로 교체, 이미 쓴 토큰이 다시 오면 계보 전체 폐기 | 동일 |
@@ -56,7 +56,7 @@ Content-Type: application/json
 
 **개발용 임시 토큰 (`local`·`dev` 전용)**
 
-구글 로그인 완성 전에도 로그인이 필요한 API를 개발·확인할 수 있도록, 회원 번호만으로 접근 토큰을 발급합니다. API 목록(22개)에는 넣지 않습니다.
+구글 로그인 완성 전에도 로그인이 필요한 API를 개발·확인할 수 있도록, 회원 번호만으로 접근 토큰을 발급합니다. API 목록에는 넣지 않습니다.
 
 ```
 POST /api/v1/auth/dev-token
@@ -83,7 +83,7 @@ POST /api/v1/auth/dev-token
 - `local`·`dev` 프로필에서만 열립니다. 운영에서는 경로가 없어 `404 COMMON404_1`입니다.
 - `userId`가 없거나 1보다 작으면 `COMMON400_1`입니다.
 - 회원이 있는지는 확인하지 않습니다. 없는 번호로 받은 토큰은 이후 API에서 `USER404_1`입니다.
-- 시드 회원: `local`·`dev` DB에 1번(FREE), 2번(PRO) 회원이 미리 들어 있습니다.
+- 시드 회원: `local`·`dev` DB에 1번, 2번 회원이 미리 들어 있습니다. 플랜 구분이 없어져 두 회원의 한도는 같습니다.
 
 ### 2. 응답 형식
 
@@ -118,12 +118,11 @@ POST /api/v1/auth/dev-token
 | --- | --- |
 | COMMON | 공통 |
 | AUTH | 로그인·가입·재발급·로그아웃 |
-| USER | 내 정보·사용량·설정 |
+| USER | 내 정보·사용량 |
 | TEMPLATE | 내 템플릿 |
 | TRASH | 휴지통 |
 | GALLERY | 템플릿 갤러리 |
 | AI | AI 톤 교정 |
-| SUBSCRIPTION | 요금제·구독·결제 (결제 도입 시 사용) |
 
 **공통 에러**
 
@@ -187,11 +186,9 @@ POST /api/v1/auth/dev-token
 
 | 이름 | 값 |
 | --- | --- |
-| 정렬 기준 | `RECENT_USED` 최근 사용순(기본) / `RECENT_EDITED` 최근 수정순 |
 | 사용 채널 | `DASHBOARD_COPY` / `POPUP_COPY` / `EMAIL_INLINE` |
 | 갤러리 카테고리 | `WORK` 업무 / `SALES` 영업 / `CUSTOMER_SERVICE` 고객 응대 / `PERSONAL` 개인 (전체 탭은 화면에서 처리) |
 | 문체 | `BOSS_EXTERNAL` 상사/외부용 / `REPORT_OFFICIAL` 보고/공문용 / `MARKETING` 마케팅/설득 / `NOTICE` 공지/안내 / `SOFT_POLITE` 부드러운 존댓말 / `CASUAL` 편한 반말 / `ESSAY` 감성/에세이 |
-| 플랜 | `FREE` / `PRO` |
 | 로그인 제공자 | `GOOGLE` |
 
 ### 7. 캐시 규칙
@@ -201,7 +198,7 @@ POST /api/v1/auth/dev-token
 | 공개 데이터 | 갤러리 목록·상세 | `Cache-Control: public, max-age=300` |
 | 개인 데이터 | 그 외 전부 (로그인 포함) | `Cache-Control: no-store` |
 
-- CDN 규칙은 경로 앞부분으로 겁니다: **`GET /api/v1/gallery/**`만 공개 캐시** (결제 도입 시 요금제 조회 추가), 나머지는 전부 캐시 금지. 개인 데이터는 `/users/me/**`, `/templates/**` 등 공개 경로 밖에 둡니다.
+- CDN 규칙은 경로 앞부분으로 겁니다: **`GET /api/v1/gallery/**`만 공개 캐시**, 나머지는 전부 캐시 금지. 개인 데이터는 `/users/me/**`, `/templates/**` 등 공개 경로 밖에 둡니다.
 - 캐시는 GET만 대상입니다. `POST /gallery/templates/{id}/save`처럼 공개 경로 아래에 있어도 GET이 아니면 캐시되지 않습니다.
 - 공개 API 응답에는 **사람마다 다른 값을 절대 넣지 않습니다.** 넣는 순간 CDN이 한 사람의 응답을 다른 사람에게 돌려줄 수 있습니다. 그래서 갤러리 응답에는 저장 여부 같은 개인 값이 없습니다.
 - 갤러리를 고치면 최대 5분 동안 이전 내용이 보일 수 있습니다 (허용 범위).
@@ -217,11 +214,15 @@ POST /api/v1/auth/dev-token
 
 휴지통 응답: `hasNext`(다음 존재 여부), `nextCursor`(다음 요청에 그대로 넣는 값, 마지막이면 `null`)
 
-### 9. 현재 플랜 (결제 도입 전)
+### 9. 사용 한도 (모든 사용자 동일)
 
-- 템플릿 한도(Free 5 / Pro 50)와 AI 톤 교정 Pro 전용 검사는 **"현재 플랜 조회" 한 곳**만 부릅니다.
-- 결제 도입 전에는 회원의 `plan_override` 값, 없으면 FREE로 판정합니다. 테스트 계정은 DB에서 `plan_override = 'PRO'`로 바꿔 씁니다.
-- 결제·구독 정책이 확정되면 이 판정 안쪽만 구독 테이블 기준으로 바꾸고, API 응답 형태는 그대로 둡니다.
+| 대상 | 한도 | 기준 | 넘으면 |
+| --- | --- | --- | --- |
+| 내 템플릿 | 50개 | 휴지통 제외 개수. 생성·휴지통 복구·갤러리 저장 때 검사 | `TEMPLATE403_1` |
+| AI 톤 교정 | 하루 5회 | KST 날짜 기준, 매일 자정 리셋 (COM-05) | `AI429_1` |
+
+- 플랜 구분이 없어졌습니다 (2026-10-31 PRO 결제 기능 제거). 회원마다 한도가 달라지지 않습니다.
+- 한도 숫자는 서버 한 곳에서만 관리하고, 사용량 API(6번)로 화면에 내려줍니다. 화면은 숫자를 직접 쓰지 않고 응답의 `limit`을 씁니다.
 
 ### 10. 팀 결정 사항
 
@@ -286,7 +287,9 @@ Content-Type: application/json
 
 | 필드 | 데이터 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| idToken | String | Y | 프론트가 구글 로그인으로 받은 ID 토큰 |
+| code | String | Y | 프론트가 구글 로그인으로 받은 인가 코드 |
+| codeVerifier | String | Y | 인가 요청 때 만든 PKCE 코드 검증값 (`code_challenge_method=S256`) |
+| redirectUri | String | Y | 인가 요청에 쓴 redirect URI. 서버 허용 목록과 정확히 같아야 함 |
 | provider | String | Y | GOOGLE (S1은 구글만) |
 
 ##### Example
@@ -295,7 +298,9 @@ Content-Type: application/json
 POST /api/v1/auth/login
 
 {
-  "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6...",
+  "code": "4/0AQSTgQ...",
+  "codeVerifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+  "redirectUri": "https://sniptext.io/auth/google/callback",
   "provider": "GOOGLE"
 }
 ```
@@ -371,12 +376,15 @@ POST /api/v1/auth/login
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
 | 400 | AUTH400_1 | 지원하지 않는 로그인 방식이에요. | provider 값 오류 (S1은 GOOGLE만) |
-| 401 | AUTH401_3 | 구글 로그인 정보를 확인할 수 없어요. 다시 시도해주세요. | ID 토큰 서명·발급자·대상·만료 검증 실패, 이메일 미인증 계정 |
+| 401 | AUTH401_3 | 구글 로그인 정보를 확인할 수 없어요. 다시 시도해주세요. | 인가 코드가 잘못됨·만료·이미 사용됨, 허용 목록에 없는 redirectUri, ID 토큰 검증 실패, 이메일 미인증 계정 |
+| 502 | AUTH502_1 | 일시적인 오류로 로그인하지 못했어요. 다시 시도해 주세요. | 구글 장애·연결 실패·시간 초과 |
 
 ##### 비고
 
-- 팀 기존 방식(소셜 ID 토큰을 서버가 검증)을 따릅니다. "가입 필요"도 202가 아니라 **200 + isCompletedSignUp=false**로 구분합니다.
+- 인가 코드 방식(PKCE)입니다(10/29 결정). 서버가 구글 토큰 엔드포인트에서 코드를 교환하고, 받은 ID 토큰을 검증합니다. state 검증은 프론트가 합니다. "가입 필요"는 202가 아니라 **200 + isCompletedSignUp=false**로 구분합니다.
 - 서버 검증 항목: 구글 공개키 서명, 발급자(accounts.google.com), 대상(우리 클라이언트 ID), 만료, 이메일 인증 여부.
+- code·codeVerifier·redirectUri가 비어 있으면 `COMMON400_1`입니다.
+- 인가 코드는 한 번만 쓸 수 있습니다. 시간 초과로 끝났어도 구글은 이미 교환했을 수 있으니, `AUTH502_1`을 받으면 같은 요청을 다시 보내지 말고 구글 로그인부터 다시 시작해 주세요.
 - 처음 온 사용자는 이 단계에서 회원을 만들지 않습니다. **약관 동의 전에는 개인정보를 저장하지 않기 위해서**입니다. 구글 계정 정보를 담은 가입용 토큰(30분)을 주고, 동의 API에서 회원을 만듭니다.
 - 웹: 재발급 토큰은 응답 본문이 아니라 `Set-Cookie`(HttpOnly, Secure, 14일)로 줍니다.
 - 로그인 화면은 랜딩(S3)에 생기며, 그 전까지 프론트는 대시보드에 임시 로그인 버튼을 둡니다.
@@ -475,6 +483,7 @@ POST /api/v1/auth/signup
 - 가입용 토큰 안의 구글 계정 정보로 `users`, `social_accounts`를 만들고, `user_terms_agreements`에 SERVICE(이용약관)·PRIVACY(개인정보 수집·이용) 두 줄을 **현재 약관 버전**으로 저장한 뒤 바로 로그인 처리합니다. 모두 한 트랜잭션입니다.
 - 현재 약관 버전은 서버 설정값입니다(예: v1). 약관 본문은 랜딩의 버전별 정적 페이지에 둡니다. 요청에 버전을 보내지 않습니다.
 - 닉네임은 구글 이름 그대로 저장합니다(앞뒤 공백 제거, 50자 초과 시 자름). 이름이 비어 있으면 이메일 앞부분을 씁니다. 화면의 말줄임은 DSH-05 기준.
+- 프로필 이미지 주소가 500자를 넘으면 저장하지 않고 가입은 계속합니다(`profileImageUrl`은 null, 화면은 닉네임 첫 글자 아바타).
 - 마케팅 수신 동의는 받지 않습니다(필요해지면 추가).
 - 개인정보처리방침 수집 항목: 구글 이름, 이메일, 프로필 이미지.
 - 분석 이벤트 `signup_completed`(signup_method=google)는 화면에서 성공 후 보냅니다.
@@ -626,7 +635,7 @@ POST /api/v1/auth/logout
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 내 정보 조회 (사이드바 프로필, 계정 팝오버) |
-| 관련 기능 | DSH-05, DSH-06, DSH-07(계정 정보 카드), MYT-03(정렬 기억 불러오기) |
+| 관련 기능 | DSH-05, DSH-06, DSH-07(계정 정보 카드) |
 | 로그인 | 필요 |
 | 캐시 | no-store |
 
@@ -667,8 +676,7 @@ GET /api/v1/users/me
     "nickname": "스닙이",
     "email": "sniptext@naver.com",
     "profileImageUrl": "https://lh3.googleusercontent.com/a/sample",
-    "loginType": "GOOGLE",
-    "templateSort": "RECENT_USED"
+    "loginType": "GOOGLE"
   }
 }
 ```
@@ -693,7 +701,6 @@ GET /api/v1/users/me
 | email | String | 이메일 |
 | profileImageUrl | String | 프로필 이미지 주소. null이면 닉네임 첫 글자 원형 아바타 |
 | loginType | String | GOOGLE |
-| templateSort | String | 저장된 내 템플릿 정렬 기준 |
 
 ##### Error Code
 
@@ -704,7 +711,7 @@ GET /api/v1/users/me
 ##### 비고
 
 - 닉네임·이메일 말줄임은 화면에서 처리합니다.
-- 플랜·사용량은 자주 바뀌므로 이 API에 넣지 않고 `GET /api/v1/users/me/usage`로 분리했습니다.
+- 사용량은 자주 바뀌므로 이 API에 넣지 않고 `GET /api/v1/users/me/usage`로 분리했습니다.
 
 ---
 
@@ -712,8 +719,8 @@ GET /api/v1/users/me
 
 | 항목 | 내용 |
 | --- | --- |
-| 설명 | 플랜 사용량 조회 (사이드바 개수 뱃지, 플랜 카드, AI 남은 횟수) |
-| 관련 기능 | DSH-02, DSH-03, DSH-04, MYT-01(클릭 시 서버 재검증), AIT-01(버튼 라벨), COM-03, COM-04 |
+| 설명 | 사용량 조회 (사이드바 개수 뱃지, AI 남은 횟수) |
+| 관련 기능 | DSH-02, AIT-01(버튼 라벨 "톤 교정하기(사용횟수/한도)", 소진 시 비활성), COM-03, COM-04, COM-05 |
 | 로그인 | 필요 |
 | 캐시 | no-store |
 
@@ -742,67 +749,14 @@ GET /api/v1/users/me/usage
 
 #### Response
 
-##### 성공 예시 (Free, 3/5)
+##### 성공 예시 (템플릿 12개, AI 오늘 2회 사용)
 
 ```json
 {
   "isSuccess": true,
   "code": "USER200_2",
-  "message": "플랜 사용량 조회에 성공했습니다.",
+  "message": "사용량 조회에 성공했습니다.",
   "result": {
-    "plan": "FREE",
-    "template": {
-      "count": 3,
-      "limit": 5,
-      "remaining": 2,
-      "isFull": false
-    },
-    "aiTone": {
-      "available": false,
-      "usedCount": 0,
-      "limit": 0,
-      "remaining": 0,
-      "resetAt": "2026-10-12T00:00:00+09:00"
-    }
-  }
-}
-```
-
-##### 성공 예시 (Free, 5/5 한도 도달)
-
-```json
-{
-  "isSuccess": true,
-  "code": "USER200_2",
-  "message": "플랜 사용량 조회에 성공했습니다.",
-  "result": {
-    "plan": "FREE",
-    "template": {
-      "count": 5,
-      "limit": 5,
-      "remaining": 0,
-      "isFull": true
-    },
-    "aiTone": {
-      "available": false,
-      "usedCount": 0,
-      "limit": 0,
-      "remaining": 0,
-      "resetAt": "2026-10-12T00:00:00+09:00"
-    }
-  }
-}
-```
-
-##### 성공 예시 (Pro, AI 4회 사용)
-
-```json
-{
-  "isSuccess": true,
-  "code": "USER200_2",
-  "message": "플랜 사용량 조회에 성공했습니다.",
-  "result": {
-    "plan": "PRO",
     "template": {
       "count": 12,
       "limit": 50,
@@ -810,10 +764,33 @@ GET /api/v1/users/me/usage
       "isFull": false
     },
     "aiTone": {
-      "available": true,
-      "usedCount": 4,
-      "limit": 10,
-      "remaining": 6,
+      "usedCount": 2,
+      "limit": 5,
+      "remaining": 3,
+      "resetAt": "2026-10-12T00:00:00+09:00"
+    }
+  }
+}
+```
+
+##### 성공 예시 (템플릿 50개 도달, AI 오늘 모두 사용)
+
+```json
+{
+  "isSuccess": true,
+  "code": "USER200_2",
+  "message": "사용량 조회에 성공했습니다.",
+  "result": {
+    "template": {
+      "count": 50,
+      "limit": 50,
+      "remaining": 0,
+      "isFull": true
+    },
+    "aiTone": {
+      "usedCount": 5,
+      "limit": 5,
+      "remaining": 0,
       "resetAt": "2026-10-12T00:00:00+09:00"
     }
   }
@@ -824,16 +801,14 @@ GET /api/v1/users/me/usage
 
 | 필드 | 데이터 타입 | 설명 |
 | --- | --- | --- |
-| plan | String | FREE / PRO |
-| template.count | Integer | 보유 템플릿 수 (휴지통 제외) → 사이드바 뱃지·"3 / 5" |
-| template.limit | Integer | 플랜 한도 (Free 5 / Pro 50) |
-| template.remaining | Integer | 더 만들 수 있는 개수 → "템플릿을 N개 더 만들 수 있어요." |
-| template.isFull | Boolean | 한도 도달 여부 → 강조색, 한도 모달 판단 |
-| aiTone.available | Boolean | AI 톤 교정 사용 가능 여부 (false면 업그레이드 유도 화면) |
-| aiTone.usedCount | Integer | 오늘 사용 횟수 |
-| aiTone.limit | Integer | 일일 한도 (Pro 10) |
-| aiTone.remaining | Integer | 오늘 남은 횟수 |
-| aiTone.resetAt | String | 다음 리셋 시각 (다음 날 00:00 KST) → 카운트다운 |
+| template.count | Integer | 보유 템플릿 수 (휴지통 제외) → 사이드바 뱃지 (DSH-02) |
+| template.limit | Integer | 템플릿 한도 (50, 모든 사용자 동일) |
+| template.remaining | Integer | 더 만들 수 있는 개수 |
+| template.isFull | Boolean | 한도 도달 여부 |
+| aiTone.usedCount | Integer | 오늘 사용 횟수 → 버튼 라벨 "톤 교정하기(2/5)" |
+| aiTone.limit | Integer | 하루 한도 (5, 모든 사용자 동일) |
+| aiTone.remaining | Integer | 오늘 남은 횟수. 0이면 톤 교정하기 버튼 비활성 (AIT-01) |
+| aiTone.resetAt | String | 다음 리셋 시각 (다음 날 00:00 KST) |
 
 ##### Error Code
 
@@ -841,92 +816,16 @@ GET /api/v1/users/me/usage
 
 ##### 비고
 
-- **결제 도입 전 플랜 판정**: 회원의 `plan_override` 값(테스트 계정을 Pro로 지정할 때 사용), 없으면 FREE. 결제가 들어오면 이 판정 로직 안쪽만 바뀌고 응답 형태는 그대로입니다.
-- 템플릿 생성·삭제·복구·갤러리 저장 성공 후 이 API를 다시 불러 사이드바·플랜 카드를 갱신합니다 (COM-04).
-- MYT-01 "새 템플릿" 클릭 시 이 API로 한도를 재검증합니다. 최종 검증은 생성 API가 다시 합니다.
-- 조회 실패 시 화면은 Free로 간주합니다 (DSH-03).
+- **v0.7 대비 변경**: `plan`, `aiTone.available` 삭제. 플랜 구분이 없어져 모든 사용자가 AI 톤 교정을 쓸 수 있습니다. 나머지 필드 이름과 위치는 그대로입니다.
+- 템플릿 생성·삭제·복구·갤러리 저장 성공 후 이 API를 다시 불러 사이드바 개수를 갱신합니다 (COM-04). 플랜 사용량 카드(DSH-04)는 삭제됐습니다.
+- 한도 검사는 생성·복구·갤러리 저장 API가 합니다. 새 템플릿 버튼(MYT-01)을 누를 때 이 API로 다시 확인하던 동작은 기획에서 삭제됐습니다.
+- `template.remaining`·`template.isFull`은 기획 화면에서 쓰는 곳이 없어졌지만, 50개 도달 시 화면 처리(미정)에 쓸 수 있어 남겨둡니다.
 
 ---
 
-### 7. PATCH /api/v1/users/me/settings
+### 7. (삭제) PATCH /api/v1/users/me/settings
 
-| 항목 | 내용 |
-| --- | --- |
-| 설명 | 내 템플릿 정렬 기준 저장 (다음 접속 시 유지) |
-| 관련 기능 | MYT-03, 정책표 11(정렬 기억, 계정 단위) |
-| 로그인 | 필요 |
-| 캐시 | no-store |
-
-#### Request
-
-##### Header
-
-```
-Authorization: Bearer accessToken
-Content-Type: application/json
-```
-
-##### Parameter
-
-없음
-
-##### Body
-
-| 필드 | 데이터 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| templateSort | String | Y | RECENT_USED(최근 사용순) / RECENT_EDITED(최근 수정순) |
-
-##### Example
-
-```
-PATCH /api/v1/users/me/settings
-
-{
-  "templateSort": "RECENT_EDITED"
-}
-```
-
-#### Response
-
-##### 성공 예시
-
-```json
-{
-  "isSuccess": true,
-  "code": "USER200_3",
-  "message": "설정이 저장되었습니다.",
-  "result": {
-    "templateSort": "RECENT_EDITED"
-  }
-}
-```
-
-##### 에러 예시
-
-```json
-{
-  "isSuccess": false,
-  "code": "USER400_1",
-  "message": "지원하지 않는 정렬 기준이에요.",
-  "result": null
-}
-```
-
-##### Response Field (result)
-
-| 필드 | 데이터 타입 | 설명 |
-| --- | --- | --- |
-| templateSort | String | 저장된 정렬 기준 |
-
-##### Error Code
-
-| HttpStatus | ResultCode | ErrorMessage | Description |
-| --- | --- | --- | --- |
-| 400 | USER400_1 | 지원하지 않는 정렬 기준이에요. | templateSort 값 오류 |
-
-##### 비고
-
-- 정렬 변경 시 화면은 즉시 다시 정렬하고, 이 요청은 뒤에서 보냅니다. 실패해도 사용자에게 알리지 않습니다.
+v0.8에서 삭제했습니다. 기획에서 정렬 드롭다운(MYT-03)이 빠지고 내 템플릿 정렬이 생성 순으로 고정되어, 정렬 기준을 저장할 일이 없어졌습니다. 다른 API 번호가 바뀌지 않도록 7번은 비워 둡니다. `USER400_1`도 함께 삭제하고 번호는 다시 쓰지 않습니다.
 
 ---
 
@@ -938,7 +837,7 @@ PATCH /api/v1/users/me/settings
 | 항목 | 내용 |
 | --- | --- |
 | 설명 | 내 템플릿 목록 조회 (휴지통 제외 전체) |
-| 관련 기능 | MYT-03, MYT-04, MYT-05, DSH-09(상단 통합 검색) |
+| 관련 기능 | MYT-04(정렬: 오래된 순), MYT-05, DSH-09(상단 통합 검색) |
 | 로그인 | 필요 |
 | 캐시 | no-store |
 
@@ -953,9 +852,7 @@ Content-Type: application/json
 
 ##### Parameter
 
-| 파라미터 | 데이터 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| sort | String | N | 쿼리 파라미터. RECENT_USED / RECENT_EDITED. 없으면 저장된 정렬 기준 |
+없음
 
 ##### Body
 
@@ -964,12 +861,12 @@ Content-Type: application/json
 ##### Example
 
 ```
-GET /api/v1/templates?sort=RECENT_USED
+GET /api/v1/templates
 ```
 
 #### Response
 
-##### 성공 예시 (최근 사용순)
+##### 성공 예시 (생성 순)
 
 ```json
 {
@@ -977,7 +874,6 @@ GET /api/v1/templates?sort=RECENT_USED
   "code": "TEMPLATE200_1",
   "message": "템플릿 목록 조회에 성공했습니다.",
   "result": {
-    "sort": "RECENT_USED",
     "totalCount": 3,
     "templates": [
       {
@@ -1030,21 +926,9 @@ GET /api/v1/templates?sort=RECENT_USED
   "code": "TEMPLATE200_1",
   "message": "템플릿 목록 조회에 성공했습니다.",
   "result": {
-    "sort": "RECENT_USED",
     "totalCount": 0,
     "templates": []
   }
-}
-```
-
-##### 에러 예시
-
-```json
-{
-  "isSuccess": false,
-  "code": "TEMPLATE400_8",
-  "message": "지원하지 않는 정렬 기준이에요.",
-  "result": null
 }
 ```
 
@@ -1052,32 +936,31 @@ GET /api/v1/templates?sort=RECENT_USED
 
 | 필드 | 데이터 타입 | 설명 |
 | --- | --- | --- |
-| sort | String | 적용된 정렬 기준 |
 | totalCount | Integer | 템플릿 수 |
 | templates[].templateId | Long | 템플릿 ID |
 | templates[].title | String | 템플릿 이름 |
 | templates[].shortcut | String | 호출 단축어 ("/" 포함, 입력한 대소문자 그대로) |
 | templates[].content | String | 본문 전체 (줄바꿈 포함). 카드에는 표시하지 않음 → 통합 검색·복사·미리보기 패널에서 사용 |
 | templates[].variables | String[] | 본문의 변수 이름 (첫 등장 순, 중복 제거) → 카드의 변수명 표시(MYT-05) |
-| templates[].lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 카드에는 표시하지 않음 → 최근 사용순 정렬 기준 |
+| templates[].lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 화면에 표시하지 않음 → 확장 팝업 "최근 사용 5개"(S2) 기준 |
 | templates[].createdAt | String | 생성 시각 |
-| templates[].editedAt | String | 마지막 수정 시각 (최근 수정순 기준) |
+| templates[].editedAt | String | 마지막 수정 시각 (제목·단축어·본문을 고친 시각) |
 
 ##### Error Code
 
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
-| 400 | TEMPLATE400_8 | 지원하지 않는 정렬 기준이에요. | sort 값 오류 |
 
 ##### 비고
 
-- **페이지 나눔 없이 전체를 내려줍니다.** 최대 50개(Pro)라 한 번에 받는 게 빠르고, 본문 암호화 때문에 서버에서 본문 검색을 하지 않습니다.
+- **페이지 나눔 없이 전체를 내려줍니다.** 최대 50개라 한 번에 받는 게 빠르고, 본문 암호화 때문에 서버에서 본문 검색을 하지 않습니다.
 - **검색은 상단 통합 검색(DSH-09)에서 화면이 처리합니다.** 이 목록과 갤러리 전체 조회 결과를 합쳐 검색하며, 규칙은 공통 규칙 11장을 따릅니다. (MYT-02 내 템플릿 검색창은 삭제됨)
-- **카드(MYT-05)에는 단축어·제목·변수명만 표시합니다.** 본문(content)은 카드에 보이지 않지만 통합 검색·복사·미리보기 패널에 필요해서 그대로 내려줍니다. 최근 사용 시각(lastUsedAt)도 카드에 표시하지 않고 정렬 기준으로만 씁니다.
-- 정렬 기준
-    - RECENT_USED: 최근 사용 시각 내림차순 → 사용 이력 없는 템플릿은 그 뒤에 생성 시각 내림차순
-    - RECENT_EDITED: 수정 시각(editedAt) 내림차순. 복사·사용은 수정으로 치지 않음
-- `sort`를 보내도 저장된 정렬 기준은 바뀌지 않습니다. 저장은 `PATCH /api/v1/users/me/settings`.
+- **카드(MYT-05)에는 단축어·제목·변수명만 표시합니다.** 본문(content)은 카드에 보이지 않지만 통합 검색·복사·미리보기 패널에 필요해서 그대로 내려줍니다. 최근 사용 시각(lastUsedAt)도 카드에 표시하지 않습니다.
+- **정렬은 생성 순(오래된 것 먼저)으로 고정입니다** (기획 확정 11/1, MYT-04). 템플릿 ID 오름차순으로 내려주며 생성 시각 순서와 같습니다. 화면은 받은 순서 그대로 보여주면 됩니다.
+    - 새로 만들거나 갤러리에서 저장한 템플릿은 맨 뒤에 붙습니다.
+    - 수정·사용 기록으로는 순서가 바뀌지 않습니다.
+    - 휴지통에서 복구한 템플릿은 생성 시각이 그대로라 원래 자리로 돌아갑니다.
+- v0.7의 `sort` 파라미터·응답 필드와 `TEMPLATE400_8`은 삭제했습니다 (번호는 다시 쓰지 않음).
 
 ---
 
@@ -1160,15 +1043,15 @@ GET /api/v1/templates/12
 | shortcut | String | 호출 단축어 ("/" 포함, 입력한 대소문자 그대로) |
 | content | String | 본문 전체 (줄바꿈 포함). 카드에는 표시하지 않음 → 통합 검색·복사·미리보기 패널에서 사용 |
 | variables | String[] | 본문의 변수 이름 (첫 등장 순, 중복 제거) → 카드의 변수명 표시(MYT-05) |
-| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 카드에는 표시하지 않음 → 최근 사용순 정렬 기준 |
+| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 화면에 표시하지 않음 → 확장 팝업 "최근 사용 5개"(S2) 기준 |
 | createdAt | String | 생성 시각 |
-| editedAt | String | 마지막 수정 시각 (최근 수정순 기준) |
+| editedAt | String | 마지막 수정 시각 (제목·단축어·본문을 고친 시각) |
 
 ##### Error Code
 
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
-| 404 | TEMPLATE404_1 | 템플릿을 찾을 수 없어요. | 없는 템플릿, 다른 사람 템플릿, 휴지통에 있는 템플릿 |
+| 404 | TEMPLATE404_1 | 템플릿을 찾을 수 없어요. | 없는 템플릿, 다른 사람 템플릿 (다른 사람의 휴지통 템플릿 포함) |
 | 404 | TEMPLATE404_2 | 이미 삭제된 템플릿이에요. | 휴지통으로 이동된 템플릿에 수정·조회·사용 기록 요청 |
 
 ##### 비고
@@ -1265,9 +1148,9 @@ POST /api/v1/templates
 | shortcut | String | 호출 단축어 ("/" 포함, 입력한 대소문자 그대로) |
 | content | String | 본문 전체 (줄바꿈 포함). 카드에는 표시하지 않음 → 통합 검색·복사·미리보기 패널에서 사용 |
 | variables | String[] | 본문의 변수 이름 (첫 등장 순, 중복 제거) → 카드의 변수명 표시(MYT-05) |
-| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 카드에는 표시하지 않음 → 최근 사용순 정렬 기준 |
+| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 화면에 표시하지 않음 → 확장 팝업 "최근 사용 5개"(S2) 기준 |
 | createdAt | String | 생성 시각 |
-| editedAt | String | 마지막 수정 시각 (최근 수정순 기준) |
+| editedAt | String | 마지막 수정 시각 (제목·단축어·본문을 고친 시각) |
 
 ##### Error Code
 
@@ -1280,13 +1163,13 @@ POST /api/v1/templates
 | 400 | TEMPLATE400_5 | 사용할 수 없는 단축어예요. | 예약어 사용 (/톤교정 등) |
 | 400 | TEMPLATE400_6 | 템플릿 내용을 입력해주세요. | 본문이 비었거나 공백만 입력 |
 | 400 | TEMPLATE400_7 | 템플릿 내용은 3,000자까지 입력할 수 있어요. | 본문 3000자 초과 |
-| 403 | TEMPLATE403_1 | 템플릿 저장 한도에 도달했어요. | 활성 템플릿 수가 플랜 한도(Free 5 / Pro 50) 이상. 화면은 한도 모달 노출 |
+| 403 | TEMPLATE403_1 | 템플릿 저장 한도에 도달했어요. | 활성 템플릿 수가 한도(50개) 이상. 한도 모달은 기획에서 삭제됨. 화면 처리 미정 (프론트·기획 논의 중) |
 | 409 | TEMPLATE409_1 | 이미 사용 중인 단축어예요. | 내 템플릿(휴지통 제외)에 같은 단축어 존재. 대소문자 무시 |
 
 ##### 비고
 
 - **검증 순서는 이름 → 단축어 → 내용**이며, 여러 개가 틀려도 첫 번째 에러 하나만 내려줍니다 (NEW-02와 동일).
-- 에러 코드별 화면 처리: 이름(400_1·2)·단축어(400_3·4·5, 409_1)·내용(400_6·7)은 해당 필드 에러 + 포커스, 403_1은 한도 모달.
+- 에러 코드별 화면 처리: 이름(400_1·2)·단축어(400_3·4·5, 409_1)·내용(400_6·7)은 해당 필드 에러 + 포커스. 403_1의 화면 처리는 미정 (한도 모달 1-1 삭제됨, 프론트·기획 논의 중).
 - 단축어 중복 비교는 대소문자 무시 + 유니코드 정규화 후 비교. 휴지통 템플릿의 단축어는 비교 대상에서 제외.
 - 형식이 맞지 않는 변수(`{{고객 명}}`, `{{고객명`)는 **저장을 막지 않고** 일반 글자로 취급합니다. 경고 문구는 화면에서 표시.
 - 한도 검사와 저장은 한 트랜잭션에서 회원 행을 잠그고 처리해, 두 탭에서 동시에 저장해도 한도를 넘지 않게 합니다.
@@ -1383,9 +1266,9 @@ PUT /api/v1/templates/12
 | shortcut | String | 호출 단축어 ("/" 포함, 입력한 대소문자 그대로) |
 | content | String | 본문 전체 (줄바꿈 포함). 카드에는 표시하지 않음 → 통합 검색·복사·미리보기 패널에서 사용 |
 | variables | String[] | 본문의 변수 이름 (첫 등장 순, 중복 제거) → 카드의 변수명 표시(MYT-05) |
-| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 카드에는 표시하지 않음 → 최근 사용순 정렬 기준 |
+| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 화면에 표시하지 않음 → 확장 팝업 "최근 사용 5개"(S2) 기준 |
 | createdAt | String | 생성 시각 |
-| editedAt | String | 마지막 수정 시각 (최근 수정순 기준) |
+| editedAt | String | 마지막 수정 시각 (제목·단축어·본문을 고친 시각) |
 
 ##### Error Code
 
@@ -1398,14 +1281,14 @@ PUT /api/v1/templates/12
 | 400 | TEMPLATE400_5 | 사용할 수 없는 단축어예요. | 예약어 사용 (/톤교정 등) |
 | 400 | TEMPLATE400_6 | 템플릿 내용을 입력해주세요. | 본문이 비었거나 공백만 입력 |
 | 400 | TEMPLATE400_7 | 템플릿 내용은 3,000자까지 입력할 수 있어요. | 본문 3000자 초과 |
-| 404 | TEMPLATE404_1 | 템플릿을 찾을 수 없어요. | 없는 템플릿, 다른 사람 템플릿, 휴지통에 있는 템플릿 |
-| 409 | TEMPLATE409_1 | 이미 사용 중인 단축어예요. | 내 템플릿(휴지통 제외)에 같은 단축어 존재. 대소문자 무시 |
+| 404 | TEMPLATE404_1 | 템플릿을 찾을 수 없어요. | 없는 템플릿, 다른 사람 템플릿 (다른 사람의 휴지통 템플릿 포함) |
 | 404 | TEMPLATE404_2 | 이미 삭제된 템플릿이에요. | 휴지통으로 이동된 템플릿에 수정·조회·사용 기록 요청 |
+| 409 | TEMPLATE409_1 | 이미 사용 중인 단축어예요. | 내 템플릿(휴지통 제외)에 같은 단축어 존재. 대소문자 무시 |
 
 ##### 비고
 
 - 세 필드를 모두 보내는 전체 수정입니다. 바뀌지 않은 필드도 그대로 보내주세요.
-- 세 필드가 모두 기존과 같으면(이름·본문 정리 후 비교) 아무것도 바뀌지 않아 editedAt도 그대로입니다. 편집 화면을 열었다가 그대로 저장해도 최근 수정순이 바뀌지 않습니다. 단축어는 대소문자만 바꿔도 수정으로 봅니다.
+- 세 필드가 모두 기존과 같으면(이름·본문 정리 후 비교) 아무것도 바뀌지 않아 editedAt도 그대로입니다. 편집 화면을 열었다가 그대로 저장해도 수정 시각이 바뀌지 않습니다. 단축어는 대소문자만 바꿔도 수정으로 봅니다.
 - 자기 자신의 단축어는 중복으로 보지 않습니다.
 - 동시에 두 곳에서 수정하면 나중 저장이 덮어씁니다.
 - 단축어 변경은 확장에 즉시 반영돼야 하므로(정책표 4) S2에서 웹이 확장에 변경 알림을 보냅니다.
@@ -1675,22 +1558,22 @@ POST /api/v1/templates/12/usages
 | 필드 | 데이터 타입 | 설명 |
 | --- | --- | --- |
 | templateId | Long | 템플릿 ID |
-| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 카드에는 표시하지 않음 → 최근 사용순 정렬 기준 |
+| lastUsedAt | String | 최근 사용 시각, 사용 이력 없으면 null. 화면에 표시하지 않음 → 확장 팝업 "최근 사용 5개"(S2) 기준 |
 
 ##### Error Code
 
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
 | 400 | TEMPLATE400_9 | 지원하지 않는 사용 채널이에요. | channel 값 오류 |
-| 404 | TEMPLATE404_1 | 템플릿을 찾을 수 없어요. | 없는 템플릿, 다른 사람 템플릿, 휴지통에 있는 템플릿 |
+| 404 | TEMPLATE404_1 | 템플릿을 찾을 수 없어요. | 없는 템플릿, 다른 사람 템플릿 (다른 사람의 휴지통 템플릿 포함) |
 | 404 | TEMPLATE404_2 | 이미 삭제된 템플릿이에요. | 휴지통으로 이동된 템플릿에 수정·조회·사용 기록 요청 |
 
 ##### 비고
 
-- **사용 횟수는 저장하지 않습니다(기획 확정).** 최근 사용순 정렬과 확장 팝업의 "최근 사용 5개"를 위해 최근 사용 시각만 갱신합니다.
+- **사용 횟수는 저장하지 않습니다(기획 확정).** 확장 팝업의 "최근 사용 5개"(S2)를 위해 최근 사용 시각만 갱신합니다.
 - **클립보드 복사가 성공한 뒤에만** 호출합니다. 이 요청이 실패해도 사용자에게 알리지 않습니다.
 - 채널별 사용 통계는 분석 도구 이벤트 `template_used`(channel 속성)로 봅니다. 화면에서 따로 보냅니다.
-- editedAt은 바뀌지 않아 최근 수정순 정렬에 영향이 없습니다.
+- editedAt과 목록 순서는 바뀌지 않습니다.
 
 ---
 
@@ -1913,16 +1796,16 @@ POST /api/v1/trash/templates/18/restore
 
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
-| 403 | TEMPLATE403_1 | 템플릿 저장 한도에 도달했어요. | 활성 템플릿 수가 플랜 한도(Free 5 / Pro 50) 이상. 화면은 한도 모달 노출 |
+| 403 | TEMPLATE403_1 | 템플릿 저장 한도에 도달했어요. | 활성 템플릿 수가 한도(50개) 이상. 한도 모달은 기획에서 삭제됨. 화면 처리 미정 (프론트·기획 논의 중) |
 | 409 | TEMPLATE409_2 | 사용할 수 있는 단축어 번호가 없어요. | 자동 번호 2~99가 모두 사용 중 |
 | 404 | TRASH404_1 | 휴지통에서 템플릿을 찾을 수 없어요. | 휴지통에 없는 템플릿(이미 복구·영구 삭제됨, 다른 사람 템플릿) |
 
 ##### 비고
 
-- 한도 도달(Free 5/5) 시 복구하지 않고 TEMPLATE403_1 → BIN-07 한도 모달.
+- 한도(50개) 도달 시 복구하지 않고 TEMPLATE403_1. 한도 모달(BIN-07)은 기획에서 삭제됐습니다.
 - 자동 번호 규칙: 원본 뒤에 2부터 99까지 붙여 비어 있는 첫 번호 사용. "/" 뒤가 10자를 넘으면 원본을 뒤에서 잘라 맞춤. 예) /견적요청서작성안내문 → /견적요청서작성안내2
 - 숫자로 끝나는 단축어(/견적2)는 원본 뒤에 붙입니다(/견적22). (개발팀 결정)
-- editedAt·최근 사용 시각은 삭제 전 값 그대로 돌아옵니다.
+- editedAt·최근 사용 시각·생성 시각은 삭제 전 값 그대로 돌아옵니다. 목록은 생성 순이라 원래 자리로 돌아갑니다.
 
 ---
 
@@ -2349,18 +2232,18 @@ POST /api/v1/gallery/templates/3/save
 
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
-| 403 | TEMPLATE403_1 | 템플릿 저장 한도에 도달했어요. | 활성 템플릿 수가 플랜 한도(Free 5 / Pro 50) 이상. 화면은 한도 모달 노출 |
+| 403 | TEMPLATE403_1 | 템플릿 저장 한도에 도달했어요. | 활성 템플릿 수가 한도(50개) 이상. 한도 모달은 기획에서 삭제됨. 화면 처리 미정 (프론트·기획 논의 중) |
 | 409 | TEMPLATE409_2 | 사용할 수 있는 단축어 번호가 없어요. | 자동 번호 2~99가 모두 사용 중 |
 | 404 | GALLERY404_1 | 갤러리 템플릿을 찾을 수 없어요. | 없거나 비공개 처리된 갤러리 템플릿 |
 
 ##### 비고
 
 - 제목·단축어·본문을 복사해 새 템플릿을 만들고 출처(갤러리 ID)를 기록합니다. 이후 갤러리 원본이 바뀌어도 내 템플릿은 그대로입니다.
-- 한도 도달 시 저장하지 않고 TEMPLATE403_1 → 4-2 한도 모달.
+- 한도(50개) 도달 시 저장하지 않고 TEMPLATE403_1. 한도 모달(4-2)은 기획에서 삭제됐습니다.
 - 자동 번호 규칙은 복구 API와 같습니다.
 - 저장 후에도 갤러리 화면에 머무릅니다. 성공 후 사용량 API로 사이드바 갱신.
 - 비로그인 사용자는 화면에서 로그인으로 유도만 합니다(가입 후 자동 저장 없음).
-- **같은 갤러리 템플릿을 여러 번 저장할 수 있습니다(기획 확정).** 저장할 때마다 내 템플릿이 새로 하나씩 생기고, 각각 플랜 한도를 한 칸씩 차지합니다.
+- **같은 갤러리 템플릿을 여러 번 저장할 수 있습니다(기획 확정).** 저장할 때마다 내 템플릿이 새로 하나씩 생기고, 각각 템플릿 한도(50개)를 한 칸씩 차지합니다.
 - 단축어가 이미 있으면 자동 번호를 붙여 저장합니다(`/견적` → `/견적2` → `/견적3`). 2~99가 모두 쓰이면 TEMPLATE409_2.
 - 갤러리에서 가져온 템플릿은 내용만 복사하고 원본과 동기화하지 않습니다. `source_gallery_template_id`는 출처 기록·집계용입니다(원본이 삭제되면 비워짐).
 - 화면에 "저장됨" 표시는 없습니다. 저장 버튼은 항상 그대로 동작합니다.
@@ -2374,8 +2257,8 @@ POST /api/v1/gallery/templates/3/save
 
 | 항목 | 내용 |
 | --- | --- |
-| 설명 | AI 톤 교정 실행 (Pro 전용, 하루 10회) |
-| 관련 기능 | AIT-01, AIT-02, AIT-04, DSH-03, 정책표 8 |
+| 설명 | AI 톤 교정 실행 (모든 사용자 하루 5회) |
+| 관련 기능 | AIT-01, AIT-02, AIT-04, COM-05, 정책표 8 |
 | 로그인 | 필요 |
 | 캐시 | no-store |
 
@@ -2424,9 +2307,9 @@ POST /api/v1/ai/tone-corrections
     "style": "BOSS_EXTERNAL",
     "keyInfoWarning": null,
     "usage": {
-      "usedCount": 4,
-      "limit": 10,
-      "remaining": 6,
+      "usedCount": 2,
+      "limit": 5,
+      "remaining": 3,
       "resetAt": "2026-10-12T00:00:00+09:00"
     }
   }
@@ -2452,9 +2335,9 @@ POST /api/v1/ai/tone-corrections
       "addedValues": []
     },
     "usage": {
-      "usedCount": 5,
-      "limit": 10,
-      "remaining": 5,
+      "usedCount": 3,
+      "limit": 5,
+      "remaining": 2,
       "resetAt": "2026-10-12T00:00:00+09:00"
     }
   }
@@ -2482,8 +2365,8 @@ POST /api/v1/ai/tone-corrections
 | keyInfoWarning.message | String | 화면에 그대로 띄울 통합 문구 |
 | keyInfoWarning.missingValues | String[] | 원문에 있었는데 결과에서 빠진 값 (참고용) |
 | keyInfoWarning.addedValues | String[] | 결과에 새로 생긴 값 (참고용) |
-| usage.usedCount | Integer | 차감 후 오늘 사용 횟수 → 버튼 라벨 "톤 교정하기(4/10)" |
-| usage.limit | Integer | 일일 한도 |
+| usage.usedCount | Integer | 차감 후 오늘 사용 횟수 → 버튼 라벨 "톤 교정하기(2/5)" |
+| usage.limit | Integer | 하루 한도 (5) |
 | usage.remaining | Integer | 남은 횟수 (0이면 버튼 비활성) |
 | usage.resetAt | String | 리셋 시각 → 카운트다운 |
 
@@ -2494,9 +2377,8 @@ POST /api/v1/ai/tone-corrections
 | 400 | AI400_1 | 문체를 선택해주세요. | style 누락 또는 값 오류 |
 | 400 | AI400_2 | 교정할 문장을 입력해주세요. | text가 비었거나 공백만 입력 |
 | 400 | AI400_3 | 문장은 3,000자까지 입력할 수 있어요. | text 3000자 초과 |
-| 403 | AI403_1 | AI 톤 교정은 Pro 플랜에서 사용할 수 있어요. | Free 사용자 |
 | 422 | AI422_1 | 혐오 표현이 포함되어 있어 답변을 생성할 수 없습니다. | 혐오·차별 표현 감지. 횟수 미차감 |
-| 429 | AI429_1 | 오늘 톤 교정 횟수를 모두 사용했어요. | 일일 10회 소진. 자정(KST) 리셋 |
+| 429 | AI429_1 | 오늘 톤 교정 횟수를 모두 사용했어요. | 하루 5회 소진. 자정(KST) 리셋 |
 | 502 | AI502_1 | 일시적인 오류로 요청을 처리하지 못했어요. 다시 한 번 물어봐 주시겠어요? | 외부 AI 오류. 횟수 미차감 |
 | 504 | AI504_1 | 일시적인 오류로 요청을 처리하지 못했어요. 다시 한 번 물어봐 주시겠어요? | 외부 AI 20초 타임아웃. 횟수 미차감 |
 
@@ -2509,6 +2391,6 @@ POST /api/v1/ai/tone-corrections
 - 외부 AI 대기 시간은 20초. 넘으면 AI504_1. 출력 토큰 상한(4,000)을 반드시 설정합니다(비용 상한).
 - 원문과 결과는 저장하지도, 로그에 남기지도 않습니다 (정책표 8). 에러 로그에도 원문 제외.
 - "이전 버전으로 돌아가기"(AIT-04)용 이력은 화면에서만 보관합니다.
-- 플랜 판정은 결제 도입 전 방식(사용량 API 비고 참고)을 따릅니다. Free면 AI403_1.
+- 모든 사용자가 쓸 수 있습니다. v0.7의 `AI403_1`(Pro 전용)은 삭제했고, 번호는 다시 쓰지 않습니다.
 
 ---
