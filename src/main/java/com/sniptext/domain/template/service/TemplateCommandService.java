@@ -102,6 +102,9 @@ public class TemplateCommandService {
 	/**
 	 * 템플릿 수정. 없거나 다른 회원 것이면 TEMPLATE404_1, 휴지통에 있으면 TEMPLATE404_2, 내 다른 활성 템플릿과 단축어가 겹치면 TEMPLATE409_1.
 	 * 개수가 바뀌지 않으므로 회원을 잠그지 않고, 동시에 고치면 나중 저장이 덮어쓴다.
+	 * 조회 뒤 저장 전에 휴지통으로 옮겨지면 TEMPLATE404_2 대신 200이고 수정은 휴지통 행에 남는다.
+	 * 휴지통은 단축어를 점유하지 않아 충돌이 없고 복구하면 고친 내용이 남는 정도라 허용한다.
+	 * 막아야 하면 수정용 조회만 FOR UPDATE로 잠근다. 변경 감지는 그대로 두고, 휴지통 이동이 먼저 끝난 경우 TEMPLATE404_2를 낼 수 있다.
 	 */
 	@Transactional
 	public TemplateUpdateResult update(TemplateUpdateCommand command) {
