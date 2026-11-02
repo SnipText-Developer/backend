@@ -25,7 +25,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class SocialAccount extends BaseCreatedTimeEntity {
 
-	public static final int PROVIDER_USER_ID_MAX_LENGTH = 100;
+	/** 구글 sub는 대소문자를 구분하는 ASCII 최대 255자다. DB 컬럼도 ascii_bin이라 글자 그대로 비교한다 */
+	public static final int PROVIDER_USER_ID_MAX_LENGTH = 255;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -54,7 +55,8 @@ public class SocialAccount extends BaseCreatedTimeEntity {
 		require(userId != null, "회원 ID가 없다");
 		require(provider != null, "제공자가 없다");
 		require(providerUserId != null && !providerUserId.isBlank(), "소셜 계정 고유값이 없다");
-		require(providerUserId.length() <= PROVIDER_USER_ID_MAX_LENGTH, "소셜 계정 고유값이 100자를 넘는다");
+		require(providerUserId.length() <= PROVIDER_USER_ID_MAX_LENGTH, "소셜 계정 고유값이 255자를 넘는다");
+		require(providerUserId.chars().allMatch(c -> c < 128), "소셜 계정 고유값이 ASCII가 아니다");
 		return SocialAccount.builder()
 			.userId(userId)
 			.provider(provider)

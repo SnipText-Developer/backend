@@ -22,12 +22,19 @@ class SocialAccountTest {
 	}
 
 	@Test
-	@DisplayName("소셜 계정 고유값 100자는 만들 수 있고 101자는 IllegalArgumentException")
+	@DisplayName("소셜 계정 고유값 255자는 만들 수 있고 256자는 IllegalArgumentException")
 	void providerUserIdLength() {
 		String max = "1".repeat(SocialAccount.PROVIDER_USER_ID_MAX_LENGTH);
 
-		assertThat(SocialAccount.create(1L, SocialProvider.GOOGLE, max).getProviderUserId()).hasSize(100);
+		assertThat(SocialAccount.create(1L, SocialProvider.GOOGLE, max).getProviderUserId()).hasSize(255);
 		assertThatThrownBy(() -> SocialAccount.create(1L, SocialProvider.GOOGLE, max + "1"))
+			.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	@DisplayName("소셜 계정 고유값에 ASCII가 아닌 글자가 있으면 IllegalArgumentException")
+	void nonAsciiProviderUserId() {
+		assertThatThrownBy(() -> SocialAccount.create(1L, SocialProvider.GOOGLE, "10987가"))
 			.isInstanceOf(IllegalArgumentException.class);
 	}
 

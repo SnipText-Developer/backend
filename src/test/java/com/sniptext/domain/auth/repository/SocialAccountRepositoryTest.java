@@ -40,6 +40,36 @@ class SocialAccountRepositoryTest extends IntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("255자 고유값을 저장하고 찾을 수 있다")
+	void maxLengthProviderUserId() {
+		Long userId = userRepository.save(UserFixture.user("long@gmail.com")).getId();
+		String longSub = "a".repeat(SocialAccount.PROVIDER_USER_ID_MAX_LENGTH);
+		socialAccountRepository.saveAndFlush(SocialAccountFixture.google(userId, longSub));
+
+		assertThat(socialAccountRepository.findByProviderAndProviderUserId(SocialProvider.GOOGLE, longSub))
+			.map(SocialAccount::getUserId)
+			.contains(userId);
+	}
+
+	@Test
+	@DisplayName("고유값은 대소문자를 구분한다. 대소문자만 다른 두 계정은 따로 연결되고 각각 찾아진다")
+	void caseSensitiveProviderUserId() {
+		Long lower = userRepository.save(UserFixture.user("lower@gmail.com")).getId();
+		Long upper = userRepository.save(UserFixture.user("upper@gmail.com")).getId();
+		socialAccountRepository.saveAndFlush(SocialAccountFixture.google(lower, "abcDEF123"));
+		socialAccountRepository.saveAndFlush(SocialAccountFixture.google(upper, "ABCdef123"));
+
+		assertThat(socialAccountRepository.findByProviderAndProviderUserId(SocialProvider.GOOGLE, "abcDEF123"))
+			.map(SocialAccount::getUserId)
+			.contains(lower);
+		assertThat(socialAccountRepository.findByProviderAndProviderUserId(SocialProvider.GOOGLE, "ABCdef123"))
+			.map(SocialAccount::getUserId)
+			.contains(upper);
+		assertThat(socialAccountRepository.findByProviderAndProviderUserId(SocialProvider.GOOGLE, "abcdef123"))
+			.isEmpty();
+	}
+
+	@Test
 	@DisplayName("같은 소셜 계정을 두 번 연결하면 DB 유니크 위반이다 (동시 가입 방지)")
 	void uniqueProviderUser() {
 		Long first = userRepository.save(UserFixture.user("first@gmail.com")).getId();

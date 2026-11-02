@@ -131,7 +131,7 @@ erDiagram
 | `id` | BIGINT | N |  | PK | ID |
 | `user_id` | BIGINT | N |  | FK | 회원 ID |
 | `provider` | VARCHAR(20) | N |  |  | GOOGLE |
-| `provider_user_id` | VARCHAR(100) | N |  |  | 구글 계정 고유값(ID 토큰의 sub) |
+| `provider_user_id` | VARCHAR(255) | N |  |  | 구글 계정 고유값(ID 토큰의 sub). 대소문자를 구분하는 ASCII라 `ascii_bin` |
 | `created_at` | DATETIME(6) | N |  |  | 연결 시각 |
 
 - 유니크 `uk_social_provider_user` (provider, provider_user_id)
@@ -303,7 +303,7 @@ CREATE TABLE social_accounts (
     id                           BIGINT NOT NULL AUTO_INCREMENT COMMENT 'ID',
     user_id                      BIGINT NOT NULL COMMENT '회원 ID',
     provider                     VARCHAR(20) NOT NULL COMMENT 'GOOGLE',
-    provider_user_id             VARCHAR(100) NOT NULL COMMENT '구글 계정 고유값(ID 토큰의 sub)',
+    provider_user_id             VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '구글 계정 고유값(ID 토큰의 sub, 대소문자 구분)',
     created_at                   DATETIME(6) NOT NULL COMMENT '연결 시각',
     PRIMARY KEY (id),
     UNIQUE KEY uk_social_provider_user (provider, provider_user_id),
