@@ -1,6 +1,8 @@
 package com.sniptext.domain.template.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -8,8 +10,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.template.controller.dto.TemplateCreateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateCreateResponse;
+import com.sniptext.domain.template.controller.dto.TemplateDetailResponse;
 import com.sniptext.domain.template.service.TemplateCommandService;
+import com.sniptext.domain.template.service.TemplateQueryService;
+import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
 
@@ -25,6 +31,17 @@ import lombok.RequiredArgsConstructor;
 public class TemplateController {
 
 	private final TemplateCommandService templateCommandService;
+	private final TemplateQueryService templateQueryService;
+
+	@GetMapping("/{templateId}")
+	public ResponseEntity<ApiResponse<TemplateDetailResponse>> getTemplate(
+		@LoginUser Long userId,
+		@PathVariable Long templateId) {
+
+		TemplateDetailResult result = templateQueryService.getTemplate(new TemplateDetailQuery(userId, templateId));
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_FOUND, TemplateDetailResponse.from(result));
+	}
 
 	@PostMapping
 	public ResponseEntity<ApiResponse<TemplateCreateResponse>> createTemplate(

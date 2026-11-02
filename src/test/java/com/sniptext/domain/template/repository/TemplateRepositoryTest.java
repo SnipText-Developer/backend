@@ -229,6 +229,20 @@ class TemplateRepositoryTest extends IntegrationTestSupport {
 			.containsExactlyInAnyOrder("/quote", "/quote2");
 	}
 
+	@Test
+	@DisplayName("본인 소유 조회는 휴지통 템플릿까지 찾고, 다른 회원의 템플릿은 찾지 않는다")
+	void findByIdAndUserId() {
+		Template active = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/견적"));
+		Template trashed = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/공지"));
+		trashed.moveToTrash(FIXED.plusHours(1));
+		templateRepository.flush();
+		entityManager.clear();
+
+		assertThat(templateRepository.findByIdAndUserId(active.getId(), userId)).isPresent();
+		assertThat(templateRepository.findByIdAndUserId(trashed.getId(), userId)).isPresent();
+		assertThat(templateRepository.findByIdAndUserId(active.getId(), otherUserId)).isEmpty();
+	}
+
 	private Long saveUser(String email) {
 		User user = UserFixture.user(email);
 		entityManager.persist(user);
