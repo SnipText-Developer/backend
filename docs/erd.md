@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 버전 | v0.8 (2026-11-01, PRO 결제 기능 제거·정렬 고정 반영) |
-| v0.7 대비 | `users.plan_override` 삭제(플랜 구분 없음). `users.template_sort` 삭제(내 템플릿 정렬을 생성 순으로 고정). 템플릿 한도 50개·AI 하루 5회로 설계 메모 수정, 결제·구독 관련 "나중에 추가할 것" 삭제. 컬럼 삭제는 새 마이그레이션으로 반영 (아래 "마이그레이션" 참고) |
+| v0.7 대비 | `users.plan_override` 삭제(플랜 구분 없음). `users.template_sort` 삭제(내 템플릿 정렬을 생성 순으로 고정). 템플릿 한도 50개·AI 하루 5회로 설계 메모 수정, 결제·구독 관련 "나중에 추가할 것" 삭제. `social_accounts.provider_user_id`를 `VARCHAR(255)`·`ascii_bin`으로 변경(구글 `sub` 규격). 모두 새 마이그레이션으로 반영 (아래 "마이그레이션" 참고) |
 | v0.6 → v0.7 | 설명만 보강: `users.profile_image_url`(500자 초과 시 저장 안 함), `users.last_login_at`(가입도 로그인으로 기록), `refresh_tokens.revoked_at`(재사용 감지 시 계보 폐기), 설계 메모 "가입"(인가 코드 방식). 테이블·컬럼·인덱스 변경 없음 |
 | v0.5 → v0.6 | 같은 갤러리 템플릿 여러 번 저장 허용 → `source_gallery_template_id`는 출처 기록·집계용으로만 사용, 인덱스를 `(source_gallery_template_id)` 하나로 변경. 테이블·컬럼 변경 없음 |
 | v0.4 → v0.5 | `user_terms_agreements` 추가(약관 버전별 동의 기록), `users.terms_agreed_at` 삭제 |
@@ -128,7 +128,7 @@ erDiagram
 | `id` | BIGINT | N |  | PK | ID |
 | `user_id` | BIGINT | N |  | FK | 회원 ID |
 | `provider` | VARCHAR(20) | N |  |  | GOOGLE |
-| `provider_user_id` | VARCHAR(100) | N |  |  | 구글 계정 고유값(ID 토큰의 sub) |
+| `provider_user_id` | VARCHAR(255) | N |  |  | 구글 계정 고유값(ID 토큰의 sub). 대소문자를 구분하는 ASCII라 `ascii_bin` |
 | `created_at` | DATETIME(6) | N |  |  | 연결 시각 |
 
 - 유니크 `uk_social_provider_user` (provider, provider_user_id)
@@ -288,6 +288,15 @@ ALTER TABLE users
 
 - 개발용 시드(`R__dev_seed_users.sql`)에서 두 컬럼을 넣는 부분이 있으면 그것도 같이 지워야 합니다. 플라이웨이는 버전 마이그레이션(컬럼 삭제)을 모두 끝낸 뒤 반복 실행 시드를 돌리므로, 시드를 그대로 두면 새로 만드는 DB(테스트컨테이너 포함)에서 실패합니다. 같은 PR에서 함께 고칩니다.
 
+구글 `sub`는 대소문자를 구분하는 ASCII 최대 255자입니다. 초기 마이그레이션의 `VARCHAR(100)`과 기본 정렬 규칙(대소문자 구분 안 함)으로는 맞지 않아 새 파일로 바꿉니다.
+
+```sql
+-- V202610311700__widen_social_provider_user_id.sql
+ALTER TABLE social_accounts
+    MODIFY provider_user_id VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL
+        COMMENT '구글 계정 고유값(ID 토큰의 sub, 대소문자 구분)';
+```
+
 ## 부록. DDL (MySQL 8.4)
 
 ```sql
@@ -313,7 +322,7 @@ CREATE TABLE social_accounts (
     id                           BIGINT NOT NULL AUTO_INCREMENT COMMENT 'ID',
     user_id                      BIGINT NOT NULL COMMENT '회원 ID',
     provider                     VARCHAR(20) NOT NULL COMMENT 'GOOGLE',
-    provider_user_id             VARCHAR(100) NOT NULL COMMENT '구글 계정 고유값(ID 토큰의 sub)',
+    provider_user_id             VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '구글 계정 고유값(ID 토큰의 sub, 대소문자 구분)',
     created_at                   DATETIME(6) NOT NULL COMMENT '연결 시각',
     PRIMARY KEY (id),
     UNIQUE KEY uk_social_provider_user (provider, provider_user_id),
