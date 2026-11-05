@@ -125,6 +125,19 @@ public class Template extends BaseTimeEntity {
 		this.deletedAt = now;
 	}
 
+	/**
+	 * 휴지통에서 꺼낸다. shortcut은 삭제 당시 단축어이거나, 겹쳐서 자동 번호를 붙인 단축어다 (고르는 건 서비스가 한다).
+	 * 수정·사용 시각은 삭제 전 값 그대로 둔다. 휴지통이 아닌 템플릿에 부르면 조회 조건을 빠뜨린 코드 실수다.
+	 */
+	public void restore(Shortcut shortcut) {
+		require(shortcut != null, "단축어가 없다");
+		if (!isInTrash()) {
+			throw new IllegalStateException("휴지통에 없는 템플릿은 복구할 수 없다");
+		}
+		this.shortcut = shortcut;
+		this.deletedAt = null;
+	}
+
 	public boolean isInTrash() {
 		return deletedAt != null;
 	}

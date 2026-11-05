@@ -218,6 +218,69 @@ class TemplateTest {
 
 	}
 
+	@Nested
+	@DisplayName("휴지통 복구")
+	class Restore {
+
+		@Test
+		@DisplayName("원본 단축어로 복구하면 휴지통 시각만 비고 단축어·수정·사용 시각은 그대로다")
+		void restoreWithOriginal() {
+			Template template = trashedTemplate();
+
+			template.restore(Shortcut.create(TemplateFixture.SHORTCUT));
+
+			assertThat(template.isInTrash()).isFalse();
+			assertThat(template.getDeletedAt()).isNull();
+			assertThat(template.getShortcut()).isEqualTo(SHORTCUT);
+			assertThat(template.getEditedAt()).isEqualTo(NOW);
+			assertThat(template.getLastUsedAt()).isEqualTo(NOW.plusHours(1));
+		}
+
+		@Test
+		@DisplayName("번호가 붙은 단축어로 복구하면 표시값과 비교 키가 함께 바뀌고 이름·본문은 그대로다")
+		void restoreWithNumbered() {
+			Template template = trashedTemplate();
+
+			template.restore(Shortcut.create("/견적2"));
+
+			assertThat(template.getShortcut().getValue()).isEqualTo("/견적2");
+			assertThat(template.getShortcut().getKey()).isEqualTo("/견적2");
+			assertThat(template.getTitle()).isEqualTo(TITLE);
+			assertThat(template.getContent()).isEqualTo(CONTENT);
+			assertThat(template.getEditedAt()).isEqualTo(NOW);
+		}
+
+		@Test
+		@DisplayName("휴지통에 없는 템플릿을 복구하면 IllegalStateException이고 단축어가 바뀌지 않는다")
+		void notInTrash() {
+			Template template = editedTemplate();
+
+			assertThatThrownBy(() -> template.restore(Shortcut.create("/견적2")))
+				.isInstanceOf(IllegalStateException.class);
+
+			assertThat(template.getShortcut()).isEqualTo(SHORTCUT);
+		}
+
+		@Test
+		@DisplayName("단축어가 없으면 IllegalArgumentException이고 휴지통에 그대로 있다")
+		void shortcutRequired() {
+			Template template = trashedTemplate();
+
+			assertThatThrownBy(() -> template.restore(null)).isInstanceOf(IllegalArgumentException.class);
+
+			assertThat(template.isInTrash()).isTrue();
+		}
+
+		/** 수정 시각 NOW, 사용 시각 NOW+1시간, 휴지통 시각 NOW+2시간 */
+		private static Template trashedTemplate() {
+			Template template = editedTemplate();
+			template.markUsed(NOW.plusHours(1));
+			template.moveToTrash(NOW.plusHours(2));
+			return template;
+		}
+
+	}
+
 	/** 수정 시각이 NOW인 템플릿. 같은 값 수정은 무시되므로 다른 이름에서 수정해 만든다 */
 	private static Template editedTemplate() {
 		Template template = Template.create(USER_ID, TemplateTitle.create("처음 이름"), SHORTCUT, CONTENT);
