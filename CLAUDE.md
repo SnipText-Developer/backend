@@ -100,6 +100,8 @@ domain/{도메인}/
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
+| 로그인 시각 기록 | `void recordLogin(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → auth |
+| 닉네임 조회 | `String getNickname(Long userId)` (`UserQueryService`) | user → auth |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
 
 - **다른 도메인 서비스를 조합하는 조회는 별도 서비스로 분리한다.** 예: 사용량 API는 `UserUsageQueryService`
