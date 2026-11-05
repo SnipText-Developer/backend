@@ -1,6 +1,6 @@
 package com.sniptext.domain.template.service;
 
-import static com.sniptext.support.ConcurrentRunner.runAtOnce;
+import static com.sniptext.domain.template.service.ConcurrentRunner.runAtOnce;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
