@@ -2,12 +2,17 @@ package com.sniptext.domain.template.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.template.controller.dto.TrashListResponse;
+import com.sniptext.domain.template.controller.dto.TrashRestoreResponse;
+import com.sniptext.domain.template.service.TrashCommandService;
 import com.sniptext.domain.template.service.TrashQueryService;
+import com.sniptext.domain.template.service.dto.command.TrashRestoreCommand;
 import com.sniptext.domain.template.service.dto.query.TrashListQuery;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
@@ -26,6 +31,8 @@ public class TrashController {
 
 	private final TrashQueryService trashQueryService;
 
+	private final TrashCommandService trashCommandService;
+
 	@GetMapping
 	public ResponseEntity<ApiResponse<TrashListResponse>> getTrash(
 		@LoginUser Long userId,
@@ -37,6 +44,17 @@ public class TrashController {
 			trashQueryService.getTrash(new TrashListQuery(userId, cursor, size)));
 
 		return ApiResponse.success(TrashSuccessCode.TRASH_LIST_FOUND, response);
+	}
+
+	@PostMapping("/{templateId}/restore")
+	public ResponseEntity<ApiResponse<TrashRestoreResponse>> restore(
+		@LoginUser Long userId,
+		@PathVariable Long templateId) {
+
+		TrashRestoreResponse response = TrashRestoreResponse.from(
+			trashCommandService.restore(new TrashRestoreCommand(userId, templateId)));
+
+		return ApiResponse.success(TrashSuccessCode.TRASH_RESTORED, response);
 	}
 
 }

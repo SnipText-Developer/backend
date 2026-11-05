@@ -11,7 +11,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum TrashSuccessCode implements ResultCode {
 
-	TRASH_LIST_FOUND(HttpStatus.OK, "TRASH200_1", "휴지통 조회에 성공했습니다.");
+	TRASH_LIST_FOUND(HttpStatus.OK, "TRASH200_1", "휴지통 조회에 성공했습니다."),
+	TRASH_RESTORED(HttpStatus.OK, "TRASH200_2", "템플릿을 복구했습니다.");
 
 	private final HttpStatus httpStatus;
 	private final String code;
