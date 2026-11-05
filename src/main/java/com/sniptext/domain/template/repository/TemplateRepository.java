@@ -19,6 +19,12 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 	/** 본인 소유 조회. 휴지통 템플릿도 찾으므로 내 휴지통과 다른 회원 것을 호출자가 구분할 수 있다 */
 	Optional<Template> findByIdAndUserId(Long id, Long userId);
 
+	/**
+	 * 휴지통을 제외한 본인 템플릿 전체, 생성 순(ID 오름차순). 목록은 페이지를 나누지 않는다.
+	 * idx_templates_user_deleted (user_id, deleted_at)는 뒤에 기본 키가 붙어 있어 따로 정렬하지 않는다
+	 */
+	List<Template> findAllByUserIdAndDeletedAtIsNullOrderByIdAsc(Long userId);
+
 	/** 휴지통을 제외한 보유 개수. idx_templates_user_deleted (user_id, deleted_at)를 탄다 */
 	long countByUserIdAndDeletedAtIsNull(Long userId);
 
