@@ -34,7 +34,10 @@ import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.global.exception.BusinessException;
 
-/** 한도 검사·자동 번호·저장 자체는 TemplateCommandServiceTest와 TrashRestoreTest(실제 MySQL)에서 본다 */
+/**
+ * 한도 검사·자동 번호·저장 자체는 TemplateCommandServiceTest와 TrashRestoreControllerTest(실제 MySQL)에서 본다.
+ * 활성·다른 회원 템플릿을 거르는 조건은 조회 쿼리에 있어 TrashTemplateRepositoryTest에서 본다.
+ */
 @ExtendWith(MockitoExtension.class)
 class TrashCommandServiceTest {
 
@@ -66,7 +69,7 @@ class TrashCommandServiceTest {
 
 	/** 잠금보다 먼저 일반 조회를 하면 그 스냅샷 때문에 잠금 뒤 개수 검사가 옛 값을 봐서 한도를 넘는다 */
 	@Test
-	@DisplayName("회원 잠금 → 템플릿 조회 → 한도 검사 → 단축어 고르기 → 저장 순서다")
+	@DisplayName("회원 잠금 → 템플릿 잠금 조회 → 한도 검사 → 단축어 고르기 → 저장 순서다")
 	void order() {
 		givenTrashed();
 		givenAssigned(ORIGINAL);
@@ -76,7 +79,7 @@ class TrashCommandServiceTest {
 
 		InOrder order = inOrder(userCommandService, templateRepository, templateCommandService);
 		order.verify(userCommandService).lockUser(USER_ID);
-		order.verify(templateRepository).findByIdAndUserId(TEMPLATE_ID, USER_ID);
+		order.verify(templateRepository).findTrashedByIdAndUserIdForUpdate(TEMPLATE_ID, USER_ID);
 		order.verify(templateCommandService).validateTemplateLimit(USER_ID);
 		order.verify(templateCommandService).assignShortcut(USER_ID, ORIGINAL);
 		order.verify(templateCommandService).save(trashed);
@@ -111,24 +114,13 @@ class TrashCommandServiceTest {
 	}
 
 	@Test
-	@DisplayName("없거나 다른 회원의 템플릿이면 TRASH404_1이고 한도 검사·저장을 하지 않는다")
+	@DisplayName("본인 휴지통에서 찾지 못하면 TRASH404_1이고 한도 검사·저장을 하지 않는다")
 	void notFound() {
-		given(templateRepository.findByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(Optional.empty());
+		given(templateRepository.findTrashedByIdAndUserIdForUpdate(TEMPLATE_ID, USER_ID)).willReturn(Optional.empty());
 
 		assertErrorCode(TrashErrorCode.TRASHED_TEMPLATE_NOT_FOUND);
 
 		then(templateCommandService).should(never()).validateTemplateLimit(anyLong());
-		then(templateCommandService).should(never()).save(any());
-	}
-
-	@Test
-	@DisplayName("휴지통에 없는 내 템플릿이면 TRASH404_1이고 저장하지 않는다")
-	void notInTrash() {
-		Template active = TemplateFixture.template(USER_ID);
-		given(templateRepository.findByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(Optional.of(active));
-
-		assertErrorCode(TrashErrorCode.TRASHED_TEMPLATE_NOT_FOUND);
-
 		then(templateCommandService).should(never()).save(any());
 	}
 
@@ -160,7 +152,7 @@ class TrashCommandServiceTest {
 	}
 
 	private void givenTrashed() {
-		given(templateRepository.findByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(Optional.of(trashed));
+		given(templateRepository.findTrashedByIdAndUserIdForUpdate(TEMPLATE_ID, USER_ID)).willReturn(Optional.of(trashed));
 	}
 
 	private void givenAssigned(Shortcut assigned) {
