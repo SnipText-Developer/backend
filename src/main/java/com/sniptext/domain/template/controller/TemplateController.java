@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.sniptext.domain.template.controller.dto.TemplateCreateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateCreateResponse;
 import com.sniptext.domain.template.controller.dto.TemplateDetailResponse;
+import com.sniptext.domain.template.controller.dto.TemplateListResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateResponse;
 import com.sniptext.domain.template.service.TemplateCommandService;
@@ -36,6 +37,12 @@ public class TemplateController {
 
 	private final TemplateCommandService templateCommandService;
 	private final TemplateQueryService templateQueryService;
+
+	@GetMapping
+	public ResponseEntity<ApiResponse<TemplateListResponse>> getTemplates(@LoginUser Long userId) {
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_LIST_FOUND,
+			TemplateListResponse.from(templateQueryService.getTemplates(userId)));
+	}
 
 	@GetMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateDetailResponse>> getTemplate(
