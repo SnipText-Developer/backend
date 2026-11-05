@@ -20,6 +20,7 @@ import com.sniptext.domain.template.service.TemplateQueryService;
 import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
+import com.sniptext.domain.template.service.dto.result.TemplateListResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
@@ -40,8 +41,9 @@ public class TemplateController {
 
 	@GetMapping
 	public ResponseEntity<ApiResponse<TemplateListResponse>> getTemplates(@LoginUser Long userId) {
-		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_LIST_FOUND,
-			TemplateListResponse.from(templateQueryService.getTemplates(userId)));
+		TemplateListResult result = templateQueryService.getTemplates(userId);
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_LIST_FOUND, TemplateListResponse.from(result));
 	}
 
 	@GetMapping("/{templateId}")
