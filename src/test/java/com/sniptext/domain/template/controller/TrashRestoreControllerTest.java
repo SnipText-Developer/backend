@@ -15,6 +15,8 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
@@ -211,6 +213,14 @@ class TrashRestoreControllerTest extends IntegrationTestSupport {
 		Long trashedId = saveTrashed(userId, "/견적");
 
 		expectError(mockMvc.perform(post(PATH, trashedId)), 401, "COMMON401_1", "로그인이 필요해요.");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"abc", "99999999999999999999"})
+	@DisplayName("templateId가 Long으로 바뀌지 않으면 COMMON400_1")
+	void invalidTemplateId(String templateId) throws Exception {
+		expectError(mockMvc.perform(post("/api/v1/trash/templates/" + templateId + "/restore")
+			.header(HttpHeaders.AUTHORIZATION, bearer(userId))), 400, "COMMON400_1", "잘못된 요청입니다.");
 	}
 
 	@Test
