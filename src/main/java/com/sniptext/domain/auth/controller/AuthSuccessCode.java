@@ -11,7 +11,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum AuthSuccessCode implements ResultCode {
 
-	LOGGED_IN(HttpStatus.OK, "AUTH200_2", "로그인에 성공했습니다.");
+	LOGGED_IN(HttpStatus.OK, "AUTH200_2", "로그인에 성공했습니다."),
+	SIGNED_UP(HttpStatus.CREATED, "AUTH201_1", "회원가입이 완료되었습니다.");
 
 	/**
 	 * 처음 온 사용자의 로그인 응답 문구 (명세 1번). 코드는 LOGGED_IN과 같은 AUTH200_2다.
