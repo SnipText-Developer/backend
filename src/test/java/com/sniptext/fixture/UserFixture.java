@@ -27,6 +27,10 @@ public final class UserFixture {
 		return User.create(email, NICKNAME, PROFILE_IMAGE_URL);
 	}
 
+	public static User userWithoutProfileImage(String email) {
+		return User.create(email, NICKNAME, null);
+	}
+
 	public static User deletedUser(String email, LocalDateTime deletedAt) {
 		User user = user(email);
 		ReflectionTestUtils.setField(user, "deletedAt", deletedAt);
