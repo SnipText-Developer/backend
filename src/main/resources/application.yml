@@ -13,6 +13,12 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+# 하이버네이트가 유니크 위반 때 겹친 값을 WARN으로 남긴다 (Duplicate entry '이메일'). 이메일을 로그에 남기지 않도록 끈다.
+# 처리하지 못한 DB 오류는 전역 예외 처리가 ERROR 로그로 남긴다.
+logging:
+  level:
+    org.hibernate.orm.jdbc.error: ERROR
+
 management:
   endpoints:
     web:
