@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.inOrder;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -23,6 +25,7 @@ import com.sniptext.global.exception.BusinessException;
 /**
  * 영구 삭제·비우기는 엔티티를 읽지 않고 삭제 쿼리의 지운 행 수만 본다.
  * 본인 소유·휴지통 조건은 쿼리에 있어 TrashPurgeRepositoryTest에서 본다.
+ * 회원 잠금 순서가 지켜지는지(복구와 교착하지 않는지)는 TrashPurgeConcurrencyTest에서 실제 MySQL로 본다.
  */
 @ExtendWith(MockitoExtension.class)
 class TrashCommandServicePurgeTest {
@@ -55,6 +58,19 @@ class TrashCommandServicePurgeTest {
 		then(templateRepository).shouldHaveNoMoreInteractions();
 	}
 
+	/** 복구와 같은 순서(회원 행 → 템플릿 행)로 잠가야 교착이 나지 않는다 */
+	@Test
+	@DisplayName("영구 삭제는 회원을 먼저 잠근 뒤 지운다")
+	void purgeLocksUserFirst() {
+		given(templateRepository.deleteTrashedByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(1);
+
+		trashCommandService.purge(COMMAND);
+
+		InOrder order = inOrder(userCommandService, templateRepository);
+		order.verify(userCommandService).lockUser(USER_ID);
+		order.verify(templateRepository).deleteTrashedByIdAndUserId(TEMPLATE_ID, USER_ID);
+	}
+
 	@Test
 	@DisplayName("지운 행이 없으면 TRASH404_1이다")
 	void purgeNotFound() {
@@ -76,6 +92,16 @@ class TrashCommandServicePurgeTest {
 		assertThat(result).isEqualTo(new TrashEmptyResult(4));
 		then(templateRepository).should().deleteTrashedByUserId(USER_ID);
 		then(templateRepository).shouldHaveNoMoreInteractions();
+	}
+
+	@Test
+	@DisplayName("비우기는 회원을 먼저 잠근 뒤 지운다")
+	void emptyLocksUserFirst() {
+		trashCommandService.empty(USER_ID);
+
+		InOrder order = inOrder(userCommandService, templateRepository);
+		order.verify(userCommandService).lockUser(USER_ID);
+		order.verify(templateRepository).deleteTrashedByUserId(USER_ID);
 	}
 
 	@Test

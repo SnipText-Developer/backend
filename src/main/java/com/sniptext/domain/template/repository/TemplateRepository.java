@@ -25,7 +25,7 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 
 	/**
 	 * 본인의 휴지통 템플릿을 비관적 쓰기 잠금으로 찾는다 (SELECT ... FOR UPDATE). 복구가 쓴다.
-	 * 회원을 잠그지 않는 정리 배치·영구 삭제가 먼저 지우고 있으면 기다렸다가 빈 값을 받는다.
+	 * 회원을 잠그지 않는 정리 배치가 먼저 지우고 있으면 기다렸다가 빈 값을 받는다.
 	 * 잠금 순서는 회원 행 → 템플릿 행이다. 템플릿을 먼저 잠그고 회원을 잠그는 쪽이 생기면 교착이 날 수 있다
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
