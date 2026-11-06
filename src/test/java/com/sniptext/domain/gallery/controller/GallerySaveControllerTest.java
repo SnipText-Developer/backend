@@ -114,8 +114,9 @@ class GallerySaveControllerTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("활성 템플릿 50개에서 저장하면 TEMPLATE403_1이고 개수가 그대로다")
 	void limitReached() throws Exception {
-		IntStream.rangeClosed(1, 50)
-			.forEach(number -> templateRepository.save(TemplateFixture.template(userId, "/t" + number)));
+		templateRepository.saveAll(IntStream.rangeClosed(1, 50)
+			.mapToObj(number -> TemplateFixture.template(userId, "/t" + number))
+			.toList());
 
 		expectError(save(galleryTemplateId), 403, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요.");
 
@@ -125,7 +126,7 @@ class GallerySaveControllerTest extends IntegrationTestSupport {
 	@Test
 	@DisplayName("없는 갤러리 템플릿 ID면 GALLERY404_1이고 내 템플릿이 생기지 않는다")
 	void missingGalleryTemplate() throws Exception {
-		expectError(save(galleryTemplateId + 1_000), 404, "GALLERY404_1", "갤러리 템플릿을 찾을 수 없어요.");
+		expectError(save(Long.MAX_VALUE), 404, "GALLERY404_1", "갤러리 템플릿을 찾을 수 없어요.");
 
 		assertThat(myTemplates()).isEmpty();
 	}
