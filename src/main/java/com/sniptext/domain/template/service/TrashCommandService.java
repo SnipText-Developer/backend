@@ -7,8 +7,11 @@ import com.sniptext.domain.template.entity.Shortcut;
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.exception.TrashErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
+import com.sniptext.domain.template.service.dto.command.TrashPurgeCommand;
 import com.sniptext.domain.template.service.dto.command.TrashRestoreCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
+import com.sniptext.domain.template.service.dto.result.TrashEmptyResult;
+import com.sniptext.domain.template.service.dto.result.TrashPurgeResult;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.global.exception.BusinessException;
 
@@ -47,6 +50,26 @@ public class TrashCommandService {
 		template.restore(templateCommandService.assignShortcut(command.userId(), original));
 
 		return TemplateShortcutAssignResult.of(templateCommandService.save(template), original);
+	}
+
+	/**
+	 * 본인 휴지통의 템플릿 하나를 영구 삭제한다. 없는 ID, 다른 회원의 템플릿, 휴지통 밖 템플릿, 이미 지운 템플릿은 TRASH404_1.
+	 * 엔티티를 읽지 않고 삭제 쿼리로 지우므로 본문 복호화에 실패하는 행도 지운다.
+	 * 같은 템플릿을 동시에 지우거나 복구와 겹치면 행 잠금으로 줄을 서고, 뒤에 온 쪽은 조건에 맞는 행이 없어 TRASH404_1이 된다.
+	 */
+	@Transactional
+	public TrashPurgeResult purge(TrashPurgeCommand command) {
+		int deleted = templateRepository.deleteTrashedByIdAndUserId(command.templateId(), command.userId());
+		if (deleted == 0) {
+			throw new BusinessException(TrashErrorCode.TRASHED_TEMPLATE_NOT_FOUND);
+		}
+		return new TrashPurgeResult(command.templateId());
+	}
+
+	/** 본인 휴지통을 모두 영구 삭제하고 지운 개수를 돌려준다. 비어 있어도 성공이다. 읽지 않고 지우는 이유는 purge와 같다 */
+	@Transactional
+	public TrashEmptyResult empty(Long userId) {
+		return new TrashEmptyResult(templateRepository.deleteTrashedByUserId(userId));
 	}
 
 }
