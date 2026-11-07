@@ -8,11 +8,14 @@ import java.util.Set;
 
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.sniptext.domain.template.entity.Template;
 import com.sniptext.domain.template.repository.dto.TrashTemplateRow;
+
+import jakarta.persistence.LockModeType;
 
 public interface TemplateRepository extends JpaRepository<Template, Long> {
 
@@ -24,6 +27,15 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 	 * idx_templates_user_deleted (user_id, deleted_at)는 뒤에 기본 키가 붙어 있어 따로 정렬하지 않는다
 	 */
 	List<Template> findAllByUserIdAndDeletedAtIsNullOrderByIdAsc(Long userId);
+
+	/**
+	 * 본인의 휴지통 템플릿을 비관적 쓰기 잠금으로 찾는다 (SELECT ... FOR UPDATE). 복구가 쓴다.
+	 * 회원을 잠그지 않는 정리 배치·영구 삭제가 먼저 지우고 있으면 기다렸다가 빈 값을 받는다.
+	 * 잠금 순서는 회원 행 → 템플릿 행이다. 템플릿을 먼저 잠그고 회원을 잠그는 쪽이 생기면 교착이 날 수 있다
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select t from Template t where t.id = :id and t.userId = :userId and t.deletedAt is not null")
+	Optional<Template> findTrashedByIdAndUserIdForUpdate(@Param("id") Long id, @Param("userId") Long userId);
 
 	/** 휴지통을 제외한 보유 개수. idx_templates_user_deleted (user_id, deleted_at)를 탄다 */
 	long countByUserIdAndDeletedAtIsNull(Long userId);
