@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -18,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +45,7 @@ import tools.jackson.databind.json.JsonMapper;
 class TemplateListControllerTest extends IntegrationTestSupport {
 
 	private static final String PATH = "/api/v1/templates";
+	private static final String RESTORE_PATH = "/api/v1/trash/templates/{templateId}/restore";
 	private static final String NO_STORE = "no-store";
 	private static final LocalDateTime FIXED = LocalDateTime.of(2026, 10, 7, 10, 30);
 	private static final String CONTENT = "{{금액}}원입니다.\n{{고객명}}님, {{금액}}원을 확인해주세요.";
@@ -144,9 +145,9 @@ class TemplateListControllerTest extends IntegrationTestSupport {
 
 		expectOrder(first, third);
 
-		// 16번 복구 API가 아직 없어 휴지통 표시만 지운다. 복구는 생성 시각·ID를 바꾸지 않는다
-		Template trashed = templateRepository.findById(middle.getId()).orElseThrow();
-		ReflectionTestUtils.setField(trashed, "deletedAt", null);
+		mockMvc.perform(post(RESTORE_PATH, middle.getId()).header(HttpHeaders.AUTHORIZATION, bearer(userId)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.code").value("TRASH200_2"));
 		flushAndClear();
 
 		expectOrder(first, middle.getId(), third);
