@@ -56,6 +56,17 @@ public class UserCommandService {
 	}
 
 	/**
+	 * 로그인 시각을 남긴다. 호출자(auth의 로그인 처리) 트랜잭션에 합류해 재발급 토큰 저장과 함께 커밋된다.
+	 * 없거나 탈퇴한 회원이면 USER404_1.
+	 */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public void recordLogin(Long userId) {
+		User user = userRepository.findByIdAndDeletedAtIsNull(userId)
+			.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+		user.recordLogin(LocalDateTime.now(clock));
+	}
+
+	/**
 	 * 회원 행을 비관적 쓰기 잠금으로 잡는다. 템플릿 생성·복구·갤러리 저장의 한도 검사 전에 부른다.
 	 * 자기 트랜잭션을 열면 메서드가 끝날 때 잠금이 풀려 이어지는 개수 검사·저장이 잠금 없이 실행되므로,
 	 * 호출자 트랜잭션 안에서만 동작하게 강제한다 (밖에서 부르면 IllegalTransactionStateException).
