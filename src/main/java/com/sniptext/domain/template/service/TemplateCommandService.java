@@ -83,9 +83,7 @@ public class TemplateCommandService {
 			validateTemplateLimit(command.userId());
 
 			Shortcut original = Shortcut.create(command.shortcut());
-			Set<String> usedKeys = templateRepository.findActiveShortcutKeys(command.userId(), original.candidateKeys());
-			Shortcut assigned = original.findAvailable(usedKeys)
-				.orElseThrow(() -> new BusinessException(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED));
+			Shortcut assigned = assignShortcut(command.userId(), original);
 
 			Template template = Template.createFromGallery(
 				command.userId(),
@@ -125,10 +123,25 @@ public class TemplateCommandService {
 		}
 	}
 
-	private void validateTemplateLimit(Long userId) {
+	/*
+	 * 아래 패키지 범위 메서드 3개는 휴지통 복구(TrashCommandService)가 같이 쓴다. 생성·갤러리 저장과 규칙이 같아야 하기 때문이다.
+	 * 셋 다 트랜잭션을 따로 열지 않으므로, 호출자가 lockUser를 첫 조회로 부른 트랜잭션 안에서 불러야 한다.
+	 * save는 엔티티를 받고 돌려주고, 순서를 지키지 않으면 한도를 넘을 수 있어 template 도메인 안에서만 부른다
+	 * (패키지 범위라 service 패키지 밖에서는 부를 수 없다).
+	 */
+
+	/** 활성 템플릿(휴지통 제외)이 한도 이상이면 TEMPLATE403_1 */
+	void validateTemplateLimit(Long userId) {
 		if (templateRepository.countByUserIdAndDeletedAtIsNull(userId) >= UsageLimits.TEMPLATE_LIMIT) {
 			throw new BusinessException(TemplateErrorCode.TEMPLATE_LIMIT_REACHED);
 		}
+	}
+
+	/** 활성 템플릿과 겹치지 않으면 원본, 겹치면 자동 번호를 붙인 단축어. 2~99가 모두 차면 TEMPLATE409_2 */
+	Shortcut assignShortcut(Long userId, Shortcut original) {
+		Set<String> usedKeys = templateRepository.findActiveShortcutKeys(userId, original.candidateKeys());
+		return original.findAvailable(usedKeys)
+			.orElseThrow(() -> new BusinessException(TemplateErrorCode.SHORTCUT_NUMBER_EXHAUSTED));
 	}
 
 	private void validateShortcutAvailable(Long userId, Shortcut shortcut) {
@@ -149,7 +162,7 @@ public class TemplateCommandService {
 	 * 단축어 유니크가 아닌 무결성 위반은 코드 실수라 그대로 던진다 (500).
 	 * 위반 예외 메시지에는 겹친 단축어가 들어 있으므로 원인으로 붙이거나 로그에 남기지 않는다.
 	 */
-	private Template save(Template template) {
+	Template save(Template template) {
 		try {
 			return templateRepository.saveAndFlush(template);
 		} catch (DataIntegrityViolationException e) {

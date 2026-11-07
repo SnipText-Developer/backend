@@ -118,7 +118,7 @@ domain/{도메인}/
   - 회원은 `User.create(email, nickname, profileImageUrl)`로 만든다. 닉네임 정리(앞뒤 공백 제거, 50자 자르기, 비면 이메일 앞부분)는 가입 서비스가 하고, `create`는 길이·필수 값만 검사한다. 테스트에서는 `UserFixture`를 쓴다
 - 롬복 허용: `@Getter`, `@NoArgsConstructor(access = PROTECTED)`, `@Builder(access = PRIVATE)`(정적 팩토리 안에서만), `@RequiredArgsConstructor`, `@Slf4j`
 - 롬복 금지: `@Setter`, `@Data`, `@AllArgsConstructor`, 엔티티의 `@ToString`·`@EqualsAndHashCode`
-- 트랜잭션: 서비스 클래스에 `@Transactional(readOnly = true)`, 쓰기 메서드에만 `@Transactional`
+- 트랜잭션: 조회 서비스(`{도메인}QueryService`)는 클래스에 `@Transactional(readOnly = true)`. 명령 서비스(`{도메인}CommandService`)는 클래스에 붙이지 않고 쓰기 메서드마다 `@Transactional` (클래스에 `readOnly`를 두면 메서드에 빠뜨렸을 때 쓰기가 읽기 전용 트랜잭션으로 실행된다)
 - 검증: 형식 검증은 요청 객체(빈 검증), 업무 규칙 검증은 서비스
 
 ## 응답·예외
