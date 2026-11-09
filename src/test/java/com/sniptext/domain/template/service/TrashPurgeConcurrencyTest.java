@@ -85,13 +85,18 @@ class TrashPurgeConcurrencyTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("같은 템플릿 복구와 영구 삭제가 동시에 오면 1건만 성공하고 1건은 TRASH404_1")
+	@DisplayName("같은 템플릿 복구와 영구 삭제가 동시에 오면 1건만 성공하고 1건은 TRASH404_1이며, DB는 성공한 쪽 결과와 같다")
 	void restoreAndPurgeAtOnce() throws Exception {
 		Long trashedId = saveTrashed("/견적");
 
 		List<String> results = runAtOnce(() -> restore(trashedId), () -> purge(trashedId));
 
 		assertThat(results).containsOnlyOnce(SUCCESS).contains("TRASH404_1");
+		if (SUCCESS.equals(results.get(0))) {
+			assertThat(templateRepository.findById(trashedId).orElseThrow().isInTrash()).isFalse();
+		} else {
+			assertThat(templateRepository.existsById(trashedId)).isFalse();
+		}
 	}
 
 	@Test
