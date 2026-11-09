@@ -1,6 +1,7 @@
 package com.sniptext.domain.template.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -8,10 +9,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.sniptext.domain.template.controller.dto.TrashEmptyResponse;
 import com.sniptext.domain.template.controller.dto.TrashListResponse;
+import com.sniptext.domain.template.controller.dto.TrashPurgeResponse;
 import com.sniptext.domain.template.controller.dto.TrashRestoreResponse;
 import com.sniptext.domain.template.service.TrashCommandService;
 import com.sniptext.domain.template.service.TrashQueryService;
+import com.sniptext.domain.template.service.dto.command.TrashPurgeCommand;
 import com.sniptext.domain.template.service.dto.command.TrashRestoreCommand;
 import com.sniptext.domain.template.service.dto.query.TrashListQuery;
 import com.sniptext.global.response.ApiResponse;
@@ -55,6 +59,24 @@ public class TrashController {
 			trashCommandService.restore(new TrashRestoreCommand(userId, templateId)));
 
 		return ApiResponse.success(TrashSuccessCode.TRASH_RESTORED, response);
+	}
+
+	@DeleteMapping("/{templateId}")
+	public ResponseEntity<ApiResponse<TrashPurgeResponse>> purge(
+		@LoginUser Long userId,
+		@PathVariable Long templateId) {
+
+		TrashPurgeResponse response = TrashPurgeResponse.from(
+			trashCommandService.purge(new TrashPurgeCommand(userId, templateId)));
+
+		return ApiResponse.success(TrashSuccessCode.TRASH_PURGED, response);
+	}
+
+	@DeleteMapping
+	public ResponseEntity<ApiResponse<TrashEmptyResponse>> empty(@LoginUser Long userId) {
+		TrashEmptyResponse response = TrashEmptyResponse.from(trashCommandService.empty(userId));
+
+		return ApiResponse.success(TrashSuccessCode.TRASH_EMPTIED, response);
 	}
 
 }

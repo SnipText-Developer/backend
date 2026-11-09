@@ -9,6 +9,7 @@ import java.util.Set;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -30,7 +31,7 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 
 	/**
 	 * 본인의 휴지통 템플릿을 비관적 쓰기 잠금으로 찾는다 (SELECT ... FOR UPDATE). 복구가 쓴다.
-	 * 회원을 잠그지 않는 정리 배치·영구 삭제가 먼저 지우고 있으면 기다렸다가 빈 값을 받는다.
+	 * 회원을 잠그지 않는 정리 배치가 먼저 지우고 있으면 기다렸다가 빈 값을 받는다.
 	 * 잠금 순서는 회원 행 → 템플릿 행이다. 템플릿을 먼저 잠그고 회원을 잠그는 쪽이 생기면 교착이 날 수 있다
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -83,5 +84,20 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 		""")
 	List<TrashTemplateRow> findTrashAfter(@Param("userId") Long userId, @Param("deletedAt") LocalDateTime deletedAt,
 		@Param("id") Long id, Limit limit);
+
+	/**
+	 * 본인의 휴지통 템플릿 하나를 엔티티를 읽지 않고 지운다. 지운 행 수(1 또는 0)를 돌려준다.
+	 * 엔티티를 읽으면 본문을 복호화하므로, 복호화에 실패하는 행도 지울 수 있게 삭제 쿼리로 둔다.
+	 * 지운 행이 1차 캐시에 남아 있으면 같은 트랜잭션의 다음 조회가 이미 없는 행을 돌려주므로 실행 뒤 캐시를 비우고,
+	 * 비우면서 아직 내보내지 않은 변경이 사라지지 않게 실행 전에 내보낸다. 호출 뒤에는 미리 읽어 둔 엔티티를 고쳐도 반영되지 않는다
+	 */
+	@Modifying(flushAutomatically = true, clearAutomatically = true)
+	@Query("delete from Template t where t.id = :id and t.userId = :userId and t.deletedAt is not null")
+	int deleteTrashedByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+	/** 본인의 휴지통을 모두 지우고 지운 개수를 돌려준다. 읽지 않고 지우는 이유와 캐시 처리는 deleteTrashedByIdAndUserId와 같다 */
+	@Modifying(flushAutomatically = true, clearAutomatically = true)
+	@Query("delete from Template t where t.userId = :userId and t.deletedAt is not null")
+	int deleteTrashedByUserId(@Param("userId") Long userId);
 
 }
