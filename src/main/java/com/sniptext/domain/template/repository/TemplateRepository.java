@@ -23,6 +23,12 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 	Optional<Template> findByIdAndUserId(Long id, Long userId);
 
 	/**
+	 * 휴지통을 제외한 본인 템플릿 전체, 생성 순(ID 오름차순). 목록은 페이지를 나누지 않는다.
+	 * idx_templates_user_deleted (user_id, deleted_at)는 뒤에 기본 키가 붙어 있어 따로 정렬하지 않는다
+	 */
+	List<Template> findAllByUserIdAndDeletedAtIsNullOrderByIdAsc(Long userId);
+
+	/**
 	 * 본인의 휴지통 템플릿을 비관적 쓰기 잠금으로 찾는다 (SELECT ... FOR UPDATE). 복구가 쓴다.
 	 * 회원을 잠그지 않는 정리 배치·영구 삭제가 먼저 지우고 있으면 기다렸다가 빈 값을 받는다.
 	 * 잠금 순서는 회원 행 → 템플릿 행이다. 템플릿을 먼저 잠그고 회원을 잠그는 쪽이 생기면 교착이 날 수 있다
