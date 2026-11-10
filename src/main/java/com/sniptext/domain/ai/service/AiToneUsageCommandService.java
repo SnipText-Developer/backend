@@ -17,7 +17,7 @@ import com.sniptext.global.policy.UsageLimits;
 import lombok.RequiredArgsConstructor;
 
 /**
- * AI 톤 교정 하루 횟수의 선점과 반환. 요청 시 1회를 먼저 잡고, AI 오류·타임아웃·혐오 표현 차단이면 되돌린다.
+ * AI 톤 교정 하루 횟수의 선점과 반환. 요청 시 1회를 먼저 잡고, AI 오류·타임아웃·혐오 표현·욕설 차단이면 되돌린다.
  * 선점·반환은 각각 자기 트랜잭션으로 짧게 끝낸다. 톤 교정 API가 외부 AI를 부르는 동안(최대 20초)
  * DB 트랜잭션과 커넥션을 잡고 있지 않게 하기 위해서다.
  * 그래서 호출자 트랜잭션 안에서 부르면 예외를 던지고, 트랜잭션은 @Transactional 대신 TransactionTemplate으로 직접 연다.
