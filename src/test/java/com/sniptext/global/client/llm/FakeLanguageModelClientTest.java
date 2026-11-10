@@ -17,6 +17,7 @@ class FakeLanguageModelClientTest {
 		assertThat(result.text()).isEqualTo("[가짜 교정] 안녕하세요\n두 번째 줄")
 			.doesNotContain("<text>", "</text>");
 		assertThat(result.refused()).isFalse();
+		assertThat(result.outputTokens()).isZero();
 	}
 
 	@Test
