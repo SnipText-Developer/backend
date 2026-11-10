@@ -13,6 +13,7 @@ import java.text.Normalizer;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.hibernate.exception.ConstraintViolationException;
@@ -42,12 +43,15 @@ import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
+import com.sniptext.domain.template.service.dto.command.TemplateDeleteCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateUpdateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateUsageCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateDeleteResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
+import com.sniptext.domain.template.support.TrashRetention;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.global.exception.BusinessException;
@@ -423,6 +427,79 @@ class TemplateCommandServiceTest {
 
 		private void givenUpdateSaved() {
 			given(templateRepository.saveAndFlush(template)).willReturn(template);
+		}
+
+	}
+
+	@Nested
+	@DisplayName("삭제 (휴지통 이동)")
+	class Delete {
+
+		private static final TemplateDeleteCommand DELETE_COMMAND = new TemplateDeleteCommand(USER_ID, TEMPLATE_ID);
+		private static final LocalDateTime EDITED_AT = NOW.minusDays(2);
+		private static final LocalDateTime LAST_USED_AT = NOW.minusDays(1);
+
+		private Template template;
+
+		@BeforeEach
+		void setUp() {
+			template = TemplateFixture.template(USER_ID);
+			ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
+			ReflectionTestUtils.setField(template, "editedAt", EDITED_AT);
+			template.markUsed(LAST_USED_AT);
+		}
+
+		@Test
+		@DisplayName("Clock 시각을 휴지통 시각으로 쓰고 ID·이름·휴지통 시각·영구 삭제 예정 시각을 돌려준다. 수정·사용 시각은 그대로다")
+		void delete() {
+			given(templateRepository.findByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(Optional.of(template));
+
+			TemplateDeleteResult result = templateCommandService.delete(DELETE_COMMAND);
+
+			assertThat(result).isEqualTo(
+				new TemplateDeleteResult(TEMPLATE_ID, TemplateFixture.TITLE, NOW, TrashRetention.purgeAt(NOW)));
+			assertThat(template.getDeletedAt()).isEqualTo(NOW);
+			assertThat(template.getEditedAt()).isEqualTo(EDITED_AT);
+			assertThat(template.getLastUsedAt()).isEqualTo(LAST_USED_AT);
+		}
+
+		@Test
+		@DisplayName("회원 행을 먼저 잠근 뒤 템플릿을 찾고, 한도 개수를 세거나 직접 저장하지 않는다 (변경 감지)")
+		void locksUserFirst() {
+			given(templateRepository.findByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(Optional.of(template));
+
+			templateCommandService.delete(DELETE_COMMAND);
+
+			InOrder order = inOrder(userCommandService, templateRepository);
+			order.verify(userCommandService).lockUser(USER_ID);
+			order.verify(templateRepository).findByIdAndUserId(TEMPLATE_ID, USER_ID);
+			then(templateRepository).shouldHaveNoMoreInteractions();
+			then(templateQueryService).shouldHaveNoInteractions();
+		}
+
+		@Test
+		@DisplayName("없거나 다른 회원의 템플릿이면 TEMPLATE404_1")
+		void notFound() {
+			given(templateRepository.findByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(Optional.empty());
+
+			assertThatThrownBy(() -> templateCommandService.delete(DELETE_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.extracting("resultCode")
+				.isEqualTo(TemplateErrorCode.TEMPLATE_NOT_FOUND);
+		}
+
+		@Test
+		@DisplayName("내 템플릿이 이미 휴지통에 있으면 TEMPLATE404_2가 아니라 TEMPLATE404_1이고 휴지통 시각이 그대로다")
+		void alreadyInTrash() {
+			LocalDateTime deletedAt = NOW.minusHours(3);
+			template.moveToTrash(deletedAt);
+			given(templateRepository.findByIdAndUserId(TEMPLATE_ID, USER_ID)).willReturn(Optional.of(template));
+
+			assertThatThrownBy(() -> templateCommandService.delete(DELETE_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.extracting("resultCode")
+				.isEqualTo(TemplateErrorCode.TEMPLATE_NOT_FOUND);
+			assertThat(template.getDeletedAt()).isEqualTo(deletedAt);
 		}
 
 	}

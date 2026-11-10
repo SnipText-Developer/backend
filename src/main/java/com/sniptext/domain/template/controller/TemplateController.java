@@ -1,6 +1,7 @@
 package com.sniptext.domain.template.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.template.controller.dto.TemplateCreateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateCreateResponse;
+import com.sniptext.domain.template.controller.dto.TemplateDeleteResponse;
 import com.sniptext.domain.template.controller.dto.TemplateDetailResponse;
 import com.sniptext.domain.template.controller.dto.TemplateListResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateRequest;
@@ -19,8 +21,10 @@ import com.sniptext.domain.template.controller.dto.TemplateUsageRequest;
 import com.sniptext.domain.template.controller.dto.TemplateUsageResponse;
 import com.sniptext.domain.template.service.TemplateCommandService;
 import com.sniptext.domain.template.service.TemplateQueryService;
+import com.sniptext.domain.template.service.dto.command.TemplateDeleteCommand;
 import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateDeleteResult;
 import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
 import com.sniptext.domain.template.service.dto.result.TemplateListResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
@@ -78,6 +82,16 @@ public class TemplateController {
 		TemplateUpdateResult result = templateCommandService.update(request.toCommand(userId, templateId));
 
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_UPDATED, TemplateUpdateResponse.from(result));
+	}
+
+	@DeleteMapping("/{templateId}")
+	public ResponseEntity<ApiResponse<TemplateDeleteResponse>> deleteTemplate(
+		@LoginUser Long userId,
+		@PathVariable Long templateId) {
+
+		TemplateDeleteResult result = templateCommandService.delete(new TemplateDeleteCommand(userId, templateId));
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_DELETED, TemplateDeleteResponse.from(result));
 	}
 
 	@PostMapping("/{templateId}/usages")
