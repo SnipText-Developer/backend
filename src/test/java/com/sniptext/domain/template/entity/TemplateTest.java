@@ -216,6 +216,17 @@ class TemplateTest {
 			assertThatThrownBy(() -> template.moveToTrash(null)).isInstanceOf(IllegalArgumentException.class);
 		}
 
+		@Test
+		@DisplayName("이미 휴지통에 있으면 IllegalStateException이고 휴지통 시각이 그대로다 (30일 기한이 다시 시작되지 않는다)")
+		void alreadyInTrash() {
+			Template template = editedTemplate();
+			template.moveToTrash(NOW.plusHours(2));
+
+			assertThatThrownBy(() -> template.moveToTrash(NOW.plusDays(1))).isInstanceOf(IllegalStateException.class);
+
+			assertThat(template.getDeletedAt()).isEqualTo(NOW.plusHours(2));
+		}
+
 	}
 
 	@Nested
