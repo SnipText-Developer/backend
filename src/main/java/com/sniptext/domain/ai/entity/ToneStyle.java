@@ -11,7 +11,6 @@ public enum ToneStyle {
 	MARKETING,
 	NOTICE,
 	SOFT_POLITE,
-	CASUAL,
-	ESSAY
+	CASUAL
 
 }

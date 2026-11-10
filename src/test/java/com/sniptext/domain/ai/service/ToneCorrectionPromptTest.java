@@ -38,20 +38,20 @@ class ToneCorrectionPromptTest {
 	}
 
 	@Test
-	@DisplayName("7개 문체의 문체별 지시는 서로 다르다")
+	@DisplayName("6개 문체의 문체별 지시는 서로 다르다")
 	void styleInstructionsAreDistinct() {
 		List<String> instructions = Arrays.stream(ToneStyle.values())
 			.map(ToneCorrectionPrompt::styleInstruction)
 			.toList();
 
-		assertThat(instructions).hasSize(7).doesNotHaveDuplicates();
+		assertThat(instructions).hasSize(6).doesNotHaveDuplicates();
 	}
 
 	@Test
 	@DisplayName("문체 이름 줄에는 명세의 한국어 이름이 들어간다")
 	void styleNameLine() {
 		assertThat(ToneCorrectionPrompt.styleInstruction(ToneStyle.BOSS_EXTERNAL)).startsWith("문체: 상사/외부용\n");
-		assertThat(ToneCorrectionPrompt.styleInstruction(ToneStyle.ESSAY)).startsWith("문체: 감성/에세이\n");
+		assertThat(ToneCorrectionPrompt.styleInstruction(ToneStyle.CASUAL)).startsWith("문체: 편한 반말\n");
 	}
 
 	@Test
