@@ -101,6 +101,7 @@ domain/{도메인}/
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
+| 회원 존재 확인 | `void validateActive(Long userId)` (`UserQueryService`, 없거나 탈퇴면 `USER404_1`) | user → ai |
 
 - **다른 도메인 서비스를 조합하는 조회는 별도 서비스로 분리한다.** 예: 사용량 API는 `UserUsageQueryService`
   - 순환 참조를 막기 위해서다. 사용량 조합(template·ai 서비스 호출)을 `UserQueryService`에 넣으면, template·ai가 `UserQueryService`를 부르게 될 때 생성자 주입 순환으로 앱이 뜨지 않는다
