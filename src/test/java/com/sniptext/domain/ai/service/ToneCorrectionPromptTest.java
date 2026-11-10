@@ -37,6 +37,27 @@ class ToneCorrectionPromptTest {
 			.contains("다른 말 없이 " + BLOCKED_MARKER + "만 출력합니다");
 	}
 
+	@ParameterizedTest
+	@EnumSource(ToneStyle.class)
+	@DisplayName("모든 문체의 지시문에 욕설·비속어(초성·변형 표기 포함) 차단 문장과 원문에 없는 문장 덧붙이기 금지 문장이 들어 있다")
+	void systemPromptBlocksProfanityAndForbidsAddedSentences(ToneStyle style) {
+		assertThat(ToneCorrectionPrompt.systemPrompt(style))
+			.contains("욕설이나 비속어")
+			.contains("초성으로 줄이거나 글자를 바꾸거나 띄어 쓴 변형 표기도 포함합니다")
+			.contains("원문에 없는 문장(사과, 감사, 인사, 홍보·행동 유도, 문의 안내 등)을 덧붙이지 않습니다")
+			.doesNotContain("순화해 교정합니다");
+	}
+
+	@Test
+	@DisplayName("상사/외부용 지시에는 인사와 맺음말을 항상 붙인다는 문장이 들어 있다")
+	void bossExternalAlwaysAddsGreetingAndClosing() {
+		assertThat(ToneCorrectionPrompt.styleInstruction(ToneStyle.BOSS_EXTERNAL))
+			.contains("항상 짧은 인사로 시작하고 짧은 맺음말로 끝냅니다")
+			.contains("원문에 이미 인사나 맺음말이 있으면 새로 덧붙이지 않고")
+			.contains("약속, 제안, 사과처럼 원문에 없는 내용은 넣지 않습니다")
+			.doesNotContain("필요하면");
+	}
+
 	@Test
 	@DisplayName("6개 문체의 문체별 지시는 서로 다르다")
 	void styleInstructionsAreDistinct() {
