@@ -26,3 +26,17 @@ jobs:
 
       - name: 빌드 및 테스트
         run: ./gradlew build
+
+  # 운영 서버(EC2 t4g, ARM)용 이미지가 만들어지는지만 확인한다. 푸시는 배포 워크플로에서 한다
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 이미지 빌더 설정
+        uses: docker/setup-buildx-action@v4
+
+      # x86 실행기에서 arm64 이미지를 빌드한다. 빌드 단계는 실행기 아키텍처에서 돌고
+      # 실행 단계에는 RUN이 없어 에뮬레이터(QEMU) 설정 없이 빌드된다 (Dockerfile 주석 참고)
+      - name: arm64 이미지 빌드 확인
+        run: docker buildx build --platform linux/arm64 .
