@@ -20,9 +20,11 @@ import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
+import com.sniptext.domain.template.service.dto.command.TemplateDeleteCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateUpdateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateUsageCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateDeleteResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
@@ -133,6 +135,28 @@ public class TemplateCommandService {
 		template.markUsed(LocalDateTime.now(clock));
 
 		return TemplateUsageResult.from(template);
+	}
+
+	/**
+	 * 템플릿을 휴지통으로 옮긴다 (소프트 삭제). deleted_at만 Clock 시각으로 바꾸고 수정·사용 시각은 그대로 둔다.
+	 * 없거나 다른 회원 것이면 TEMPLATE404_1이고, 수정·사용 기록과 달리 내 휴지통 템플릿도 TEMPLATE404_1이다 (명세 12번).
+	 * 개수를 줄이기만 해서 한도 검사는 없지만 회원 행을 먼저 잠근다. 잠그지 않고 일반 조회로 읽으면, 같은 템플릿을 동시에 지울 때
+	 * 뒤 요청이 커밋 전 스냅샷에서 활성 템플릿을 보고 행 잠금만 기다렸다가 deleted_at을 덮어써 둘 다 200이 되고 30일 기한이 다시 시작된다.
+	 * 복구·영구 삭제·비우기와 같은 순서(회원 행 → 템플릿 행)로 잠가 서로 줄을 서게 한다. 잠금 뒤의 첫 일반 조회라 앞 요청의 커밋을 본다.
+	 * 변경 감지로 쓴다. @DynamicUpdate라 UPDATE에는 deleted_at과 감사 기능이 채우는 updated_at만 들어간다.
+	 * 엔티티를 읽으므로 본문 복호화에 실패하는 행이면 500이다.
+	 */
+	@Transactional
+	public TemplateDeleteResult delete(TemplateDeleteCommand command) {
+		userCommandService.lockUser(command.userId());
+
+		Template template = templateRepository.findByIdAndUserId(command.templateId(), command.userId())
+			.filter(found -> !found.isInTrash())
+			.orElseThrow(() -> new BusinessException(TemplateErrorCode.TEMPLATE_NOT_FOUND));
+
+		template.moveToTrash(LocalDateTime.now(clock));
+
+		return TemplateDeleteResult.from(template);
 	}
 
 	private static void requireNoOuterTransaction() {

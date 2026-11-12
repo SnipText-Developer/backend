@@ -120,8 +120,15 @@ public class Template extends BaseTimeEntity {
 		this.lastUsedAt = now;
 	}
 
+	/**
+	 * 휴지통으로 옮긴다. 수정·사용 시각은 그대로 둔다.
+	 * 이미 휴지통인 템플릿에 부르면 휴지통 시각을 덮어써 30일 기한이 다시 시작되므로 막는다 (서비스가 먼저 404로 막으니 코드 실수다).
+	 */
 	public void moveToTrash(LocalDateTime now) {
 		require(now != null, "휴지통 이동 시각이 없다");
+		if (isInTrash()) {
+			throw new IllegalStateException("이미 휴지통에 있는 템플릿은 다시 옮길 수 없다");
+		}
 		this.deletedAt = now;
 	}
 
