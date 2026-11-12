@@ -21,9 +21,11 @@ import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateUpdateCommand;
+import com.sniptext.domain.template.service.dto.command.TemplateUsageCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.global.exception.BusinessException;
 import com.sniptext.global.policy.UsageLimits;
@@ -115,6 +117,22 @@ public class TemplateCommandService {
 		template.edit(title, shortcut, content, LocalDateTime.now(clock));
 
 		return TemplateUpdateResult.from(save(template));
+	}
+
+	/**
+	 * 템플릿 사용 기록. 최근 사용 시각(last_used_at)만 Clock 시각으로 바꾸고 수정 시각(edited_at)은 그대로 둔다.
+	 * 없거나 다른 회원 것이면 TEMPLATE404_1, 휴지통에 있으면 TEMPLATE404_2. 개수가 바뀌지 않으므로 회원을 잠그지 않는다.
+	 * 변경 감지로 쓴다. @DynamicUpdate라 UPDATE에는 last_used_at과 감사 기능이 채우는 updated_at만 들어가고,
+	 * 읽은 뒤 다른 요청이 고친 이름·본문을 덮어쓰지 않는다. 엔티티를 읽으므로 본문 복호화에 실패하는 행이면 500이다.
+	 * 조회 뒤 커밋 전에 휴지통으로 옮겨지면 휴지통 행의 last_used_at이 바뀐다. 표시하지 않는 값이고 복구 시 그대로 남는 정도라 허용한다.
+	 */
+	@Transactional
+	public TemplateUsageResult recordUsage(TemplateUsageCommand command) {
+		Template template = templateQueryService.getActiveTemplate(command.userId(), command.templateId());
+
+		template.markUsed(LocalDateTime.now(clock));
+
+		return TemplateUsageResult.from(template);
 	}
 
 	private static void requireNoOuterTransaction() {

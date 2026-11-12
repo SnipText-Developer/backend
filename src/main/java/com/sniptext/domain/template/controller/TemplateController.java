@@ -15,6 +15,8 @@ import com.sniptext.domain.template.controller.dto.TemplateDetailResponse;
 import com.sniptext.domain.template.controller.dto.TemplateListResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateResponse;
+import com.sniptext.domain.template.controller.dto.TemplateUsageRequest;
+import com.sniptext.domain.template.controller.dto.TemplateUsageResponse;
 import com.sniptext.domain.template.service.TemplateCommandService;
 import com.sniptext.domain.template.service.TemplateQueryService;
 import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
@@ -22,6 +24,7 @@ import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
 import com.sniptext.domain.template.service.dto.result.TemplateListResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
 
@@ -75,6 +78,17 @@ public class TemplateController {
 		TemplateUpdateResult result = templateCommandService.update(request.toCommand(userId, templateId));
 
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_UPDATED, TemplateUpdateResponse.from(result));
+	}
+
+	@PostMapping("/{templateId}/usages")
+	public ResponseEntity<ApiResponse<TemplateUsageResponse>> recordUsage(
+		@LoginUser Long userId,
+		@PathVariable Long templateId,
+		@Valid @RequestBody TemplateUsageRequest request) {
+
+		TemplateUsageResult result = templateCommandService.recordUsage(request.toCommand(userId, templateId));
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_USAGE_RECORDED, TemplateUsageResponse.from(result));
 	}
 
 }

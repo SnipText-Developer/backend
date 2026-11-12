@@ -28,6 +28,8 @@ public enum TemplateErrorCode implements ResultCode {
 	CONTENT_EMPTY(HttpStatus.BAD_REQUEST, "TEMPLATE400_6", "템플릿 내용을 입력해주세요."),
 	/** 본문 3000자 초과 */
 	CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "TEMPLATE400_7", "템플릿 내용은 3,000자까지 입력할 수 있어요."),
+	/** 사용 기록의 채널이 없거나 지원하지 않는 값 */
+	USAGE_CHANNEL_UNSUPPORTED(HttpStatus.BAD_REQUEST, "TEMPLATE400_9", "지원하지 않는 사용 채널이에요."),
 	/** 활성 템플릿 수가 플랜 한도 이상 (화면은 한도 모달) */
 	TEMPLATE_LIMIT_REACHED(HttpStatus.FORBIDDEN, "TEMPLATE403_1", "템플릿 저장 한도에 도달했어요."),
 	/** 없는 템플릿, 다른 회원의 템플릿 (다른 회원의 휴지통 템플릿 포함) */

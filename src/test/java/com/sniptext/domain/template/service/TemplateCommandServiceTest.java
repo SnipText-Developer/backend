@@ -43,9 +43,11 @@ import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateCreateFromGalleryCommand;
 import com.sniptext.domain.template.service.dto.command.TemplateUpdateCommand;
+import com.sniptext.domain.template.service.dto.command.TemplateUsageCommand;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.global.exception.BusinessException;
@@ -421,6 +423,61 @@ class TemplateCommandServiceTest {
 
 		private void givenUpdateSaved() {
 			given(templateRepository.saveAndFlush(template)).willReturn(template);
+		}
+
+	}
+
+	@Nested
+	@DisplayName("사용 기록")
+	class RecordUsage {
+
+		private static final TemplateUsageCommand USAGE_COMMAND = new TemplateUsageCommand(USER_ID, TEMPLATE_ID);
+		private static final LocalDateTime EDITED_AT = NOW.minusDays(1);
+
+		private Template template;
+
+		@BeforeEach
+		void setUp() {
+			template = TemplateFixture.template(USER_ID);
+			ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
+			ReflectionTestUtils.setField(template, "editedAt", EDITED_AT);
+		}
+
+		@Test
+		@DisplayName("Clock 시각을 최근 사용 시각으로 쓰고 ID와 그 시각을 돌려준다. 수정 시각은 그대로다")
+		void recordUsage() {
+			given(templateQueryService.getActiveTemplate(USER_ID, TEMPLATE_ID)).willReturn(template);
+
+			TemplateUsageResult result = templateCommandService.recordUsage(USAGE_COMMAND);
+
+			assertThat(result).isEqualTo(new TemplateUsageResult(TEMPLATE_ID, NOW));
+			assertThat(template.getLastUsedAt()).isEqualTo(NOW);
+			assertThat(template.getEditedAt()).isEqualTo(EDITED_AT);
+		}
+
+		@Test
+		@DisplayName("개수가 바뀌지 않으므로 회원을 잠그지 않고, 변경 감지로 쓰므로 레포지토리를 직접 부르지 않는다")
+		void doesNotLockUserOrCallRepository() {
+			given(templateQueryService.getActiveTemplate(USER_ID, TEMPLATE_ID)).willReturn(template);
+
+			templateCommandService.recordUsage(USAGE_COMMAND);
+
+			then(userCommandService).shouldHaveNoInteractions();
+			then(templateRepository).shouldHaveNoInteractions();
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = TemplateErrorCode.class, names = {"TEMPLATE_NOT_FOUND", "TEMPLATE_IN_TRASH"})
+		@DisplayName("사용 기록할 수 없는 템플릿이면 그 404를 그대로 던진다")
+		void notUsable(TemplateErrorCode errorCode) {
+			given(templateQueryService.getActiveTemplate(USER_ID, TEMPLATE_ID))
+				.willThrow(new BusinessException(errorCode));
+
+			assertThatThrownBy(() -> templateCommandService.recordUsage(USAGE_COMMAND))
+				.isInstanceOf(BusinessException.class)
+				.extracting("resultCode")
+				.isEqualTo(errorCode);
+			then(templateRepository).shouldHaveNoInteractions();
 		}
 
 	}
