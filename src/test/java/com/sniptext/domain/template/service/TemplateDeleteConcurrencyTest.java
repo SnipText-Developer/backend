@@ -18,7 +18,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.template.entity.Template;
@@ -26,7 +25,6 @@ import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.command.TemplateDeleteCommand;
 import com.sniptext.domain.template.service.dto.command.TrashRestoreCommand;
 import com.sniptext.domain.user.repository.UserRepository;
-import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.fixture.TemplateFixture;
 import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.exception.BusinessException;
@@ -55,9 +53,6 @@ class TemplateDeleteConcurrencyTest extends IntegrationTestSupport {
 	private TrashCommandService trashCommandService;
 
 	@Autowired
-	private UserCommandService userCommandService;
-
-	@Autowired
 	private TemplateRepository templateRepository;
 
 	@Autowired
@@ -65,9 +60,6 @@ class TemplateDeleteConcurrencyTest extends IntegrationTestSupport {
 
 	@Autowired
 	private TransactionTemplate transactionTemplate;
-
-	@Autowired
-	private JdbcTemplate jdbcTemplate;
 
 	@Autowired
 	private MutableClock clock;
@@ -269,15 +261,9 @@ class TemplateDeleteConcurrencyTest extends IntegrationTestSupport {
 		}
 	}
 
-	/**
-	 * 휴지통 비우기(18번, develop의 TrashCommandService.empty)와 같은 잠금 순서·쿼리로 지운 개수를 돌려준다.
-	 * 이 브랜치의 기준(#80)에는 아직 18번이 없어 흉내 낸다. #80이 develop을 받으면 실제 메서드로 바꾼다.
-	 */
+	/** 휴지통 비우기(18번)로 지운 개수 */
 	private int emptyTrash() {
-		return transactionTemplate.execute(status -> {
-			userCommandService.lockUser(userId);
-			return jdbcTemplate.update("delete from templates where user_id = ? and deleted_at is not null", userId);
-		});
+		return trashCommandService.empty(userId).deletedCount();
 	}
 
 }
