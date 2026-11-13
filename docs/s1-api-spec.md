@@ -815,7 +815,9 @@ GET /api/v1/users/me/usage
 
 ##### Error Code
 
-이 API 전용 에러 없음 (공통 에러만)
+| HttpStatus | ResultCode | ErrorMessage | Description |
+| --- | --- | --- | --- |
+| 404 | USER404_1 | 회원 정보를 찾을 수 없어요. | 탈퇴했거나 없는 회원의 토큰 |
 
 ##### 비고
 
