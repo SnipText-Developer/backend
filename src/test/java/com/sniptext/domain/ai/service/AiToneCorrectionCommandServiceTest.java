@@ -6,7 +6,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -23,6 +25,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.sniptext.domain.ai.entity.ToneStyle;
@@ -31,6 +34,7 @@ import com.sniptext.domain.ai.service.dto.command.AiToneCorrectCommand;
 import com.sniptext.domain.ai.service.dto.result.AiToneCorrectResult;
 import com.sniptext.domain.ai.service.dto.result.AiToneReserveResult;
 import com.sniptext.domain.ai.service.dto.result.AiToneUsageResult;
+import com.sniptext.domain.ai.support.KeyInfoChecker;
 import com.sniptext.domain.user.exception.UserErrorCode;
 import com.sniptext.domain.user.service.UserQueryService;
 import com.sniptext.global.client.llm.LanguageModelClient;
@@ -138,7 +142,7 @@ class AiToneCorrectionCommandServiceTest {
 
 		assertErrorCode("AI422_1");
 
-		verify(aiToneUsageCommandService).release(RESERVATION);
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
 	}
 
 	@ParameterizedTest
@@ -149,7 +153,7 @@ class AiToneCorrectionCommandServiceTest {
 
 		assertErrorCode("AI422_1");
 
-		verify(aiToneUsageCommandService).release(RESERVATION);
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
 	}
 
 	@Test
@@ -159,7 +163,7 @@ class AiToneCorrectionCommandServiceTest {
 
 		assertErrorCode("AI502_1");
 
-		verify(aiToneUsageCommandService).release(RESERVATION);
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
 	}
 
 	@Test
@@ -169,26 +173,56 @@ class AiToneCorrectionCommandServiceTest {
 
 		assertErrorCode("AI504_1");
 
-		verify(aiToneUsageCommandService).release(RESERVATION);
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
 	}
 
 	@Test
-	@DisplayName("반환이 실패해도 원래 에러 코드를 그대로 던진다")
+	@DisplayName("반환이 실패해도 원래 에러 코드를 그대로 던지고, 반환을 다시 시도하지 않는다")
 	void releaseFails() {
 		given(languageModelClient.complete(any())).willThrow(new LanguageModelTimeoutException("언어 모델 응답 시간 초과"));
 		willThrow(new IllegalStateException("DB 오류")).given(aiToneUsageCommandService).release(RESERVATION);
 
 		assertErrorCode("AI504_1");
+
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
 	}
 
 	@Test
-	@DisplayName("그 밖의 예상 못 한 예외는 그대로 올라가고 반환하지 않는다")
-	void unexpectedException() {
-		given(languageModelClient.complete(any())).willThrow(new IllegalStateException("예상 못 한 오류"));
+	@DisplayName("언어 모델 호출에서 예상 못 한 런타임 예외가 나면 선점한 1회를 한 번 반환하고 원래 예외를 그대로 던진다")
+	void unexpectedExceptionFromModelClient() {
+		IllegalStateException unexpected = new IllegalStateException("예상 못 한 오류");
+		given(languageModelClient.complete(any())).willThrow(unexpected);
 
-		assertThatThrownBy(() -> service.correct(COMMAND)).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> service.correct(COMMAND)).isSameAs(unexpected);
 
-		verify(aiToneUsageCommandService, never()).release(any());
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
+	}
+
+	@Test
+	@DisplayName("결과 조립(핵심 정보 검사)에서 예외가 나면 선점한 1회를 한 번 반환하고 원래 예외를 그대로 던진다")
+	void unexpectedExceptionWhileAssemblingResult() {
+		givenModelReturns("안녕하세요. 10월 14일까지 300만 원으로 진행 가능합니다.", false);
+		IllegalArgumentException unexpected = new IllegalArgumentException("비교 실패");
+
+		try (MockedStatic<KeyInfoChecker> checker = mockStatic(KeyInfoChecker.class)) {
+			checker.when(() -> KeyInfoChecker.compare(any(), any())).thenThrow(unexpected);
+
+			assertThatThrownBy(() -> service.correct(COMMAND)).isSameAs(unexpected);
+		}
+
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
+	}
+
+	@Test
+	@DisplayName("서버 내부 오류 뒤 반환이 실패해도 원래 예외를 그대로 던진다")
+	void releaseFailsAfterUnexpectedException() {
+		IllegalStateException unexpected = new IllegalStateException("예상 못 한 오류");
+		given(languageModelClient.complete(any())).willThrow(unexpected);
+		willThrow(new IllegalStateException("DB 오류")).given(aiToneUsageCommandService).release(RESERVATION);
+
+		assertThatThrownBy(() -> service.correct(COMMAND)).isSameAs(unexpected);
+
+		verify(aiToneUsageCommandService, times(1)).release(RESERVATION);
 	}
 
 	@Test

@@ -22,13 +22,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * AI 톤 교정 (명세 22번). 1회를 먼저 잡고 언어 모델을 부른 뒤, 차단·외부 오류·시간 초과면 되돌린다.
+ * AI 톤 교정 (명세 22번). 1회를 먼저 잡고 언어 모델을 부른 뒤, 정상 결과를 돌려주지 못하면 되돌린다.
+ * 차단·외부 오류·시간 초과(BusinessException)와 서버 내부 오류(그 밖의 RuntimeException, 500) 모두 되돌린다.
+ * 반환은 {@link #correct}의 catch 한 곳에서만 하므로 한 요청에서 두 번 반환되지 않는다.
  * <p>
  * 클래스·메서드 모두 트랜잭션을 걸지 않는다 ("명령 서비스는 쓰기 메서드마다 @Transactional" 규칙의 예외).
  * 외부 호출(최대 20초) 동안 DB 커넥션을 쥐지 않도록, 선점·반환이 각자 짧은 트랜잭션으로 끝난다
  * (AiToneUsageCommandService는 호출자 트랜잭션 안에서 부르면 예외를 던진다).
  * <p>
  * 원문과 결과는 저장하지도 로그에 남기지도 않는다. 로그에는 회원 번호·문체·결과 종류·소요 시간·출력 토큰 수만 남긴다.
+ * 서버 내부 오류는 메시지에 원문이 섞일 수 있어 예외 클래스 이름만 남긴다.
  */
 @Slf4j
 @Service
@@ -46,47 +49,58 @@ public class AiToneCorrectionCommandService {
 		userQueryService.validateActive(command.userId());
 		AiToneReserveResult reservation = aiToneUsageCommandService.reserve(command.userId());
 
-		LanguageModelResult modelResult = complete(command, reservation);
-
-		String correctedText = TextWhitespace.strip(modelResult.text());
-		return new AiToneCorrectResult(correctedText, command.style(),
-			KeyInfoChecker.compare(command.text(), correctedText), usage(reservation));
+		long startedAt = System.nanoTime();
+		try {
+			LanguageModelResult modelResult = complete(command, startedAt);
+			String correctedText = TextWhitespace.strip(modelResult.text());
+			return new AiToneCorrectResult(correctedText, command.style(),
+				KeyInfoChecker.compare(command.text(), correctedText), usage(reservation));
+		} catch (RuntimeException e) {
+			// 선점 뒤 실패는 모두 여기서 한 번만 반환한다. 업무 에러는 complete()에서 이미 로그를 남겼다
+			if (!(e instanceof BusinessException)) {
+				log.error("AI 톤 교정 서버 오류 userId={} style={} elapsedMs={} exception={}", command.userId(),
+					command.style(), elapsedMillis(startedAt), e.getClass().getName());
+			}
+			release(reservation);
+			throw e;
+		}
 	}
 
-	/** 언어 모델을 부른다. 차단·외부 오류·시간 초과면 선점한 1회를 되돌리고 에러를 던진다. 반환은 이 세 경우에서만 한다. */
-	private LanguageModelResult complete(AiToneCorrectCommand command, AiToneReserveResult reservation) {
+	/**
+	 * 언어 모델을 부른다. 차단·외부 오류·시간 초과면 해당 에러 코드의 BusinessException을 던진다.
+	 * 반환은 하지 않는다 (호출한 {@link #correct}가 이 에러와 서버 내부 오류 모두에서 반환한다).
+	 */
+	private LanguageModelResult complete(AiToneCorrectCommand command, long startedAt) {
 		LanguageModelRequest request = new LanguageModelRequest(ToneCorrectionPrompt.systemPrompt(command.style()),
 			ToneCorrectionPrompt.userMessage(command.text()), MAX_OUTPUT_TOKENS);
-		long startedAt = System.nanoTime();
 		LanguageModelResult result;
 		try {
 			result = languageModelClient.complete(request);
 		} catch (LanguageModelTimeoutException e) {
 			logFailure(command, startedAt, e);
-			throw releaseAndFail(reservation, AiErrorCode.LANGUAGE_MODEL_TIMEOUT);
+			throw new BusinessException(AiErrorCode.LANGUAGE_MODEL_TIMEOUT);
 		} catch (LanguageModelException e) {
 			logFailure(command, startedAt, e);
-			throw releaseAndFail(reservation, AiErrorCode.LANGUAGE_MODEL_FAILED);
+			throw new BusinessException(AiErrorCode.LANGUAGE_MODEL_FAILED);
 		}
 
 		boolean blocked = result.refused() || ToneCorrectionPrompt.isBlocked(result.text());
 		log.info("AI 톤 교정 userId={} style={} outcome={} elapsedMs={} outputTokens={}", command.userId(),
 			command.style(), blocked ? "blocked" : "success", elapsedMillis(startedAt), result.outputTokens());
 		if (blocked) {
-			throw releaseAndFail(reservation, AiErrorCode.INAPPROPRIATE_TEXT);
+			throw new BusinessException(AiErrorCode.INAPPROPRIATE_TEXT);
 		}
 		return result;
 	}
 
-	/** 반환이 실패해도 원래 에러를 그대로 돌려준다. 로그에는 회원 번호·날짜와 예외 종류만 남긴다. */
-	private BusinessException releaseAndFail(AiToneReserveResult reservation, AiErrorCode errorCode) {
+	/** 반환이 실패해도 호출자가 원래 예외를 그대로 던진다. 로그에는 회원 번호·날짜와 예외 종류만 남긴다. */
+	private void release(AiToneReserveResult reservation) {
 		try {
 			aiToneUsageCommandService.release(reservation);
 		} catch (RuntimeException e) {
 			log.error("AI 톤 교정 사용량 반환 실패 userId={} usageDate={} exception={}", reservation.userId(),
 				reservation.usageDate(), e.getClass().getSimpleName());
 		}
-		return new BusinessException(errorCode);
 	}
 
 	// 언어 모델 예외 메시지는 상태 코드·오류 종류만 담는다 (원문·응답 본문 없음)
