@@ -4,7 +4,7 @@ import java.util.regex.Pattern;
 
 /**
  * 로컬·테스트용 가짜 언어 모델. 외부를 부르지 않고 사용자 메시지의 원문에 표시만 붙여 돌려준다.
- * 사용자 메시지가 &lt;text&gt;...&lt;/text&gt;로 감싸져 있으면 태그와 그 안쪽 앞뒤 줄바꿈을 벗긴 원문을 쓴다.
+ * 사용자 메시지가 &lt;text&gt;...&lt;/text&gt;로 감싸져 있으면 태그와 그 안쪽 앞뒤 줄바꿈을 벗긴 원문을 쓴다. 출력 토큰 수는 0이다.
  * 원문을 로그에 남기지 않는다.
  */
 public class FakeLanguageModelClient implements LanguageModelClient {
@@ -17,7 +17,7 @@ public class FakeLanguageModelClient implements LanguageModelClient {
 
 	@Override
 	public LanguageModelResult complete(LanguageModelRequest request) {
-		return new LanguageModelResult(PREFIX + unwrap(request.userText()), false);
+		return new LanguageModelResult(PREFIX + unwrap(request.userText()), false, 0);
 	}
 
 	private static String unwrap(String userText) {

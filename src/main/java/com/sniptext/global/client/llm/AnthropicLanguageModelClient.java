@@ -88,8 +88,9 @@ public class AnthropicLanguageModelClient implements LanguageModelClient {
 			throw new LanguageModelException("언어 모델 응답 없음");
 		}
 		String stopReason = response.stopReason();
+		int outputTokens = outputTokens(response);
 		if (REFUSAL.equals(stopReason)) {
-			return new LanguageModelResult(joinText(response), true);
+			return new LanguageModelResult(joinText(response), true, outputTokens);
 		}
 		if (MAX_TOKENS.equals(stopReason)) {
 			// 잘린 결과는 내보내지 않는다
@@ -105,7 +106,14 @@ public class AnthropicLanguageModelClient implements LanguageModelClient {
 		if (TextWhitespace.isBlank(text)) {
 			throw new LanguageModelException("언어 모델 응답이 빈 텍스트");
 		}
-		return new LanguageModelResult(text, false);
+		return new LanguageModelResult(text, false, outputTokens);
+	}
+
+	private static int outputTokens(MessagesResponse response) {
+		if (response.usage() == null || response.usage().outputTokens() == null) {
+			return 0;
+		}
+		return response.usage().outputTokens();
 	}
 
 	private static List<ContentBlock> textBlocks(MessagesResponse response) {
@@ -130,7 +138,12 @@ public class AnthropicLanguageModelClient implements LanguageModelClient {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
-	record MessagesResponse(List<ContentBlock> content, @JsonProperty("stop_reason") String stopReason) {
+	record MessagesResponse(List<ContentBlock> content, @JsonProperty("stop_reason") String stopReason, Usage usage) {
+	}
+
+	// 잭슨 3은 원시 타입에 값이 없으면 실패할 수 있어, 없을 수 있는 값은 Integer로 받는다
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	record Usage(@JsonProperty("output_tokens") Integer outputTokens) {
 	}
 
 	@JsonIgnoreProperties(ignoreUnknown = true)
