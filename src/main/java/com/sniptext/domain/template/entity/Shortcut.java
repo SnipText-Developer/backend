@@ -149,7 +149,11 @@ public class Shortcut {
 		return Objects.hashCode(value);
 	}
 
-	private static String normalize(String shortcut) {
+	/**
+	 * 표시용 값과 같은 방식으로 정규화한다 (NFC, 대소문자 그대로). 규칙을 어긴 입력에도 쓸 수 있다.
+	 * 단축어 확인 API가 형식이 틀린 입력도 정규화한 값으로 돌려줄 때 쓴다. null은 받지 않는다.
+	 */
+	public static String normalize(String shortcut) {
 		return Normalizer.normalize(shortcut, Normalizer.Form.NFC);
 	}
 
