@@ -101,6 +101,7 @@ domain/{도메인}/
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
+| 회원 존재 확인 | `void validateActive(Long userId)` (`UserQueryService`, 없거나 탈퇴면 `USER404_1`) | user → ai |
 
 - **다른 도메인 서비스를 조합하는 조회는 별도 서비스로 분리한다.** 예: 사용량 API는 `UserUsageQueryService`
   - 순환 참조를 막기 위해서다. 사용량 조합(template·ai 서비스 호출)을 `UserQueryService`에 넣으면, template·ai가 `UserQueryService`를 부르게 될 때 생성자 주입 순환으로 앱이 뜨지 않는다
@@ -118,7 +119,7 @@ domain/{도메인}/
   - 회원은 `User.create(email, nickname, profileImageUrl)`로 만든다. 닉네임 정리(앞뒤 공백 제거, 50자 자르기, 비면 이메일 앞부분)는 가입 서비스가 하고, `create`는 길이·필수 값만 검사한다. 테스트에서는 `UserFixture`를 쓴다
 - 롬복 허용: `@Getter`, `@NoArgsConstructor(access = PROTECTED)`, `@Builder(access = PRIVATE)`(정적 팩토리 안에서만), `@RequiredArgsConstructor`, `@Slf4j`
 - 롬복 금지: `@Setter`, `@Data`, `@AllArgsConstructor`, 엔티티의 `@ToString`·`@EqualsAndHashCode`
-- 트랜잭션: 서비스 클래스에 `@Transactional(readOnly = true)`, 쓰기 메서드에만 `@Transactional`
+- 트랜잭션: 조회 서비스(`{도메인}QueryService`)는 클래스에 `@Transactional(readOnly = true)`. 명령 서비스(`{도메인}CommandService`)는 클래스에 붙이지 않고 쓰기 메서드마다 `@Transactional` (클래스에 `readOnly`를 두면 메서드에 빠뜨렸을 때 쓰기가 읽기 전용 트랜잭션으로 실행된다)
 - 검증: 형식 검증은 요청 객체(빈 검증), 업무 규칙 검증은 서비스
 
 ## 응답·예외
@@ -190,8 +191,8 @@ domain/{도메인}/
 
 **AI 톤 교정**
 - 모든 사용자 하루 5회 (KST 날짜별 1행)
-- 요청 시 `used_count < 한도` 조건부 증가로 1회를 먼저 잡고, 외부 AI 오류·20초 타임아웃·혐오 표현 차단이면 되돌린다.
-- 출력 토큰 상한 4000을 반드시 설정한다.
+- 요청 시 `used_count < 한도` 조건부 증가로 1회를 먼저 잡고, 외부 AI 오류·20초 타임아웃·혐오 표현·욕설 차단이면 되돌린다.
+- 출력 토큰 상한 6000을 반드시 설정한다 (생각 토큰 포함. 3000자 원문 보고/공문 교정이 4000에서는 잘렸다).
 - **원문과 결과는 저장하지도, 로그에 남기지도 않는다.** 예외 로그에도 넣지 않는다.
 
 **인증**

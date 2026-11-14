@@ -12,7 +12,8 @@ import lombok.RequiredArgsConstructor;
 public enum GallerySuccessCode implements ResultCode {
 
 	GALLERY_TEMPLATES_FOUND(HttpStatus.OK, "GALLERY200_2", "갤러리 조회에 성공했습니다."),
-	GALLERY_TEMPLATE_FOUND(HttpStatus.OK, "GALLERY200_3", "갤러리 템플릿 조회에 성공했습니다.");
+	GALLERY_TEMPLATE_FOUND(HttpStatus.OK, "GALLERY200_3", "갤러리 템플릿 조회에 성공했습니다."),
+	GALLERY_TEMPLATE_SAVED(HttpStatus.CREATED, "GALLERY201_1", "내 템플릿에 저장되었습니다.");
 
 	private final HttpStatus httpStatus;
 	private final String code;
