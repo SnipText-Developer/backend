@@ -120,9 +120,29 @@ public class Template extends BaseTimeEntity {
 		this.lastUsedAt = now;
 	}
 
+	/**
+	 * 휴지통으로 옮긴다. 수정·사용 시각은 그대로 둔다.
+	 * 이미 휴지통인 템플릿에 부르면 휴지통 시각을 덮어써 30일 기한이 다시 시작되므로 막는다 (서비스가 먼저 404로 막으니 코드 실수다).
+	 */
 	public void moveToTrash(LocalDateTime now) {
 		require(now != null, "휴지통 이동 시각이 없다");
+		if (isInTrash()) {
+			throw new IllegalStateException("이미 휴지통에 있는 템플릿은 다시 옮길 수 없다");
+		}
 		this.deletedAt = now;
+	}
+
+	/**
+	 * 휴지통에서 꺼낸다. shortcut은 삭제 당시 단축어이거나, 겹쳐서 자동 번호를 붙인 단축어다 (고르는 건 서비스가 한다).
+	 * 수정·사용 시각은 삭제 전 값 그대로 둔다. 휴지통이 아닌 템플릿에 부르면 조회 조건을 빠뜨린 코드 실수다.
+	 */
+	public void restore(Shortcut shortcut) {
+		require(shortcut != null, "단축어가 없다");
+		if (!isInTrash()) {
+			throw new IllegalStateException("휴지통에 없는 템플릿은 복구할 수 없다");
+		}
+		this.shortcut = shortcut;
+		this.deletedAt = null;
 	}
 
 	public boolean isInTrash() {

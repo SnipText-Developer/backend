@@ -23,6 +23,14 @@ class TemplateErrorCodeTest {
 	}
 
 	@Test
+	@DisplayName("지원하지 않는 사용 채널은 명세의 결과 코드와 문구다")
+	void unsupportedUsageChannel() {
+		assertThat(TemplateErrorCode.USAGE_CHANNEL_UNSUPPORTED.getHttpStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(TemplateErrorCode.USAGE_CHANNEL_UNSUPPORTED.getCode()).isEqualTo("TEMPLATE400_9");
+		assertThat(TemplateErrorCode.USAGE_CHANNEL_UNSUPPORTED.getMessage()).isEqualTo("지원하지 않는 사용 채널이에요.");
+	}
+
+	@Test
 	@DisplayName("템플릿 없음과 휴지통은 명세의 결과 코드와 문구다")
 	void notFound() {
 		assertThat(TemplateErrorCode.TEMPLATE_NOT_FOUND.getHttpStatus()).isEqualTo(HttpStatus.NOT_FOUND);

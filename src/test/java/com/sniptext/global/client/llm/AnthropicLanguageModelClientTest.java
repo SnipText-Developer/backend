@@ -96,6 +96,33 @@ class AnthropicLanguageModelClientTest {
 	}
 
 	@Test
+	@DisplayName("응답의 usage.output_tokens를 출력 토큰 수로 돌려준다 (거절 응답도 같다)")
+	void outputTokens() {
+		respond(response("end_turn", 4361, "{\"type\":\"text\",\"text\":\"교정\"}"));
+		assertThat(client.complete(REQUEST).outputTokens()).isEqualTo(4361);
+
+		server.reset();
+		respond(response("refusal", 21));
+		assertThat(client.complete(REQUEST).outputTokens()).isEqualTo(21);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {
+		"{\"content\":[{\"type\":\"text\",\"text\":\"교정\"}],\"stop_reason\":\"end_turn\"}",
+		"{\"content\":[{\"type\":\"text\",\"text\":\"교정\"}],\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":1}}",
+		"{\"content\":[{\"type\":\"text\",\"text\":\"교정\"}],\"stop_reason\":\"end_turn\",\"usage\":null}"
+	})
+	@DisplayName("usage나 output_tokens가 없으면 출력 토큰 수는 0이고 결과는 정상이다")
+	void outputTokensMissing(String body) {
+		respond(body);
+
+		LanguageModelResult result = client.complete(REQUEST);
+
+		assertThat(result.text()).isEqualTo("교정");
+		assertThat(result.outputTokens()).isZero();
+	}
+
+	@Test
 	@DisplayName("stop_sequence도 정상 응답이다")
 	void stopSequence() {
 		respond(response("stop_sequence", "{\"type\":\"text\",\"text\":\"교정\"}"));
@@ -194,8 +221,12 @@ class AnthropicLanguageModelClientTest {
 	}
 
 	private static String response(String stopReason, String... blocks) {
-		return "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[%s],\"stop_reason\":\"%s\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}"
-			.formatted(String.join(",", blocks), stopReason);
+		return response(stopReason, 1, blocks);
+	}
+
+	private static String response(String stopReason, int outputTokens, String... blocks) {
+		return "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[%s],\"stop_reason\":\"%s\",\"usage\":{\"input_tokens\":1,\"output_tokens\":%d}}"
+			.formatted(String.join(",", blocks), stopReason, outputTokens);
 	}
 
 	private static AnthropicLanguageModelClient realClient(String baseUrl, Duration timeout) {
