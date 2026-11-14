@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.user.controller.dto.UserDetailResponse;
 import com.sniptext.domain.user.service.UserQueryService;
+import com.sniptext.domain.user.service.dto.result.UserDetailResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
 
@@ -24,7 +25,9 @@ public class UserController {
 
 	@GetMapping("/me")
 	public ResponseEntity<ApiResponse<UserDetailResponse>> getMe(@LoginUser Long userId) {
-		return ApiResponse.success(UserSuccessCode.USER_FOUND, UserDetailResponse.from(userQueryService.getDetail(userId)));
+		UserDetailResult result = userQueryService.getDetail(userId);
+
+		return ApiResponse.success(UserSuccessCode.USER_FOUND, UserDetailResponse.from(result));
 	}
 
 }
