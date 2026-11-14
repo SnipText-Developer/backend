@@ -5,11 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.sniptext.domain.ai.service.AiToneUsageQueryService;
 import com.sniptext.domain.template.service.TemplateQueryService;
-import com.sniptext.domain.user.exception.UserErrorCode;
-import com.sniptext.domain.user.repository.UserRepository;
 import com.sniptext.domain.user.service.dto.result.UserUsageResult;
-import com.sniptext.global.exception.BusinessException;
-import com.sniptext.global.policy.UsageLimits;
 
 import lombok.RequiredArgsConstructor;
 
@@ -22,16 +18,15 @@ import lombok.RequiredArgsConstructor;
 @Transactional(readOnly = true)
 public class UserUsageQueryService {
 
-	private final UserRepository userRepository;
+	private final UserQueryService userQueryService;
 	private final TemplateQueryService templateQueryService;
 	private final AiToneUsageQueryService aiToneUsageQueryService;
 
 	/** 없거나 탈퇴한 회원이면 USER404_1. */
 	public UserUsageResult getUsage(Long userId) {
-		if (userRepository.findByIdAndDeletedAtIsNull(userId).isEmpty()) {
-			throw new BusinessException(UserErrorCode.USER_NOT_FOUND);
-		}
-		return UserUsageResult.of(templateQueryService.countActive(userId), UsageLimits.TEMPLATE_LIMIT,
+		userQueryService.validateActive(userId);
+
+		return UserUsageResult.of(templateQueryService.countActive(userId),
 			aiToneUsageQueryService.getTodayUsage(userId));
 	}
 

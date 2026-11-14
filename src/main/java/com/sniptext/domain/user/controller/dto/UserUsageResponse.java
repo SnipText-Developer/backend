@@ -16,7 +16,7 @@ public record UserUsageResponse(TemplateUsage template, AiToneUsage aiTone) {
 			new AiToneUsage(aiTone.usedCount(), aiTone.limit(), aiTone.remaining(), aiTone.resetAt()));
 	}
 
-	public record TemplateUsage(long count, int limit, long remaining, @JsonProperty("isFull") boolean isFull) {
+	public record TemplateUsage(int count, int limit, int remaining, @JsonProperty("isFull") boolean isFull) {
 	}
 
 	public record AiToneUsage(int usedCount, int limit, int remaining, LocalDateTime resetAt) {
