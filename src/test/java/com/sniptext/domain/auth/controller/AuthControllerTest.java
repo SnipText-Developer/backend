@@ -25,9 +25,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -64,6 +67,7 @@ import tools.jackson.databind.json.JsonMapper;
  * (소셜 계정·토큰은 외래키 CASCADE로 함께 지워진다).
  */
 @Import(MutableClockConfiguration.class)
+@ExtendWith(OutputCaptureExtension.class)
 class AuthControllerTest extends IntegrationTestSupport {
 
 	private static final String LOGIN_PATH = "/api/v1/auth/login";
@@ -192,15 +196,18 @@ class AuthControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("구글 장애면 AUTH502_1이고 캐시하지 않는다")
-	void loginGoogleUnavailable() throws Exception {
+	@DisplayName("구글 장애면 AUTH502_1이고 캐시하지 않으며, 실패 사유는 로그에 남기되 인가 코드·코드 검증값은 남기지 않는다")
+	void loginGoogleUnavailable(CapturedOutput output) throws Exception {
 		given(googleAuthCodeClient.exchange(CODE, VERIFIER, REDIRECT_URI))
-			.willThrow(new GoogleLoginException("구글 토큰 교환 통신 실패"));
+			.willThrow(new GoogleLoginException("구글 토큰 교환 실패: 401 invalid_client"));
 
 		login().andExpect(status().isBadGateway())
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
 			.andExpect(jsonPath("$.code").value("AUTH502_1"))
 			.andExpect(jsonPath("$.message").value("일시적인 오류로 로그인하지 못했어요. 다시 시도해주세요."));
+
+		assertThat(output.getAll()).contains("구글 로그인 실패: 구글 토큰 교환 실패: 401 invalid_client")
+			.doesNotContain(CODE, VERIFIER);
 	}
 
 	@Test
