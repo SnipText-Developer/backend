@@ -1,5 +1,7 @@
 package com.sniptext.domain.auth.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 
@@ -9,13 +11,17 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.sniptext.domain.auth.entity.RefreshToken;
 import com.sniptext.domain.auth.entity.SocialAccount;
 import com.sniptext.domain.auth.entity.SocialProvider;
 import com.sniptext.domain.auth.exception.AuthErrorCode;
+import com.sniptext.domain.auth.repository.RefreshTokenRepository;
 import com.sniptext.domain.auth.repository.SocialAccountRepository;
 import com.sniptext.domain.auth.service.dto.command.AuthLoginCommand;
+import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthSignUpCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
+import com.sniptext.domain.auth.service.dto.result.AuthReissueResult;
 import com.sniptext.domain.auth.service.dto.result.AuthSignUpResult;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.domain.user.service.UserQueryService;
@@ -28,11 +34,13 @@ import com.sniptext.global.security.JwtTokenProvider;
 import com.sniptext.global.security.SignupTokenClaims;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 구글 로그인과 가입 완료. 클래스에 @Transactional을 붙이지 않는다.
  * 구글 호출(최대 수 초) 동안 DB 연결을 잡고 있지 않도록, DB 작업만 TransactionTemplate으로 묶는다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthCommandService {
@@ -42,6 +50,8 @@ public class AuthCommandService {
 
 	private final GoogleAuthCodeClient googleAuthCodeClient;
 	private final SocialAccountRepository socialAccountRepository;
+	private final RefreshTokenRepository refreshTokenRepository;
+	private final Clock clock;
 	private final UserCommandService userCommandService;
 	private final UserQueryService userQueryService;
 	private final RefreshTokenIssuer refreshTokenIssuer;
@@ -98,6 +108,39 @@ public class AuthCommandService {
 			}
 			throw e;
 		}
+	}
+
+	/**
+	 * 재발급 토큰을 새것으로 바꾸고 접근 토큰을 발급한다. 토큰이 없거나 모르는 값이거나 만료면 AUTH401_5.
+	 * 이미 폐기된 토큰이 다시 오거나 같은 토큰으로 동시에 오면 탈취로 보고 계보 전체를 폐기한 뒤 AUTH401_5.
+	 * 트랜잭션 안에서 예외를 던지면 계보 폐기까지 롤백되므로, 폐기를 커밋한 뒤 트랜잭션 바깥에서 던진다.
+	 * 재사용 감지는 응답이 다른 실패와 같은 AUTH401_5라 운영에서 구분할 수 있게 로그를 남긴다 (토큰 값은 넣지 않는다).
+	 */
+	public AuthReissueResult reissue(AuthReissueCommand command) {
+		RefreshToken token = findToken(command.refreshToken())
+			.orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID));
+		LocalDateTime now = LocalDateTime.now(clock);
+		if (!token.isRevoked() && token.isExpired(now)) {
+			throw new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID);
+		}
+
+		return transactionTemplate.execute(status -> {
+			if (token.isRevoked() || refreshTokenRepository.revokeIfActive(token.getId(), now) == 0) {
+				refreshTokenRepository.revokeFamily(token.getFamilyId(), now);
+				log.warn("재발급 토큰 재사용 감지로 계보 폐기: userId={}, familyId={}", token.getUserId(), token.getFamilyId());
+				return Optional.<AuthReissueResult>empty();
+			}
+			String refreshToken = refreshTokenIssuer.issueForReissue(token.getUserId(), token.getClientType(),
+				token.getFamilyId());
+			return Optional.of(new AuthReissueResult(jwtTokenProvider.issueAccessToken(token.getUserId()), refreshToken));
+		}).orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID));
+	}
+
+	private Optional<RefreshToken> findToken(String rawToken) {
+		if (rawToken == null || rawToken.isBlank()) {
+			return Optional.empty();
+		}
+		return refreshTokenRepository.findByTokenHash(RefreshTokenIssuer.hash(rawToken));
 	}
 
 	// 구글 호출 실패 원인에는 응답 내용이 들어 있을 수 있어 원인으로 붙이지 않는다
