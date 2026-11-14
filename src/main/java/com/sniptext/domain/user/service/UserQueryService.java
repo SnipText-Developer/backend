@@ -18,9 +18,14 @@ public class UserQueryService {
 
 	private final UserRepository userRepository;
 
-	/** 로그인·가입 응답에 담을 닉네임. 없거나 탈퇴한 회원이면 USER404_1. */
+	/**
+	 * 로그인·가입 응답에 담을 닉네임. 없거나 탈퇴한 회원이면 USER404_1.
+	 * 로그인·가입은 같은 트랜잭션에서 회원을 이미 읽었으므로, ID 조회(findById)로 영속성 컨텍스트의 회원을 다시 써서 조회 쿼리를 한 번 줄인다.
+	 * 조건 조회(findByIdAndDeletedAtIsNull)는 매번 쿼리가 나가므로 쓰지 않고 탈퇴 여부는 여기서 거른다.
+	 */
 	public String getNickname(Long userId) {
-		return userRepository.findByIdAndDeletedAtIsNull(userId)
+		return userRepository.findById(userId)
+			.filter(user -> user.getDeletedAt() == null)
 			.map(User::getNickname)
 			.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 	}
