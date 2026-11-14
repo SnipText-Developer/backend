@@ -3,6 +3,7 @@ package com.sniptext.domain.auth.controller;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -10,11 +11,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.auth.controller.dto.AuthLoginRequest;
 import com.sniptext.domain.auth.controller.dto.AuthLoginResponse;
+import com.sniptext.domain.auth.controller.dto.AuthReissueResponse;
 import com.sniptext.domain.auth.controller.dto.AuthSignUpRequest;
 import com.sniptext.domain.auth.controller.dto.AuthSignUpResponse;
 import com.sniptext.domain.auth.service.AuthCommandService;
 import com.sniptext.domain.auth.service.RefreshTokenIssuer;
+import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
+import com.sniptext.domain.auth.service.dto.result.AuthReissueResult;
 import com.sniptext.domain.auth.service.dto.result.AuthSignUpResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.response.ResultCode;
@@ -23,7 +27,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 로그인·가입 (로그인 불필요, 캐시 금지). 재발급 토큰은 본문이 아니라 HttpOnly·Secure 쿠키로만 내보낸다.
+ * 로그인·가입·재발급 (로그인 불필요, 캐시 금지). 재발급 토큰은 본문이 아니라 HttpOnly·Secure 쿠키로만 내보낸다.
  * 쿠키 경로를 인증 API로 좁혀 다른 API 요청에는 재발급 토큰이 실려 가지 않게 한다.
  */
 @RestController
@@ -54,6 +58,15 @@ public class AuthController {
 		AuthSignUpResult result = authCommandService.signUp(request.toCommand());
 
 		return withRefreshToken(AuthSuccessCode.SIGNED_UP, AuthSignUpResponse.from(result), result.refreshToken());
+	}
+
+	@PostMapping("/reissue")
+	public ResponseEntity<ApiResponse<AuthReissueResponse>> reissue(
+		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {
+
+		AuthReissueResult result = authCommandService.reissue(new AuthReissueCommand(refreshToken));
+
+		return withRefreshToken(AuthSuccessCode.TOKEN_REISSUED, AuthReissueResponse.from(result), result.refreshToken());
 	}
 
 	private <T> ResponseEntity<ApiResponse<T>> withRefreshToken(ResultCode resultCode, T response, String refreshToken) {
