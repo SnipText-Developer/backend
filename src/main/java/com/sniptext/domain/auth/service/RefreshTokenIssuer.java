@@ -40,9 +40,19 @@ public class RefreshTokenIssuer {
 	/** 새 로그인의 웹 재발급 토큰을 저장하고 원문을 돌려준다. 새 로그인이므로 계보(family_id)도 새로 만든다. */
 	@Transactional(propagation = Propagation.MANDATORY)
 	public String issueForNewLogin(Long userId) {
+		return issue(userId, ClientType.WEB, UUID.randomUUID().toString());
+	}
+
+	/** 재발급으로 교체할 새 토큰을 저장하고 원문을 돌려준다. 이어지는 토큰이므로 계보와 발급처는 이전 토큰과 같다. */
+	@Transactional(propagation = Propagation.MANDATORY)
+	public String issueForReissue(Long userId, ClientType clientType, String familyId) {
+		return issue(userId, clientType, familyId);
+	}
+
+	private String issue(Long userId, ClientType clientType, String familyId) {
 		String rawToken = generate();
-		refreshTokenRepository.save(RefreshToken.create(userId, ClientType.WEB, hash(rawToken),
-			UUID.randomUUID().toString(), LocalDateTime.now(clock).plus(TTL)));
+		refreshTokenRepository.save(RefreshToken.create(userId, clientType, hash(rawToken), familyId,
+			LocalDateTime.now(clock).plus(TTL)));
 		return rawToken;
 	}
 
@@ -52,7 +62,7 @@ public class RefreshTokenIssuer {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
-	private static String hash(String rawToken) {
+	static String hash(String rawToken) {
 		try {
 			byte[] digest = MessageDigest.getInstance("SHA-256").digest(rawToken.getBytes(StandardCharsets.UTF_8));
 			return HexFormat.of().formatHex(digest);

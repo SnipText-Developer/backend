@@ -16,7 +16,7 @@ class RefreshTokenTest {
 
 	private static final String HASH = RefreshTokenFixture.hash(1);
 	private static final String FAMILY_ID = RefreshTokenFixture.FAMILY_ID;
-	private static final LocalDateTime EXPIRES_AT = LocalDateTime.of(2026, 11, 8, 10, 0);
+	private static final LocalDateTime EXPIRES_AT = RefreshTokenFixture.EXPIRES_AT;
 
 	@Test
 	@DisplayName("재발급 토큰을 만들면 받은 값이 들어가고 폐기되지 않은 상태로 시작한다")
@@ -75,6 +75,14 @@ class RefreshTokenTest {
 
 		assertThat(token.isExpired(EXPIRES_AT.minusNanos(1_000))).isFalse();
 		assertThat(token.isExpired(EXPIRES_AT)).isTrue();
+	}
+
+	@Test
+	@DisplayName("만료 판단 시각이 없으면 IllegalArgumentException")
+	void expiryWithoutTime() {
+		RefreshToken token = RefreshToken.create(1L, ClientType.WEB, HASH, FAMILY_ID, EXPIRES_AT);
+
+		assertThatThrownBy(() -> token.isExpired(null)).isInstanceOf(IllegalArgumentException.class);
 	}
 
 }
