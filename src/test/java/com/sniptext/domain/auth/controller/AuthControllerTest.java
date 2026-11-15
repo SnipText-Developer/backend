@@ -352,6 +352,20 @@ class AuthControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("다른 구글 계정이 같은 이메일로 가입하면 AUTH409_1이고 회원을 만들지 않으며 이메일을 로그에 남기지 않는다")
+	void signUpSameEmailOtherAccount(CapturedOutput output) throws Exception {
+		signedUpUser(EMAIL, "other-google-sub");
+
+		signUp(signupToken(), true).andExpect(status().isConflict())
+			.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+			.andExpect(jsonPath("$.code").value("AUTH409_1"));
+
+		assertThat(userRepository.count()).isEqualTo(1);
+		assertThat(socialAccountRepository.count()).isEqualTo(1);
+		assertThat(output.getOut()).doesNotContain(EMAIL);
+	}
+
+	@Test
 	@DisplayName("소셜 계정 저장이 유니크 위반이면 AUTH409_1이고 먼저 저장한 회원·약관도 함께 취소된다")
 	void signUpRollsBackTogether() throws Exception {
 		signedUpUser("other@gmail.com", SUB);
