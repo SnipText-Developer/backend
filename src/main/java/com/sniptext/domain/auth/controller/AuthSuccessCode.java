@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum AuthSuccessCode implements ResultCode {
 
+	LOGGED_OUT(HttpStatus.OK, "AUTH200_1", "로그아웃되었습니다."),
 	LOGGED_IN(HttpStatus.OK, "AUTH200_2", "로그인에 성공했습니다."),
 	TOKEN_REISSUED(HttpStatus.OK, "AUTH200_3", "토큰이 재발급되었습니다."),
 	SIGNED_UP(HttpStatus.CREATED, "AUTH201_1", "회원가입이 완료되었습니다.");
