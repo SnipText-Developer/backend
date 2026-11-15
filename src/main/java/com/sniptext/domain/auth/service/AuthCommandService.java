@@ -18,6 +18,7 @@ import com.sniptext.domain.auth.exception.AuthErrorCode;
 import com.sniptext.domain.auth.repository.RefreshTokenRepository;
 import com.sniptext.domain.auth.repository.SocialAccountRepository;
 import com.sniptext.domain.auth.service.dto.command.AuthLoginCommand;
+import com.sniptext.domain.auth.service.dto.command.AuthLogoutCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthSignUpCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
@@ -134,6 +135,16 @@ public class AuthCommandService {
 				token.getFamilyId());
 			return Optional.of(new AuthReissueResult(jwtTokenProvider.issueAccessToken(token.getUserId()), refreshToken));
 		}).orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID));
+	}
+
+	/**
+	 * 쿠키의 재발급 토큰으로 회원을 찾아 그 회원의 재발급 토큰을 웹·확장 모두 폐기한다.
+	 * 쿠키가 없거나 모르는 토큰이면 폐기할 것이 없으므로 그대로 성공이다 (명세 4번).
+	 * 만료·폐기된 토큰이어도 누구의 토큰인지는 알 수 있으므로, 사용자가 로그아웃을 눌렀다면 그 회원의 토큰을 모두 폐기한다.
+	 */
+	public void logout(AuthLogoutCommand command) {
+		findToken(command.refreshToken()).ifPresent(token -> transactionTemplate.executeWithoutResult(status ->
+			refreshTokenRepository.revokeAllByUserId(token.getUserId(), LocalDateTime.now(clock))));
 	}
 
 	private Optional<RefreshToken> findToken(String rawToken) {
