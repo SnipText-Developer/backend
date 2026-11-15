@@ -100,6 +100,8 @@ domain/{도메인}/
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
+| 로그인 시각 기록 | `void recordLogin(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → auth |
+| 닉네임 조회 | `String getNickname(Long userId)` (`UserQueryService`) | user → auth |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
 | 회원 존재 확인 | `void validateActive(Long userId)` (`UserQueryService`, 없거나 탈퇴면 `USER404_1`) | user → ai |
 
