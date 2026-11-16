@@ -135,7 +135,8 @@ sequenceDiagram
 - **선택지**: 테라폼 변수로 값 넣기 / Secrets Manager / 파라미터 저장소 + 사람이 값 입력 / 쓰기 전용 인자
 - **고른 것**
   - DB 마스터 비밀번호: 테라폼 **임시(ephemeral) 난수 → RDS `password_wo`, SSM `value_wo`(`DB_MASTER_PASSWORD`)** 쓰기 전용 인자. 상태 파일에 값이 남지 않는다. 바꿀 때는 버전 숫자를 올린다. 앱은 이 값을 쓰지 않는다(`deploy.sh`가 `.env`로 옮기지 않음).
-  - 그 밖의 비밀(앱 DB 비밀번호, JWT 서명 키, 본문 암호화 키, 구글 클라이언트 비밀, AI 키): 테라폼은 SecureString 자리를 `CHANGE_ME`로 만들고 `ignore_changes = [value]`. 실제 값은 사람이 `aws ssm put-parameter --overwrite`로 넣는다. `deploy.sh`는 `CHANGE_ME`가 남아 있으면 기동하지 않는다.
+  - 그 밖의 비밀(앱 DB 비밀번호, JWT 서명 키, 본문 암호화 키, 구글 클라이언트 비밀, AI 키): 테라폼은 SecureString 자리를 **쓰기 전용 인자(`value_wo = "CHANGE_ME"`)**로 만든다. 실제 값은 사람이 `aws ssm put-parameter --overwrite`로 넣는다. `deploy.sh`는 `CHANGE_ME`가 남아 있으면 기동하지 않는다.
+    - 처음 생각한 `value` + `ignore_changes = [value]`는 쓰지 않는다. 공급자가 refresh 때 실제 값을 복호화해 상태 파일에 적기 때문이다(#91에서 공급자 코드로 확인). `value_wo`는 상태에 값을 남기지 않고, 버전 숫자를 올리지 않는 한 사람이 넣은 값을 덮지 않는다.
   - 비밀이 아닌 설정은 테라폼이 값까지 넣는다.
 - **대가**: 쓰기 전용 인자는 테라폼 1.11 이상, AWS 공급자 6.x가 필요하다. 사람 손이 한 번 들어간다. RDS 관리형 마스터 비밀번호(Secrets Manager)는 7일마다 자동 교체되어 실행 중인 앱이 접속을 잃을 수 있고 비밀 하나당 월 $0.4가 붙어 고르지 않았다.
 

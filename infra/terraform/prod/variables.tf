@@ -50,3 +50,83 @@ variable "deploy_file_retention_days" {
   type        = number
   default     = 90
 }
+
+# ---------- DB (#91) ----------
+variable "db_instance_class" {
+  description = "RDS 인스턴스 크기"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_allocated_storage_gb" {
+  description = "RDS 저장소 크기(GB, gp3)"
+  type        = number
+  default     = 20
+}
+
+variable "db_backup_retention_days" {
+  description = "RDS 자동 백업 보존 기간(일). 이 기간 안의 시점으로 복구할 수 있다"
+  type        = number
+  default     = 7
+}
+
+variable "db_master_username" {
+  description = "RDS 마스터 계정 이름. 관리 작업 전용이고 앱은 쓰지 않는다"
+  type        = string
+  default     = "sniptext_admin"
+}
+
+variable "db_master_password_version" {
+  description = "마스터 비밀번호 버전. 올리면 새 난수로 RDS와 DB_MASTER_PASSWORD 파라미터를 함께 바꾼다"
+  type        = number
+  default     = 1
+}
+
+variable "app_db_schema" {
+  description = "앱이 쓰는 스키마. 출시 전 sniptext_dev, 출시 후 sniptext (설계 문서 7절)"
+  type        = string
+  default     = "sniptext_dev"
+}
+
+variable "app_db_username" {
+  description = "앱 전용 DB 계정 (sql/create_app_user.sql로 만든다)"
+  type        = string
+  default     = "sniptext_app"
+}
+
+# ---------- 앱 설정 파라미터 (#91) ----------
+variable "spring_profile" {
+  description = "SPRING_PROFILES_ACTIVE. 출시 전 dev, 출시 후 prod"
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "prod"], var.spring_profile)
+    error_message = "spring_profile은 dev 또는 prod여야 합니다."
+  }
+}
+
+variable "google_client_id" {
+  description = "구글 OAuth 클라이언트 ID (비밀 아님). terraform.tfvars로 넣는다"
+  type        = string
+
+  validation {
+    condition     = endswith(var.google_client_id, ".apps.googleusercontent.com")
+    error_message = "google_client_id는 .apps.googleusercontent.com으로 끝나야 합니다."
+  }
+}
+
+variable "google_redirect_uris" {
+  description = "허용할 구글 로그인 redirectUri 목록. 출시 전 값(설계 문서 4-10). 출시 때 sniptext.kr만 남긴다"
+  type        = list(string)
+  default = [
+    "https://sniptext.kr/auth/google/callback",
+    "http://localhost:5173/auth/google/callback",
+  ]
+}
+
+variable "ai_model" {
+  description = "AI 톤 교정에 쓸 Anthropic 모델 ID"
+  type        = string
+  default     = "claude-haiku-5-5"
+}
