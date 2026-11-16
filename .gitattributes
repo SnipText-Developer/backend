@@ -1,3 +1,5 @@
 /gradlew text eol=lf
+# 리눅스 서버에서 실행되는 스크립트 (CRLF면 bash가 실패한다)
+*.sh text eol=lf
 *.bat text eol=crlf
 *.jar binary
