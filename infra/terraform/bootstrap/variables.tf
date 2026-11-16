@@ -1,7 +1,14 @@
 variable "region" {
-  description = "AWS 리전"
+  description = "AWS 리전. backend 블록에는 변수를 쓸 수 없어 versions.tf의 backend region과 같은 값만 허용한다"
   type        = string
   default     = "ap-northeast-2"
+
+  # 다른 리전에 버킷을 만들면 backend가 서울에서 버킷을 찾아 상태 이전이 실패한다.
+  # 리전을 바꾸려면 이 검증과 versions.tf의 backend region을 함께 바꾼다
+  validation {
+    condition     = var.region == "ap-northeast-2"
+    error_message = "region은 versions.tf의 backend region(ap-northeast-2)과 같아야 합니다. 바꾸려면 둘을 함께 바꾸세요."
+  }
 }
 
 variable "budget_limit_usd" {
