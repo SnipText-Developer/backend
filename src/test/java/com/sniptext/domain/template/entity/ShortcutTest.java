@@ -156,4 +156,19 @@ class ShortcutTest {
 		assertThat(Shortcut.create("/Quote")).isNotEqualTo(Shortcut.create("/quote"));
 	}
 
+	@Test
+	@DisplayName("표시용 정규화는 규칙을 어긴 입력도 NFC로 합치기만 하고 대소문자·공백은 그대로 둔다")
+	void normalizeKeepsInvalidInput() {
+		assertThat(Shortcut.normalize(nfd(" /견적 Quote"))).isEqualTo(" /견적 Quote");
+		assertThat(Shortcut.normalize("")).isEmpty();
+	}
+
+	@Test
+	@DisplayName("규칙을 지킨 입력의 표시용 정규화 결과는 만든 단축어의 표시용 값과 같다")
+	void normalizeMatchesValue() {
+		String input = nfd("/견적Quote");
+
+		assertThat(Shortcut.normalize(input)).isEqualTo(Shortcut.create(input).getValue());
+	}
+
 }
