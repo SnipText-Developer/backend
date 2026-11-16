@@ -14,6 +14,7 @@ locals {
     API_DOMAIN             = local.api_fqdn
     GOOGLE_CLIENT_ID       = var.google_client_id
     GOOGLE_REDIRECT_URIS   = join(",", var.google_redirect_uris)
+    AUTH_COOKIE_SAME_SITE  = var.auth_cookie_same_site
     AI_PROVIDER            = "anthropic"
     AI_MODEL               = var.ai_model
   }

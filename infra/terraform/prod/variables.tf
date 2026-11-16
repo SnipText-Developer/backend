@@ -125,6 +125,17 @@ variable "google_redirect_uris" {
   ]
 }
 
+variable "auth_cookie_same_site" {
+  description = "재발급 토큰 쿠키 SameSite. 출시 전 None(로컬 화면 → 서버가 다른 사이트), 출시 후 Lax (설계 문서 4-10)"
+  type        = string
+  default     = "None"
+
+  validation {
+    condition     = contains(["None", "Lax", "Strict"], var.auth_cookie_same_site)
+    error_message = "auth_cookie_same_site는 None, Lax, Strict 중 하나여야 합니다."
+  }
+}
+
 variable "ai_model" {
   description = "AI 톤 교정에 쓸 Anthropic 모델 ID"
   type        = string

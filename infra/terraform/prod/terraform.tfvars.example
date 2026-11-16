@@ -21,5 +21,6 @@ app_db_username            = "sniptext_app"
 # 앱 설정 (#91). google_client_id는 기본값이 없어 반드시 넣는다
 spring_profile       = "dev"
 google_client_id     = "000000000000-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
-google_redirect_uris = ["https://sniptext.kr/auth/google/callback", "http://localhost:5173/auth/google/callback"]
-ai_model             = "claude-haiku-5-5"
+google_redirect_uris  = ["https://sniptext.kr/auth/google/callback", "http://localhost:5173/auth/google/callback"]
+auth_cookie_same_site = "None" # 출시 후 Lax
+ai_model              = "claude-haiku-5-5"

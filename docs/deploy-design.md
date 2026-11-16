@@ -212,6 +212,7 @@ sequenceDiagram
 | `GOOGLE_CLIENT_ID` | 전체 | 일반 | 테라폼(변수) | |
 | `GOOGLE_CLIENT_SECRET` | 전체 | SecureString | 사람 | |
 | `GOOGLE_REDIRECT_URIS` | 전체 | 일반 | 테라폼(변수) | 프로필별 값은 4-10 표 |
+| `AUTH_COOKIE_SAME_SITE` | 전체 | 일반 | 테라폼(변수) | 재발급 토큰 쿠키 `SameSite`. 4-10 표 (출시 전 `None`, 출시 후 `Lax`) |
 | `AI_PROVIDER` | 전체 | 일반 | 테라폼 | prod에서는 `fake` 불가 |
 | `AI_MODEL` | 전체 | 일반 | 테라폼(변수) | |
 | `AI_API_KEY` | 전체 | SecureString | 사람 | |
@@ -263,7 +264,7 @@ sequenceDiagram
 1. 배포 전 RDS 스냅샷을 만든다.
 2. RDS에 새 스키마 `sniptext`를 만들고 `sniptext_app`에 같은 권한을 준다(SSM 포트 포워딩, 마스터 계정).
 3. 새 `JWT_SECRET`·`CONTENT_ENCRYPTION_KEY`를 만들어 파라미터에 넣는다. **출시 전 값과 다르게** 한다(개발 중 발급된 토큰이 운영에서 통하지 않게, 개발 데이터 키와 섞이지 않게). 본문 키는 따로 안전하게 보관한다.
-4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
+4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`·`AUTH_COOKIE_SAME_SITE`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
 5. 현재 커밋 해시로 배포 워크플로를 다시 실행한다. 빈 스키마에 플라이웨이가 `db/migration`만 적용한다(시드 없음).
 6. 확인: `/actuator/health` UP, 스웨거 꺼짐, `dev-token` 경로 없음(404 또는 401), `localhost` 출처 거절, 구글 로그인 → 가입 → 템플릿 생성, 로그에 비밀값·본문 없음.
 7. GitHub 환경 `prod`에 승인자를 켠다(4-14).
