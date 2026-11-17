@@ -6,8 +6,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.user.controller.dto.UserDetailResponse;
+import com.sniptext.domain.user.controller.dto.UserUsageResponse;
 import com.sniptext.domain.user.service.UserQueryService;
+import com.sniptext.domain.user.service.UserUsageQueryService;
 import com.sniptext.domain.user.service.dto.result.UserDetailResult;
+import com.sniptext.domain.user.service.dto.result.UserUsageResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
 
@@ -22,12 +25,20 @@ import lombok.RequiredArgsConstructor;
 public class UserController {
 
 	private final UserQueryService userQueryService;
+	private final UserUsageQueryService userUsageQueryService;
 
 	@GetMapping("/me")
 	public ResponseEntity<ApiResponse<UserDetailResponse>> getMe(@LoginUser Long userId) {
 		UserDetailResult result = userQueryService.getDetail(userId);
 
 		return ApiResponse.success(UserSuccessCode.USER_FOUND, UserDetailResponse.from(result));
+	}
+
+	@GetMapping("/me/usage")
+	public ResponseEntity<ApiResponse<UserUsageResponse>> getUsage(@LoginUser Long userId) {
+		UserUsageResult result = userUsageQueryService.getUsage(userId);
+
+		return ApiResponse.success(UserSuccessCode.USAGE_FOUND, UserUsageResponse.from(result));
 	}
 
 }

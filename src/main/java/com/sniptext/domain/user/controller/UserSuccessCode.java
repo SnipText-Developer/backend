@@ -11,7 +11,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum UserSuccessCode implements ResultCode {
 
-	USER_FOUND(HttpStatus.OK, "USER200_1", "내 정보 조회에 성공했습니다.");
+	USER_FOUND(HttpStatus.OK, "USER200_1", "내 정보 조회에 성공했습니다."),
+	USAGE_FOUND(HttpStatus.OK, "USER200_2", "사용량 조회에 성공했습니다.");
 
 	private final HttpStatus httpStatus;
 	private final String code;
