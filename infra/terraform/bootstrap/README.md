@@ -36,6 +36,23 @@ terraform plan -out tfplan      # 결과 확인. 삭제·교체가 있으면 멈
 terraform apply tfplan
 ```
 
+맥·리눅스(bash)
+
+```bash
+cd infra/terraform/bootstrap
+
+eval "$(aws configure export-credentials --profile sniptext --format env)"
+export AWS_REGION=ap-northeast-2
+export TF_VAR_budget_email="받을주소@example.com"   # 셸 설정 파일에 있으면 생략
+
+acct=$(aws sts get-caller-identity --query Account --output text)
+terraform init -backend-config="bucket=sniptext-tfstate-$acct"
+terraform fmt -check
+terraform validate
+terraform plan -out tfplan
+terraform apply tfplan
+```
+
 ## 새 계정에서 처음 만들 때
 
 버킷이 아직 없어 S3 backend로 시작할 수 없다. 로컬 상태로 만든 뒤 버킷으로 옮긴다.
@@ -58,8 +75,33 @@ terraform plan                  # 변경 없음이 나와야 한다
 Remove-Item terraform.tfstate, terraform.tfstate.backup, tfplan
 ```
 
+맥·리눅스(bash)
+
+```bash
+# 1)
+echo 'terraform { backend "local" {} }' > backend_override.tf
+terraform init
+terraform plan -out tfplan
+terraform apply tfplan
+
+# 2)
+rm backend_override.tf
+acct=$(aws sts get-caller-identity --query Account --output text)
+terraform init -migrate-state -backend-config="bucket=sniptext-tfstate-$acct"
+terraform state list
+terraform plan
+
+# 3)
+rm terraform.tfstate terraform.tfstate.backup tfplan
+```
+
 apply 뒤 할 일
 - 예산 경보는 구독 확인 메일이 오지 않는다. 콘솔 **Budgets**에서 `sniptext-monthly`의 알림 3개와 메일 주소를 확인하고, `no-reply@budgets.amazonaws.com`이 스팸으로 가지 않게 허용해 둔다.
+- 메일이 실제로 오는지는 한도를 이번 달 사용액보다 낮게 잠깐 바꿔 확인한다. 파일은 고치지 않는다.
+  1. `terraform apply "-var=budget_limit_usd=10"` (bash는 `-var=budget_limit_usd=10`)
+  2. 몇 시간 안에 실제 80%·100% 메일이 오는지 확인 (Budgets는 하루 몇 차례 집계한다)
+  3. `terraform apply`로 원래 한도($60)로 되돌린다
+  - 이번 달은 이미 보낸 알림이 다시 오지 않을 수 있다. 다음 달부터 정상으로 돌아온다.
 
 ## 본체에서 쓰는 법 (#90~)
 
