@@ -345,7 +345,7 @@ sequenceDiagram
 | --- | --- | --- |
 | 루트 계정 2단계 인증, 결제 수단 확인 | 시작 전 | #89 |
 | bootstrap 최초 실행용 관리자 자격 준비: IAM 사용자 `sniptext-admin`(MFA, 접근 키 없음) + `aws login` 임시 자격. IAM Identity Center는 권한 세트에 AWS Organizations가 필요해 쓰지 않는다(10절) | 시작 전 | #89 |
-| 예산 경보 알림 확인: 구독 확인 메일은 오지 않는다. 콘솔 Budgets에서 알림 3개·메일 주소를 확인하고 `no-reply@budgets.amazonaws.com`을 스팸 허용. 수신 확인은 한도를 잠깐 낮춰 apply했다가 되돌린다(README) | bootstrap 후 | #89 |
+| 예산 경보 받는 주소 인증: AWS User Notifications → 전송 채널 → 이메일에서 "활성"으로 만든다(인증 전에는 경보 메일이 오지 않는다). 발신 주소 `budgets@costalerts.amazonaws.com` 스팸 허용. 수신 확인은 한도를 잠깐 낮춰 apply했다가 되돌린다(README) | bootstrap 후 | #89 |
 | 가비아 `sniptext.kr` 네임서버를 Route 53 4개로 변경 | 호스팅 영역 생성 후 | #90 |
 | 앱 전용 DB 계정 `sniptext_app`·스키마 `sniptext_dev` 생성(SSM 포트 포워딩) | RDS 생성 후 | #91 |
 | SecureString 실제 값 입력(앱 DB 비밀번호, JWT, 본문 키, 구글 비밀, AI 키), 본문 키 별도 보관 | RDS·파라미터 생성 후 | #91 |

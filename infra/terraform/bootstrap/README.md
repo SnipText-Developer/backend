@@ -96,12 +96,14 @@ rm terraform.tfstate terraform.tfstate.backup tfplan
 ```
 
 apply 뒤 할 일
-- 예산 경보는 구독 확인 메일이 오지 않는다. 콘솔 **Budgets**에서 `sniptext-monthly`의 알림 3개와 메일 주소를 확인하고, `no-reply@budgets.amazonaws.com`이 스팸으로 가지 않게 허용해 둔다.
+- **받는 주소를 인증해야 경보 메일이 온다.** 인증 전에는 알림이 발동(ALARM)해도 메일이 오지 않는다(2026-11 확인). 콘솔 **AWS User Notifications → 전송 채널 → 이메일**에서 해당 주소가 "대기 중"이면 **확인 재전송** → 받은 메일의 **Verify email**(콘솔에 로그인된 브라우저에서) → 상태가 "활성"인지 확인한다. 인증 메일은 스팸함으로 갈 수 있다.
+- 경보 메일 발신 주소 `budgets@costalerts.amazonaws.com`이 스팸으로 가지 않게 허용해 둔다. 네이버 메일로는 인증 전 시험에서 받지 못해 지메일을 쓴다.
 - 메일이 실제로 오는지는 한도를 이번 달 사용액보다 낮게 잠깐 바꿔 확인한다. 파일은 고치지 않는다.
   1. `terraform apply "-var=budget_limit_usd=10"` (bash는 `-var=budget_limit_usd=10`)
-  2. 몇 시간 안에 실제 80%·100% 메일이 오는지 확인 (Budgets는 하루 몇 차례 집계한다)
-  3. `terraform apply`로 원래 한도($60)로 되돌린다
-  - 이번 달은 이미 보낸 알림이 다시 오지 않을 수 있다. 다음 달부터 정상으로 돌아온다.
+  2. 알림 상태는 apply 직후 ALARM이 되고, 인증된 주소라면 몇 분 안에 메일이 온다
+     (`aws budgets describe-notifications-for-budget --account-id <계정 ID> --budget-name sniptext-monthly`로 상태 확인)
+  3. `terraform apply`로 원래 한도($60)로 되돌린다. 상태는 바로 OK로 돌아와 이후 경보도 정상으로 온다
+  - 다시 시험하려면 한도를 올렸다가(OK) 다시 낮춘다(ALARM). 알림은 상태가 바뀔 때 한 번만 보낸다.
 
 ## 본체에서 쓰는 법 (#90~)
 
