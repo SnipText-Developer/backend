@@ -1,0 +1,20 @@
+# 이미지 빌드에 필요한 것만 보낸다 (gradlew, gradle/, settings.gradle, build.gradle, src/)
+.git
+.github
+.gradle
+.idea
+.vscode
+.claude
+build
+out
+bin
+docs
+infra
+deploy
+*.md
+*.iml
+.env
+.env.*
+compose*.yaml
+Dockerfile
+.dockerignore

@@ -23,9 +23,11 @@ import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
 import com.sniptext.domain.auth.service.dto.result.AuthReissueResult;
 import com.sniptext.domain.auth.service.dto.result.AuthSignUpResult;
+import com.sniptext.global.exception.BusinessException;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.response.ResultCode;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
@@ -63,11 +65,21 @@ public class AuthController {
 		return withRefreshToken(AuthSuccessCode.SIGNED_UP, AuthSignUpResponse.from(result), result.refreshToken());
 	}
 
+	/**
+	 * 실패하면 응답은 전역 예외 처리가 만들고, 여기서는 다시 쓸 수 없는 쿠키를 지우는 헤더만 붙인다.
+	 * 지우지 않으면 브라우저가 14일 동안 같은 쿠키로 새로고침마다 재발급을 다시 시도한다.
+	 */
 	@PostMapping("/reissue")
 	public ResponseEntity<ApiResponse<AuthReissueResponse>> reissue(
-		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {
+		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken, HttpServletResponse servletResponse) {
 
-		AuthReissueResult result = authCommandService.reissue(new AuthReissueCommand(refreshToken));
+		AuthReissueResult result;
+		try {
+			result = authCommandService.reissue(new AuthReissueCommand(refreshToken));
+		} catch (BusinessException e) {
+			servletResponse.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookie("", Duration.ZERO).toString());
+			throw e;
+		}
 
 		return withRefreshToken(AuthSuccessCode.TOKEN_REISSUED, AuthReissueResponse.from(result), result.refreshToken());
 	}

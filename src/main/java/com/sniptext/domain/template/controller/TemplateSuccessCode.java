@@ -11,8 +11,12 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum TemplateSuccessCode implements ResultCode {
 
+	TEMPLATE_LIST_FOUND(HttpStatus.OK, "TEMPLATE200_1", "템플릿 목록 조회에 성공했습니다."),
 	TEMPLATE_FOUND(HttpStatus.OK, "TEMPLATE200_2", "템플릿 조회에 성공했습니다."),
 	TEMPLATE_UPDATED(HttpStatus.OK, "TEMPLATE200_3", "수정 내용이 저장되었습니다."),
+	TEMPLATE_DELETED(HttpStatus.OK, "TEMPLATE200_4", "템플릿을 휴지통으로 옮겼습니다."),
+	SHORTCUT_AVAILABILITY_CHECKED(HttpStatus.OK, "TEMPLATE200_5", "단축어 확인에 성공했습니다."),
+	TEMPLATE_USAGE_RECORDED(HttpStatus.OK, "TEMPLATE200_6", "사용 기록이 저장되었습니다."),
 	TEMPLATE_CREATED(HttpStatus.CREATED, "TEMPLATE201_1", "템플릿이 저장되었습니다.");
 
 	private final HttpStatus httpStatus;

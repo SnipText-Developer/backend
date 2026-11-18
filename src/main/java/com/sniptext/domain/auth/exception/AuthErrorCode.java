@@ -21,7 +21,7 @@ public enum AuthErrorCode implements ResultCode {
 	SIGNUP_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH401_4", "가입 시간이 지났어요. 다시 로그인해주세요."),
 	/** 재발급 토큰 없음·만료·폐기, 이미 쓴 토큰 재사용 감지(계보 전체 폐기) */
 	REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AUTH401_5", "다시 로그인해주세요."),
-	/** 같은 구글 계정으로 가입 완료 요청이 두 번 들어옴 */
+	/** 같은 구글 계정으로 가입 완료 요청이 두 번 들어옴, 또는 같은 이메일로 가입된 회원이 이미 있음 */
 	ALREADY_SIGNED_UP(HttpStatus.CONFLICT, "AUTH409_1", "이미 가입된 계정이에요."),
 	/** 구글 장애·연결 실패·시간 초과 */
 	GOOGLE_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "AUTH502_1", "일시적인 오류로 로그인하지 못했어요. 다시 시도해주세요.");

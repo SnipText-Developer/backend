@@ -1,25 +1,38 @@
 package com.sniptext.domain.template.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.template.controller.dto.TemplateCreateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateCreateResponse;
+import com.sniptext.domain.template.controller.dto.TemplateDeleteResponse;
 import com.sniptext.domain.template.controller.dto.TemplateDetailResponse;
+import com.sniptext.domain.template.controller.dto.TemplateListResponse;
+import com.sniptext.domain.template.controller.dto.TemplateShortcutAvailabilityResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateResponse;
+import com.sniptext.domain.template.controller.dto.TemplateUsageRequest;
+import com.sniptext.domain.template.controller.dto.TemplateUsageResponse;
 import com.sniptext.domain.template.service.TemplateCommandService;
 import com.sniptext.domain.template.service.TemplateQueryService;
+import com.sniptext.domain.template.service.dto.command.TemplateDeleteCommand;
 import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
+import com.sniptext.domain.template.service.dto.query.TemplateShortcutAvailabilityQuery;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateDeleteResult;
 import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
+import com.sniptext.domain.template.service.dto.result.TemplateListResult;
+import com.sniptext.domain.template.service.dto.result.TemplateShortcutAvailabilityResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
+import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.security.LoginUser;
 
@@ -36,6 +49,13 @@ public class TemplateController {
 
 	private final TemplateCommandService templateCommandService;
 	private final TemplateQueryService templateQueryService;
+
+	@GetMapping
+	public ResponseEntity<ApiResponse<TemplateListResponse>> getTemplates(@LoginUser Long userId) {
+		TemplateListResult result = templateQueryService.getTemplates(userId);
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_LIST_FOUND, TemplateListResponse.from(result));
+	}
 
 	@GetMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateDetailResponse>> getTemplate(
@@ -66,6 +86,44 @@ public class TemplateController {
 		TemplateUpdateResult result = templateCommandService.update(request.toCommand(userId, templateId));
 
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_UPDATED, TemplateUpdateResponse.from(result));
+	}
+
+	@DeleteMapping("/{templateId}")
+	public ResponseEntity<ApiResponse<TemplateDeleteResponse>> deleteTemplate(
+		@LoginUser Long userId,
+		@PathVariable Long templateId) {
+
+		TemplateDeleteResult result = templateCommandService.delete(new TemplateDeleteCommand(userId, templateId));
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_DELETED, TemplateDeleteResponse.from(result));
+	}
+
+	/**
+	 * 단축어 확인. 형식 오류·예약어·중복도 200 + reason이라 shortcut에 검증 어노테이션을 붙이지 않는다.
+	 * shortcut 파라미터가 없거나 excludeTemplateId가 숫자가 아니면 스프링이 COMMON400_1로 응답한다.
+	 */
+	@GetMapping("/shortcuts/availability")
+	public ResponseEntity<ApiResponse<TemplateShortcutAvailabilityResponse>> checkShortcutAvailability(
+		@LoginUser Long userId,
+		@RequestParam String shortcut,
+		@RequestParam(required = false) Long excludeTemplateId) {
+
+		TemplateShortcutAvailabilityResult result = templateQueryService.checkShortcutAvailability(
+			new TemplateShortcutAvailabilityQuery(userId, shortcut, excludeTemplateId));
+
+		return ApiResponse.success(TemplateSuccessCode.SHORTCUT_AVAILABILITY_CHECKED,
+			TemplateShortcutAvailabilityResponse.from(result));
+	}
+
+	@PostMapping("/{templateId}/usages")
+	public ResponseEntity<ApiResponse<TemplateUsageResponse>> recordUsage(
+		@LoginUser Long userId,
+		@PathVariable Long templateId,
+		@Valid @RequestBody TemplateUsageRequest request) {
+
+		TemplateUsageResult result = templateCommandService.recordUsage(request.toCommand(userId, templateId));
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_USAGE_RECORDED, TemplateUsageResponse.from(result));
 	}
 
 }

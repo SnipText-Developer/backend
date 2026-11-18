@@ -208,15 +208,18 @@ class AuthControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("구글 장애면 AUTH502_1이고 캐시하지 않는다")
-	void loginGoogleUnavailable() throws Exception {
+	@DisplayName("구글 장애면 AUTH502_1이고 캐시하지 않으며, 실패 사유는 로그에 남기되 인가 코드·코드 검증값은 남기지 않는다")
+	void loginGoogleUnavailable(CapturedOutput output) throws Exception {
 		given(googleAuthCodeClient.exchange(CODE, VERIFIER, REDIRECT_URI))
-			.willThrow(new GoogleLoginException("구글 토큰 교환 통신 실패"));
+			.willThrow(new GoogleLoginException("구글 토큰 교환 실패: 401 invalid_client"));
 
 		login().andExpect(status().isBadGateway())
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
 			.andExpect(jsonPath("$.code").value("AUTH502_1"))
 			.andExpect(jsonPath("$.message").value("일시적인 오류로 로그인하지 못했어요. 다시 시도해주세요."));
+
+		assertThat(output.getAll()).contains("구글 로그인 실패: 구글 토큰 교환 실패: 401 invalid_client")
+			.doesNotContain(CODE, VERIFIER);
 	}
 
 	@Test
