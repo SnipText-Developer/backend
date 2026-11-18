@@ -126,6 +126,19 @@ class TrashTemplateRepositoryTest extends IntegrationTestSupport {
 		assertThat(templateRepository.countByUserIdAndDeletedAtIsNotNull(userId)).isEqualTo(2L);
 	}
 
+	@Test
+	@DisplayName("복구용 잠금 조회는 본인 휴지통 템플릿만 찾는다")
+	void findTrashedForUpdate() {
+		Long mine = saveTrashed(userId, "/가나", DELETED_AT);
+		Long others = saveTrashed(otherUserId, "/다라", DELETED_AT);
+		Long active = templateRepository.saveAndFlush(TemplateFixture.template(userId, "/활성")).getId();
+
+		assertThat(templateRepository.findTrashedByIdAndUserIdForUpdate(mine, userId))
+			.hasValueSatisfying(template -> assertThat(template.getId()).isEqualTo(mine));
+		assertThat(templateRepository.findTrashedByIdAndUserIdForUpdate(others, userId)).isEmpty();
+		assertThat(templateRepository.findTrashedByIdAndUserIdForUpdate(active, userId)).isEmpty();
+	}
+
 	private Long saveTrashed(Long ownerId, String shortcut, LocalDateTime deletedAt) {
 		return templateRepository.saveAndFlush(TemplateFixture.trashedTemplate(ownerId, shortcut, deletedAt)).getId();
 	}

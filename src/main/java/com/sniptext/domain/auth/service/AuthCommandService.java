@@ -143,12 +143,14 @@ public class AuthCommandService {
 		return refreshTokenRepository.findByTokenHash(RefreshTokenIssuer.hash(rawToken));
 	}
 
-	// 구글 호출 실패 원인에는 응답 내용이 들어 있을 수 있어 원인으로 붙이지 않는다
+	// 구글 호출 실패 원인에는 응답 내용이 들어 있을 수 있어 원인으로 붙이지 않는다.
+	// 응답은 502로만 보이므로 장애·설정 오류를 추적할 수 있게 메시지(HTTP 상태와 구글 오류 종류만 담김)를 남긴다
 	private GoogleAccount exchangeCode(AuthLoginCommand command) {
 		try {
 			return googleAuthCodeClient.exchange(command.code(), command.codeVerifier(), command.redirectUri())
 				.orElseThrow(() -> new BusinessException(AuthErrorCode.GOOGLE_LOGIN_REJECTED));
 		} catch (GoogleLoginException e) {
+			log.warn("구글 로그인 실패: {}", e.getMessage());
 			throw new BusinessException(AuthErrorCode.GOOGLE_UNAVAILABLE);
 		}
 	}

@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# 스닙텍 백엔드 코드래빗 설정 — 공개 레포 무료 리뷰 기준
+# 코드래빗은 PR이 향하는 브랜치의 이 파일을 읽는다. develop에 병합된 뒤 올라오는 PR부터 적용된다.
+
+language: "ko-KR"
+early_access: false
+
+reviews:
+  # 지적 강도: chill(핵심 위주) / assertive(사소한 것까지). 팀원이 무시하지 않도록 chill로 시작
+  profile: "chill"
+  request_changes_workflow: false   # 코드래빗이 병합을 막지 않음. 승인은 사람만
+  high_level_summary: true
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+  poem: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "[skip review]"
+    # 기본 브랜치 외에 리뷰할 대상 브랜치 (정규식)
+    base_branches:
+      - "develop"
+      - "main"
+
+  # 리뷰에서 뺄 파일
+  path_filters:
+    - "!**/build/**"            # QueryDSL Q클래스 등 자동 생성 소스 포함
+    - "!**/.gradle/**"
+    - "!gradle/wrapper/**"
+    - "!gradlew"
+    - "!gradlew.bat"
+    - "!**/*.md"
+
+  path_instructions:
+    - path: "src/main/java/**"
+      instructions: |
+        스프링 부트 4.1, 자바 21, JPA + QueryDSL, MySQL 8.4, 도메인별 계층형 패키지 구조 프로젝트다.
+        JSON은 잭슨 3(tools.jackson 패키지)을 쓴다. com.fasterxml.jackson.databind 사용은 지적한다.
+        다음을 우선해서 본다. 코드 스타일·이름 짓기 같은 사소한 지적은 하지 않는다.
+        - 트랜잭션 경계
+          - {도메인}QueryService는 클래스에 @Transactional(readOnly = true), {도메인}CommandService는 클래스에 붙이지 않고 쓰기 메서드마다 @Transactional을 둔다. 쓰기 메서드에 빠졌거나 명령 서비스 클래스에 readOnly가 붙었으면 지적한다.
+          - 트랜잭션 안의 외부 호출(LanguageModelClient, GoogleAuthCodeClient·GoogleIdTokenVerifier 등 RestClient 호출), 자기 호출로 인한 프록시 미적용
+          - 템플릿 생성·복구·갤러리 저장은 UserCommandService.lockUser를 트랜잭션의 첫 조회로 부른 뒤 개수 검사 → 저장 순서여야 한다. 잠금 전에 대상을 먼저 읽으면 지적한다.
+          - @Modifying 대량 갱신 쿼리는 updated_at을 직접 넣어야 한다(확장 동기화 기준).
+        - N+1 조회, 지연 로딩 예외, 페이지 처리 누락
+        - 예외 처리
+          - 도메인 에러는 {도메인}ErrorCode 열거형(ResultCode 구현)을 담은 BusinessException으로 던지고, GlobalExceptionHandler가 ApiResponse로 감싼다. 컨트롤러에서 ApiResponse.error 등으로 에러 응답을 직접 만들거나, 예외를 삼키면 지적한다.
+          - 결과 코드·문구는 docs/s1-api-spec.md에 있는 것만 쓴다. 명세에 없는 코드가 새로 생기면 지적한다.
+        - 인가: 다른 회원의 템플릿·휴지통 자원에 접근할 수 있는지(소유자 확인 누락)
+          - 로그인 회원은 컨트롤러에서 @LoginUser Long userId로만 받는다. SecurityContextHolder에서 직접 꺼내면 지적한다.
+          - 조회·수정·삭제는 TemplateRepository.findByIdAndUserId·findTrashedByIdAndUserIdForUpdate처럼 본인 소유 조건으로 찾아야 한다. id만으로 찾은 뒤 소유자를 비교하거나, 남의 리소스에 403을 주면 지적한다(404 TEMPLATE_NOT_FOUND 등으로 응답).
+          - 갤러리 템플릿은 공개 데이터라 소유자가 없다. 대신 GET /api/v1/gallery/** 응답(5분 공개 캐시)에 회원마다 다른 값이 들어가면 지적한다.
+        - 암호화·개인정보
+          - templates.content는 TemplateContent의 @Convert(EncryptedStringConverter)로 AES-GCM 암호화된다. 이 변환기를 거치지 않고 본문을 저장하거나 DB에서 본문을 검색하는 코드를 지적한다.
+          - 템플릿 본문, AI 톤 교정 원문·결과, 토큰, 이메일이 로그·예외 메시지에 들어가면 지적한다.
+        - 비밀값(JWT_SECRET, CONTENT_ENCRYPTION_KEY, 구글·AI 키, 토큰)이 코드에 하드코딩되지 않았는지
+        - 현재 시각은 Clock 빈에서 얻는다. LocalDateTime.now() 등을 직접 부르면 지적한다.
+        - 한도 숫자(템플릿 50개, AI 하루 5회)는 global/policy/UsageLimits에만 둔다. 다른 곳에 숫자를 직접 쓰면 지적한다.
+    - path: "src/test/java/**"
+      instructions: |
+        JUnit 5, AssertJ, Mockito, 테스트컨테이너 MySQL 기준. 검증 없는 테스트, 구현 세부에 묶인 테스트,
+        테스트 간 상태 공유만 지적한다.
+        통합 테스트에서 H2를 쓰거나 인증에 @WithMockUser를 쓰면(@LoginUser가 채워지지 않음, IntegrationTestSupport.bearer 사용) 지적한다.
+        ArchUnit 테스트(com.sniptext.architecture)를 느슨하게 고쳐 통과시키는 변경은 반드시 지적한다.
+    - path: "src/main/resources/**"
+      instructions: |
+        설정 파일에 비밀값이 들어가지 않았는지 본다(운영 값은 SSM 파라미터 저장소에서 환경 변수로 주입).
+        spring.jpa.hibernate.ddl-auto는 모든 환경에서 validate 또는 none이어야 한다.
+    - path: "src/main/resources/db/migration/**"
+      instructions: |
+        플라이웨이 버전 마이그레이션이다. 파일 이름은 V{yyyyMMddHHmm}__{설명}.sql 형식이다.
+        - 이미 develop에 병합된 마이그레이션 파일을 고치는 변경은 반드시 지적한다(새 파일을 추가해야 한다).
+        - 스키마 변경은 "추가 → 옮김 → 삭제" 호환 규칙을 지켜야 한다.
+          이전 버전 코드가 새 스키마에서 돌지 못하게 만드는 변경(컬럼 삭제·이름 변경을 한 번에 하는 것 등)은 반드시 지적한다.
+        - 테이블·컬럼은 스네이크 표기, 인덱스 이름은 uk_·idx_·fk_ 접두어(docs/erd.md 기준)인지 본다.
+    - path: "**/*.tf"
+      instructions: |
+        AWS 무료 플랜 크레딧 안에서 운영한다. 다음을 지적한다.
+        - NAT 게이트웨이, 부하 분산기 등 비용이 큰 자원 추가
+        - RDS 외부 공개, 삭제 방지 해제, 자동 백업 해제
+        - 지나치게 넓은 IAM 권한, 22번 포트 개방
+    - path: ".github/workflows/**"
+      instructions: |
+        AWS 인증은 OIDC 임시 권한만 쓴다. 장기 접근 키 사용, 비밀값 로그 노출,
+        고정되지 않은 외부 액션 버전을 지적한다.
+    - path: "**/Dockerfile"
+      instructions: |
+        루트 사용자 실행, 이미지에 비밀값 포함, 불필요하게 큰 기반 이미지를 지적한다.
+
+  tools:
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    hadolint:
+      enabled: true
+    checkov:
+      enabled: true
+
+chat:
+  auto_reply: true
