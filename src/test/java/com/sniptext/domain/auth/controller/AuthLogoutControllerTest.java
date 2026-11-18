@@ -8,11 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
@@ -142,18 +139,58 @@ class AuthLogoutControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("이미 폐기된 토큰이어도 AUTH200_1이고 그 회원의 남은 토큰을 폐기하며, 먼저 폐기된 토큰의 폐기 시각은 바꾸지 않는다")
+	@DisplayName("이미 폐기된 토큰이면 AUTH200_1이고 쿠키를 지우지만, 그 회원의 다른 토큰은 폐기하지 않는다 (샌 옛 토큰으로 강제 로그아웃 방지)")
 	void revokedToken() throws Exception {
 		String oldToken = login();
 		reissue(oldToken).andExpect(status().isOk());
 		LocalDateTime firstRevokedAt = revokedAtOf(oldToken);
+		String otherLogin = login();
 		clock.advance(Duration.ofHours(1));
 
 		logout(oldToken).andExpect(status().isOk())
-			.andExpect(jsonPath("$.code").value("AUTH200_1"));
+			.andExpect(jsonPath("$.code").value("AUTH200_1"))
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+
+		assertThat(refreshTokenRepository.findAll().stream().filter(token -> !token.isRevoked())).hasSize(2);
+		assertThat(revokedAtOf(oldToken)).isEqualTo(firstRevokedAt);
+		reissue(otherLogin).andExpect(status().isOk());
+	}
+
+	@Test
+	@DisplayName("만료 1마이크로초 전의 토큰이면 그 회원의 토큰을 모두 폐기한다")
+	void justBeforeExpiry() throws Exception {
+		String token = login();
+		clock.advance(Duration.ofDays(14).minusNanos(1_000));
+		login();
+
+		logout(token).andExpect(status().isOk());
 
 		assertThat(refreshTokenRepository.findAll()).hasSize(2).allMatch(RefreshToken::isRevoked);
-		assertThat(revokedAtOf(oldToken)).isEqualTo(firstRevokedAt);
+	}
+
+	@Test
+	@DisplayName("만료된 토큰이면 AUTH200_1이고 쿠키를 지우지만, 그 회원의 다른 토큰은 폐기하지 않는다")
+	void expiredToken() throws Exception {
+		String expired = login();
+		clock.advance(Duration.ofDays(14));
+		String otherLogin = login();
+
+		logout(expired).andExpect(status().isOk())
+			.andExpect(jsonPath("$.code").value("AUTH200_1"))
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+
+		assertThat(refreshTokenRepository.findAll()).noneMatch(RefreshToken::isRevoked);
+		reissue(otherLogin).andExpect(status().isOk());
+	}
+
+	@Test
+	@DisplayName("탈퇴한 회원의 유효한 토큰이어도 AUTH200_1이고 쿠키를 지운다")
+	void deletedUser() throws Exception {
+		Long deletedId = userRepository.save(UserFixture.deletedUser("gone@gmail.com", FIXED.minusDays(1))).getId();
+
+		logout(login(deletedId)).andExpect(status().isOk())
+			.andExpect(jsonPath("$.code").value("AUTH200_1"))
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
 	}
 
 	@Test
@@ -186,10 +223,8 @@ class AuthLogoutControllerTest extends IntegrationTestSupport {
 		return mockMvc.perform(post(REISSUE_PATH).cookie(new Cookie("refreshToken", refreshToken)));
 	}
 
-	private LocalDateTime revokedAtOf(String rawToken) throws Exception {
-		String hash = HexFormat.of().formatHex(
-			MessageDigest.getInstance("SHA-256").digest(rawToken.getBytes(StandardCharsets.UTF_8)));
-		return refreshTokenRepository.findByTokenHash(hash).orElseThrow().getRevokedAt();
+	private LocalDateTime revokedAtOf(String rawToken) {
+		return refreshTokenRepository.findByTokenHash(RefreshTokenFixture.hashOf(rawToken)).orElseThrow().getRevokedAt();
 	}
 
 	private static String familyId() {
