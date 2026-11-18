@@ -2,7 +2,10 @@ package com.sniptext.domain.auth.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -60,6 +63,9 @@ class AuthReissueControllerTest extends IntegrationTestSupport {
 
 	private static final String PATH = "/api/v1/auth/reissue";
 	private static final LocalDateTime FIXED = LocalDateTime.of(2026, 11, 6, 10, 0);
+	/** 같은 이름·경로에 유효 기간 0으로 내려 브라우저의 재발급 쿠키를 지운다 */
+	private static final org.hamcrest.Matcher<String> CLEARED_COOKIE = allOf(startsWith("refreshToken=;"), containsString("Max-Age=0"),
+		containsString("Path=/api/v1/auth"), containsString("HttpOnly"), containsString("Secure"), containsString("SameSite=Lax"));
 	private static final Pattern REFRESH_COOKIE = Pattern.compile("^refreshToken=([A-Za-z0-9_-]+);");
 
 	@Autowired
@@ -134,11 +140,11 @@ class AuthReissueControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("쿠키가 없으면 AUTH401_5이고 쿠키를 내려주지 않는다")
+	@DisplayName("쿠키가 없으면 AUTH401_5이고 쿠키를 지우는 헤더를 내려준다")
 	void withoutCookie() throws Exception {
 		mockMvc.perform(post(PATH))
 			.andExpect(status().isUnauthorized())
-			.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, CLEARED_COOKIE))
 			.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
 			.andExpect(jsonPath("$.code").value("AUTH401_5"))
 			.andExpect(jsonPath("$.message").value("다시 로그인해주세요."))
@@ -146,10 +152,25 @@ class AuthReissueControllerTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("모르는 토큰이면 AUTH401_5이다")
+	@DisplayName("모르는 토큰이면 AUTH401_5이고 쿠키를 지운다")
 	void unknownToken() throws Exception {
 		reissue("unknown-token").andExpect(status().isUnauthorized())
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, CLEARED_COOKIE))
 			.andExpect(jsonPath("$.code").value("AUTH401_5"));
+	}
+
+	@Test
+	@DisplayName("탈퇴한 회원의 토큰이면 USER404_1이고 쿠키를 지우며, 토큰을 폐기하거나 새로 만들지 않는다")
+	void deletedUser() throws Exception {
+		Long deletedId = userRepository.save(UserFixture.deletedUser("gone@gmail.com", FIXED.minusDays(1))).getId();
+		String token = transactionTemplate.execute(status -> refreshTokenIssuer.issueForNewLogin(deletedId));
+
+		reissue(token).andExpect(status().isNotFound())
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, CLEARED_COOKIE))
+			.andExpect(jsonPath("$.code").value("USER404_1"))
+			.andExpect(jsonPath("$.result").value(nullValue()));
+
+		assertThat(refreshTokenRepository.findAll()).singleElement().matches(saved -> !saved.isRevoked());
 	}
 
 	@Test
@@ -162,6 +183,7 @@ class AuthReissueControllerTest extends IntegrationTestSupport {
 
 		clock.advance(Duration.ofNanos(1_000));
 		reissue(atExpiry).andExpect(status().isUnauthorized())
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, CLEARED_COOKIE))
 			.andExpect(jsonPath("$.code").value("AUTH401_5"));
 
 		assertThat(refreshTokenRepository.findAll().stream().filter(token -> !token.isRevoked()))
@@ -175,14 +197,14 @@ class AuthReissueControllerTest extends IntegrationTestSupport {
 		String newToken = cookieToken(reissue(oldToken).andReturn());
 
 		reissue(oldToken).andExpect(status().isUnauthorized())
-			.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE))
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, CLEARED_COOKIE))
 			.andExpect(jsonPath("$.code").value("AUTH401_5"));
 
 		assertThat(refreshTokenRepository.findAll()).hasSize(2).allMatch(RefreshToken::isRevoked);
 		reissue(newToken).andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("AUTH401_5"));
 		assertThat(refreshTokenRepository.count()).isEqualTo(2);
-		assertThat(output.getAll()).contains("재발급 토큰 재사용 감지로 계보 폐기: userId=" + userId)
+		assertThat(output.getAll()).contains("폐기된 재발급 토큰으로 재발급 시도(재사용 또는 로그아웃 뒤 요청), 계보 폐기: userId=" + userId)
 			.doesNotContain(oldToken, newToken);
 	}
 

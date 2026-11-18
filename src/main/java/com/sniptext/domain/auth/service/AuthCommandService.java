@@ -115,6 +115,7 @@ public class AuthCommandService {
 	 * 이미 폐기된 토큰이 다시 오거나 같은 토큰으로 동시에 오면 탈취로 보고 계보 전체를 폐기한 뒤 AUTH401_5.
 	 * 트랜잭션 안에서 예외를 던지면 계보 폐기까지 롤백되므로, 폐기를 커밋한 뒤 트랜잭션 바깥에서 던진다.
 	 * 재사용 감지는 응답이 다른 실패와 같은 AUTH401_5라 운영에서 구분할 수 있게 로그를 남긴다 (토큰 값은 넣지 않는다).
+	 * 탈퇴했거나 없는 회원이면 USER404_1이다 (로그인과 같은 코드).
 	 */
 	public AuthReissueResult reissue(AuthReissueCommand command) {
 		RefreshToken token = findToken(command.refreshToken())
@@ -125,9 +126,14 @@ public class AuthCommandService {
 		}
 
 		return transactionTemplate.execute(status -> {
+			// 회원 행을 먼저 잠가 같은 회원의 로그아웃과 순서를 정한다. 잠그지 않으면 로그아웃의 전체 폐기 뒤에
+			// 이 요청이 새 토큰을 저장해 로그아웃이 풀린다. 탈퇴한 회원도 여기서 USER404_1로 막는다
+			userCommandService.lockUser(token.getUserId());
 			if (token.isRevoked() || refreshTokenRepository.revokeIfActive(token.getId(), now) == 0) {
 				refreshTokenRepository.revokeFamily(token.getFamilyId(), now);
-				log.warn("재발급 토큰 재사용 감지로 계보 폐기: userId={}, familyId={}", token.getUserId(), token.getFamilyId());
+				// 탈취 말고도 로그아웃 뒤 남은 탭·확장의 요청이 같은 경로를 탄다
+				log.warn("폐기된 재발급 토큰으로 재발급 시도(재사용 또는 로그아웃 뒤 요청), 계보 폐기: userId={}, familyId={}",
+					token.getUserId(), token.getFamilyId());
 				return Optional.<AuthReissueResult>empty();
 			}
 			String refreshToken = refreshTokenIssuer.issueForReissue(token.getUserId(), token.getClientType(),

@@ -1,5 +1,7 @@
 package com.sniptext.domain.auth.controller;
 
+import java.time.Duration;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -20,9 +22,11 @@ import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
 import com.sniptext.domain.auth.service.dto.result.AuthReissueResult;
 import com.sniptext.domain.auth.service.dto.result.AuthSignUpResult;
+import com.sniptext.global.exception.BusinessException;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.response.ResultCode;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
@@ -60,26 +64,45 @@ public class AuthController {
 		return withRefreshToken(AuthSuccessCode.SIGNED_UP, AuthSignUpResponse.from(result), result.refreshToken());
 	}
 
+	/**
+	 * 실패하면 응답은 전역 예외 처리가 만들고, 여기서는 다시 쓸 수 없는 쿠키를 지우는 헤더만 붙인다.
+	 * 지우지 않으면 브라우저가 14일 동안 같은 쿠키로 새로고침마다 재발급을 다시 시도한다.
+	 */
 	@PostMapping("/reissue")
 	public ResponseEntity<ApiResponse<AuthReissueResponse>> reissue(
-		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {
+		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken, HttpServletResponse servletResponse) {
 
-		AuthReissueResult result = authCommandService.reissue(new AuthReissueCommand(refreshToken));
+		AuthReissueResult result;
+		try {
+			result = authCommandService.reissue(new AuthReissueCommand(refreshToken));
+		} catch (BusinessException e) {
+			servletResponse.addHeader(HttpHeaders.SET_COOKIE, refreshTokenCookie("", Duration.ZERO).toString());
+			throw e;
+		}
 
 		return withRefreshToken(AuthSuccessCode.TOKEN_REISSUED, AuthReissueResponse.from(result), result.refreshToken());
 	}
 
 	private <T> ResponseEntity<ApiResponse<T>> withRefreshToken(ResultCode resultCode, T response, String refreshToken) {
-		ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
+		return withRefreshTokenCookie(resultCode, response, refreshTokenCookie(refreshToken, RefreshTokenIssuer.TTL));
+	}
+
+	private <T> ResponseEntity<ApiResponse<T>> withRefreshTokenCookie(ResultCode resultCode, T response,
+		ResponseCookie cookie) {
+		return ResponseEntity.status(resultCode.getHttpStatus())
+			.header(HttpHeaders.SET_COOKIE, cookie.toString())
+			.body(ApiResponse.of(resultCode, response));
+	}
+
+	// 브라우저는 이름·경로가 같은 쿠키를 같은 쿠키로 본다. 지울 때도 같은 속성에 유효 기간 0으로 내보낸다
+	private ResponseCookie refreshTokenCookie(String value, Duration maxAge) {
+		return ResponseCookie.from(REFRESH_TOKEN_COOKIE, value)
 			.httpOnly(true)
 			.secure(true)
 			.sameSite(cookieProperties.sameSite())
 			.path(COOKIE_PATH)
-			.maxAge(RefreshTokenIssuer.TTL)
+			.maxAge(maxAge)
 			.build();
-		return ResponseEntity.status(resultCode.getHttpStatus())
-			.header(HttpHeaders.SET_COOKIE, cookie.toString())
-			.body(ApiResponse.of(resultCode, response));
 	}
 
 }

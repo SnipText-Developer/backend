@@ -236,7 +236,7 @@ POST /api/v1/auth/dev-token
 | DB | MySQL 8.4 | 확정 |
 | 외부에 보이는 ID | 숫자 자동 증가 ID(Long) 그대로 사용 | 모든 조회·수정은 본인 소유 확인 후 처리, 남의 것이면 404 |
 | 시간 표기 | 모든 시각에 `+09:00` 붙임 | 확정. 4장 참고 |
-| 서비스 주소 구조 | 예) 웹 `sniptext.io`, API `api.sniptext.io` | 배포 전 결정. 재발급 쿠키 설정, 외부 출처 요청 허용 범위가 이걸로 정해짐 |
+| 서비스 주소 구조 | 웹 `sniptext.kr`, API `api.sniptext.kr` | 확정. 재발급 쿠키 설정, 외부 출처 요청 허용 범위는 `docs/deploy-design.md` 4-10 참고 |
 
 ### 11. 상단 통합 검색 (DSH-09)
 
@@ -303,7 +303,7 @@ POST /api/v1/auth/login
 {
   "code": "4/0AQSTgQ...",
   "codeVerifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-  "redirectUri": "https://sniptext.io/auth/google/callback",
+  "redirectUri": "https://sniptext.kr/auth/google/callback",
   "provider": "GOOGLE"
 }
 ```
@@ -566,12 +566,15 @@ Cookie: refreshToken=...
 | HttpStatus | ResultCode | ErrorMessage | Description |
 | --- | --- | --- | --- |
 | 401 | AUTH401_5 | 다시 로그인해주세요. | 재발급 토큰 없음·만료·폐기, 이미 쓴 토큰 재사용 감지(계보 전체 폐기) |
+| 404 | USER404_1 | 회원 정보를 찾을 수 없어요. | 탈퇴했거나 없는 회원의 재발급 토큰 |
 
 ##### 비고
 
 - 재발급할 때마다 재발급 토큰도 새것으로 바꾸고 이전 것은 폐기합니다.
 - 이미 폐기된 재발급 토큰이 다시 오면 탈취로 보고 그 계보 전체를 폐기합니다 → 다시 로그인.
 - 같은 토큰으로 동시에 요청해도 재사용으로 처리합니다. 여러 탭에서 함께 부르면 로그아웃될 수 있으니 재발급 요청은 한 번만 보내 주세요.
+- 실패하면(AUTH401_5, USER404_1) 재발급 토큰 쿠키를 지웁니다. 다시 로그인해야 합니다.
+- 같은 회원의 재발급과 로그아웃은 차례로 처리합니다. 로그아웃과 겹친 재발급은 성공하더라도 그 토큰이 로그아웃에서 함께 폐기됩니다.
 - 프론트는 새로고침 직후(메모리의 접근 토큰이 사라졌을 때)와 COMMON401_1을 받았을 때 이 API를 부릅니다.
 
 ---
