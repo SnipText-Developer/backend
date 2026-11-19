@@ -10,9 +10,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.sniptext.domain.auth.controller.dto.AuthLoginRequest;
 import com.sniptext.domain.auth.controller.dto.AuthLoginResponse;
+import com.sniptext.domain.auth.controller.dto.AuthSignUpRequest;
+import com.sniptext.domain.auth.controller.dto.AuthSignUpResponse;
 import com.sniptext.domain.auth.service.AuthCommandService;
 import com.sniptext.domain.auth.service.RefreshTokenIssuer;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
+import com.sniptext.domain.auth.service.dto.result.AuthSignUpResult;
 import com.sniptext.global.response.ApiResponse;
 import com.sniptext.global.response.ResultCode;
 
@@ -20,7 +23,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 로그인 (로그인 불필요, 캐시 금지). 재발급 토큰은 본문이 아니라 HttpOnly·Secure 쿠키로만 내보낸다.
+ * 로그인·가입 (로그인 불필요, 캐시 금지). 재발급 토큰은 본문이 아니라 HttpOnly·Secure 쿠키로만 내보낸다.
  * 쿠키 경로를 인증 API로 좁혀 다른 API 요청에는 재발급 토큰이 실려 가지 않게 한다.
  */
 @RestController
@@ -44,6 +47,13 @@ public class AuthController {
 				AuthSuccessCode.SIGN_UP_REQUIRED_MESSAGE, response));
 		}
 		return withRefreshToken(AuthSuccessCode.LOGGED_IN, response, result.refreshToken());
+	}
+
+	@PostMapping("/signup")
+	public ResponseEntity<ApiResponse<AuthSignUpResponse>> signUp(@Valid @RequestBody AuthSignUpRequest request) {
+		AuthSignUpResult result = authCommandService.signUp(request.toCommand());
+
+		return withRefreshToken(AuthSuccessCode.SIGNED_UP, AuthSignUpResponse.from(result), result.refreshToken());
 	}
 
 	private <T> ResponseEntity<ApiResponse<T>> withRefreshToken(ResultCode resultCode, T response, String refreshToken) {
