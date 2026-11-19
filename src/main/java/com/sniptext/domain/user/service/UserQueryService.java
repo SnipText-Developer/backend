@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.sniptext.domain.user.entity.User;
 import com.sniptext.domain.user.exception.UserErrorCode;
 import com.sniptext.domain.user.repository.UserRepository;
+import com.sniptext.domain.user.service.dto.result.UserDetailResult;
 import com.sniptext.global.exception.BusinessException;
 
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,13 @@ public class UserQueryService {
 		return userRepository.findById(userId)
 			.filter(user -> user.getDeletedAt() == null)
 			.map(User::getNickname)
+			.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+	}
+
+	/** 내 정보. 없거나 탈퇴한 회원이면 USER404_1. */
+	public UserDetailResult getDetail(Long userId) {
+		return userRepository.findByIdAndDeletedAtIsNull(userId)
+			.map(UserDetailResult::from)
 			.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 	}
 

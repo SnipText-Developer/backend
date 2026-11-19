@@ -39,3 +39,20 @@ out/
 ### 로컬 비밀 값·개인 설정 ###
 .env
 CLAUDE.local.md
+
+### 테라폼 ###
+# 상태 파일·작업 폴더·변수 파일은 커밋하지 않는다 (.terraform.lock.hcl은 커밋)
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfplan
+tfplan

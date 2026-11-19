@@ -28,9 +28,9 @@ import com.sniptext.domain.template.service.dto.result.TemplateDeleteResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
+import com.sniptext.domain.template.support.TemplateLimit;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.global.exception.BusinessException;
-import com.sniptext.global.policy.UsageLimits;
 
 import lombok.RequiredArgsConstructor;
 
@@ -174,7 +174,7 @@ public class TemplateCommandService {
 
 	/** 활성 템플릿(휴지통 제외)이 한도 이상이면 TEMPLATE403_1 */
 	void validateTemplateLimit(Long userId) {
-		if (templateRepository.countByUserIdAndDeletedAtIsNull(userId) >= UsageLimits.TEMPLATE_LIMIT) {
+		if (TemplateLimit.isReached(templateRepository.countByUserIdAndDeletedAtIsNull(userId))) {
 			throw new BusinessException(TemplateErrorCode.TEMPLATE_LIMIT_REACHED);
 		}
 	}

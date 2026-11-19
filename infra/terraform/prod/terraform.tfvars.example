@@ -1,0 +1,10 @@
+# 복사해서 terraform.tfvars로 쓴다 (terraform.tfvars는 커밋하지 않는다). 기본값과 같으면 생략해도 된다
+
+region                     = "ap-northeast-2"
+domain_name                = "sniptext.kr"
+api_subdomain              = "api"
+instance_type              = "t4g.small"
+root_volume_size_gb        = 20
+vpc_cidr                   = "10.20.0.0/16"
+availability_zones         = ["ap-northeast-2a", "ap-northeast-2c"]
+deploy_file_retention_days = 90
