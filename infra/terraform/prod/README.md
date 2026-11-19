@@ -70,7 +70,7 @@ mysql -h 127.0.0.1 -P 13306 -u sniptext_admin -p
    aws ssm put-parameter --name /sniptext/prod/DB_PASSWORD --type SecureString --overwrite --value (Get-Clipboard)
    ```
    다른 비밀값도 같은 방식으로 넣는다.
-3. `sniptext_app`으로 다시 접속해 `SHOW DATABASES;`에 `sniptext_dev`(와 `information_schema`)만 보이는지 확인한다.
+3. `sniptext_app`으로 다시 접속해 `SHOW DATABASES;`에 `sniptext_dev`와 시스템 스키마(`information_schema`, `performance_schema`. MySQL 8은 모든 계정에 일부 성능 표를 보여 준다)만 보이고, `USE mysql;`·다른 스키마 생성·`DROP USER`가 거부되는지 확인한다.
 
 ## 비밀값 넣기 (사람)
 
