@@ -7,8 +7,10 @@
 #    - 값이 CHANGE_ME인 비밀이 남아 있으면 아무것도 바꾸지 않고 멈춘다
 #    - DB_MASTER_PASSWORD(관리 작업 전용)는 옮기지 않는다
 # 2. 이 스크립트 옆의 compose.prod.yaml·Caddyfile을 /opt/sniptext로 복사하고 이미지를 받는다
-# 3. 앱 컨테이너를 교체하고 127.0.0.1:8080/actuator/health를 최대 180초 확인한다
-# 4. 실패하면 직전 설정(.env·compose·Caddyfile)과 이전 태그로 다시 띄우고 실패 코드로 끝낸다
+# 3. 앱 컨테이너를 교체하고 Caddy 설정을 다시 읽힌 뒤 127.0.0.1:8080/actuator/health를 최대 180초 확인한다
+#    성공하면 그때의 설정(.env·compose·Caddyfile)을 *.good으로 남긴다 (마지막 정상 설정)
+# 4. 실패하면 *.good 설정(이전 태그 포함)으로 다시 띄우고 실패 코드로 끝낸다
+#    배포가 중간에 끊겨도 *.good은 성공한 배포만 덮으므로, 검증 안 된 설정으로 되돌아가지 않는다
 #
 # 종료 코드: 0 성공 / 1 실패, 이전 태그로 되돌림(또는 바꾼 것 없음) / 2 잘못된 입력·설정 / 3 되돌리기도 실패
 #
@@ -23,6 +25,7 @@ readonly HEALTH_URL="http://127.0.0.1:8080/actuator/health"
 readonly HEALTH_TIMEOUT_SECONDS=180
 readonly EXCLUDED_PARAMS=("DB_MASTER_PASSWORD")
 readonly CONFIG_FILES=(".env" "compose.prod.yaml" "Caddyfile")
+readonly CADDY_RELOAD_ATTEMPTS=5
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SRC_DIR
@@ -36,7 +39,8 @@ die() {
 }
 
 compose() {
-  docker compose --project-directory "$APP_HOME" -f "$APP_HOME/compose.prod.yaml" "$@"
+  # 셸에 APP_TAG가 export돼 있으면 compose가 .env보다 우선하므로 지운다 (태그는 .env에서만 정한다)
+  env -u APP_TAG docker compose --project-directory "$APP_HOME" -f "$APP_HOME/compose.prod.yaml" "$@"
 }
 
 # ---------- 입력 확인 ----------
@@ -90,8 +94,10 @@ has_api_domain=false
 while IFS=$'\t' read -r full_name value; do
   [[ -n "$full_name" ]] || continue
   key="${full_name#"$PARAM_PATH"/}"
-  # 하위 경로·이상한 이름, 또는 값에 줄바꿈이 있어 줄이 갈라진 경우
-  [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || die 2 "환경 변수로 쓸 수 없는 파라미터 이름이 있습니다: $full_name"
+  # 하위 경로·이상한 이름, 또는 값에 줄바꿈이 있어 줄이 갈라진 경우.
+  # 갈라진 줄은 비밀값의 일부일 수 있으므로 이름·값을 출력하지 않는다 (로그는 공개 저장소에 남는다)
+  [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] \
+    || die 2 "환경 변수로 쓸 수 없는 파라미터 이름이 있거나 값에 줄바꿈이 있습니다 ($PARAM_PATH 아래 이름·값 확인. 값은 출력하지 않습니다)"
   is_excluded "$key" && continue
   if [[ "$value" == "CHANGE_ME" ]]; then
     placeholders+=("$key")
@@ -117,12 +123,26 @@ previous_tag=""
 [[ -f "$APP_HOME/current_tag" ]] && previous_tag="$(<"$APP_HOME/current_tag")"
 log "현재 태그: ${previous_tag:-(없음, 첫 배포)} → 새 태그: $TAG"
 
-# 직전 설정을 .prev로 남긴다. 되돌릴 때 이전 태그와 함께 그대로 쓴다
-for f in "${CONFIG_FILES[@]}"; do
-  if [[ -f "$APP_HOME/$f" ]]; then
-    cp -p "$APP_HOME/$f" "$APP_HOME/$f.prev"
-  fi
-done
+# 되돌릴 대상은 마지막으로 성공한 배포의 설정(*.good)이다. 이 배포가 성공하기 전에는 건드리지 않는다
+has_good_config() { [[ -f "$APP_HOME/.env.good" ]]; }
+good_tag() { sed -n "s/^APP_TAG='\(.*\)'$/\1/p" "$APP_HOME/.env.good" 2>/dev/null || true; }
+
+restore_good_config() {
+  local f
+  for f in "${CONFIG_FILES[@]}"; do
+    if [[ -f "$APP_HOME/$f.good" ]]; then
+      cp -p "$APP_HOME/$f.good" "$APP_HOME/$f"
+    fi
+  done
+}
+
+save_good_config() {
+  local f
+  for f in "${CONFIG_FILES[@]}"; do
+    cp -p "$APP_HOME/$f" "$APP_HOME/$f.good.tmp"
+    mv "$APP_HOME/$f.good.tmp" "$APP_HOME/$f.good"
+  done
+}
 
 # Caddyfile은 컨테이너에 파일 하나로 마운트돼 있다. mv로 바꾸면 컨테이너가 옛 파일(inode)을 계속 보므로 cp로 덮어쓴다
 cp "$SRC_DIR/compose.prod.yaml" "$APP_HOME/compose.prod.yaml"
@@ -130,19 +150,10 @@ cp "$SRC_DIR/Caddyfile" "$APP_HOME/Caddyfile"
 chmod 600 "$env_next"
 mv "$env_next" "$APP_HOME/.env"
 
-restore_previous_config() {
-  local f
-  for f in "${CONFIG_FILES[@]}"; do
-    if [[ -f "$APP_HOME/$f.prev" ]]; then
-      cp -p "$APP_HOME/$f.prev" "$APP_HOME/$f"
-    fi
-  done
-}
-
 log "이미지 받기"
 if ! compose pull --quiet app caddy; then
   # 아직 컨테이너는 그대로다. 설정만 되돌린다
-  if [[ -n "$previous_tag" ]]; then restore_previous_config; fi
+  if has_good_config; then restore_good_config; fi
   die 1 "이미지를 받지 못했습니다 (태그가 레지스트리에 있는지 확인). 실행 중인 앱은 바꾸지 않았습니다"
 fi
 
@@ -158,16 +169,33 @@ wait_healthy() {
   return 1
 }
 
+# Caddyfile이 바뀌었으면 반영한다 (바뀌지 않았으면 아무 일도 없다).
+# 컨테이너를 새로 만든 직후에는 관리 포트가 늦게 열릴 수 있어 몇 번 다시 시도한다.
+# 잘못된 Caddyfile이면 Caddy는 이전 설정으로 계속 응답하므로, 끝내 실패하면 배포 실패로 본다
+reload_caddy() {
+  local attempt
+  for ((attempt = 1; attempt <= CADDY_RELOAD_ATTEMPTS; attempt++)); do
+    if compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 start_services() {
   # 앱 교체 때 이전 컨테이너는 stop_grace_period(40초) 안에서 진행 중인 요청을 마치고 내려간다
   compose up -d --remove-orphans caddy app || return 1
-  # Caddyfile이 바뀌었으면 반영한다 (바뀌지 않았으면 아무 일도 없다)
-  compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 \
-    || log "경고: Caddy 설정을 다시 읽지 못했습니다 (docker compose logs caddy 확인)"
+  if ! reload_caddy; then
+    log "Caddy 설정을 다시 읽지 못했습니다 (docker compose logs caddy 확인)"
+    return 1
+  fi
 }
 
 log "앱 교체: $TAG"
 if start_services && wait_healthy; then
+  # 이 설정이 마지막 정상 설정이 된다. 태그 기록보다 먼저 남긴다
+  save_good_config
   if [[ -n "$previous_tag" && "$previous_tag" != "$TAG" ]]; then
     printf '%s\n' "$previous_tag" >"$APP_HOME/previous_tag"
   fi
@@ -189,17 +217,18 @@ if start_services && wait_healthy; then
 fi
 
 # ---------- 4. 실패 → 되돌리기 ----------
-log "새 태그 $TAG 가 ${HEALTH_TIMEOUT_SECONDS}초 안에 UP이 되지 않았습니다"
+log "새 태그 $TAG 교체에 실패했습니다 (Caddy 설정 반영 실패 또는 ${HEALTH_TIMEOUT_SECONDS}초 안에 UP 안 됨)"
 compose ps app || true
 log "원인은 서버에서 확인: cd $APP_HOME && docker compose -f compose.prod.yaml logs --tail 200 app"
 
-if [[ -z "$previous_tag" ]]; then
-  die 1 "되돌릴 이전 태그가 없습니다 (첫 배포)"
+if ! has_good_config; then
+  die 1 "되돌릴 정상 설정이 없습니다 (첫 배포)"
 fi
 
-log "되돌리기: $previous_tag (직전 .env·compose·Caddyfile)"
-restore_previous_config
+restore_tag="$(good_tag)"
+log "되돌리기: ${restore_tag:-(태그 읽기 실패)} (마지막 정상 .env·compose·Caddyfile)"
+restore_good_config
 if start_services && wait_healthy; then
-  die 1 "$TAG 배포 실패, $previous_tag 로 되돌렸습니다"
+  die 1 "$TAG 배포 실패, ${restore_tag:-마지막 정상 설정} 로 되돌렸습니다"
 fi
 die 3 "되돌리기도 실패했습니다. 서버에서 바로 확인하세요"
