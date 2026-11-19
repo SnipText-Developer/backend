@@ -120,15 +120,15 @@ public class AuthCommandService {
 	public AuthReissueResult reissue(AuthReissueCommand command) {
 		RefreshToken token = findToken(command.refreshToken())
 			.orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID));
-		LocalDateTime now = LocalDateTime.now(clock);
-		if (!token.isRevoked() && token.isExpired(now)) {
-			throw new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID);
-		}
-
 		return transactionTemplate.execute(status -> {
 			// 회원 행을 먼저 잠가 같은 회원의 로그아웃과 순서를 정한다. 잠그지 않으면 로그아웃의 전체 폐기 뒤에
 			// 이 요청이 새 토큰을 저장해 로그아웃이 풀린다. 탈퇴한 회원도 여기서 USER404_1로 막는다
 			userCommandService.lockUser(token.getUserId());
+			// 잠금을 기다리는 사이 만료될 수 있으므로 만료 판단과 폐기 시각은 잠금을 얻은 뒤의 시각으로 정한다
+			LocalDateTime now = LocalDateTime.now(clock);
+			if (!token.isRevoked() && token.isExpired(now)) {
+				return Optional.<AuthReissueResult>empty();
+			}
 			if (token.isRevoked() || refreshTokenRepository.revokeIfActive(token.getId(), now) == 0) {
 				refreshTokenRepository.revokeFamily(token.getFamilyId(), now);
 				// 탈취 말고도 로그아웃 뒤 남은 탭·확장의 요청이 같은 경로를 탄다

@@ -5,11 +5,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 
-import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -28,6 +28,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.auth.entity.ClientType;
 import com.sniptext.domain.auth.entity.RefreshToken;
+import com.sniptext.domain.auth.exception.AuthErrorCode;
 import com.sniptext.domain.auth.repository.RefreshTokenRepository;
 import com.sniptext.domain.auth.repository.SocialAccountRepository;
 import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
@@ -59,7 +60,7 @@ class AuthCommandServiceTest {
 	private RefreshTokenRepository refreshTokenRepository;
 
 	@Spy
-	private Clock clock = new MutableClock(NOW);
+	private MutableClock clock = new MutableClock(NOW);
 
 	@Mock
 	private UserCommandService userCommandService;
@@ -110,6 +111,23 @@ class AuthCommandServiceTest {
 			.isInstanceOf(BusinessException.class)
 			.extracting("resultCode")
 			.isEqualTo(UserErrorCode.USER_NOT_FOUND);
+		then(refreshTokenRepository).should(never()).revokeIfActive(anyLong(), any());
+		then(refreshTokenRepository).should(never()).revokeFamily(any(), any());
+		then(refreshTokenIssuer).should(never()).issueForReissue(any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("회원 잠금을 기다리는 사이 만료되면 AUTH401_5이고 토큰을 폐기하거나 새로 만들지 않는다")
+	void expiresWhileWaitingForLock() {
+		willAnswer(invocation -> {
+			clock.setTo(RefreshTokenFixture.EXPIRES_AT);
+			return null;
+		}).given(userCommandService).lockUser(USER_ID);
+
+		assertThatThrownBy(() -> authCommandService.reissue(new AuthReissueCommand(RAW_TOKEN)))
+			.isInstanceOf(BusinessException.class)
+			.extracting("resultCode")
+			.isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
 		then(refreshTokenRepository).should(never()).revokeIfActive(anyLong(), any());
 		then(refreshTokenRepository).should(never()).revokeFamily(any(), any());
 		then(refreshTokenIssuer).should(never()).issueForReissue(any(), any(), any());
