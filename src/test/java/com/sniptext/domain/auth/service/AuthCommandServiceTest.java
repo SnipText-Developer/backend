@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 
 import java.time.LocalDateTime;
@@ -85,6 +86,8 @@ class AuthCommandServiceTest {
 		RefreshToken token = RefreshTokenFixture.web(USER_ID, RefreshTokenIssuer.hash(RAW_TOKEN));
 		ReflectionTestUtils.setField(token, "id", TOKEN_ID);
 		given(refreshTokenRepository.findByTokenHash(RefreshTokenIssuer.hash(RAW_TOKEN))).willReturn(Optional.of(token));
+		// 잠금 뒤 다시 읽는 토큰. 회원이 없으면 잠금에서 끝나 불리지 않는 테스트도 있다
+		lenient().when(refreshTokenRepository.findById(TOKEN_ID)).thenReturn(Optional.of(token));
 		given(transactionTemplate.execute(any())).willAnswer(invocation ->
 			invocation.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
 	}
@@ -130,6 +133,26 @@ class AuthCommandServiceTest {
 			.isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
 		then(refreshTokenRepository).should(never()).revokeIfActive(anyLong(), any());
 		then(refreshTokenRepository).should(never()).revokeFamily(any(), any());
+		then(refreshTokenIssuer).should(never()).issueForReissue(any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("잠금을 기다리는 사이 다른 요청이 토큰을 교체했으면 그 사이 만료됐어도 계보 전체를 폐기한다")
+	void rotatedAndExpiredWhileWaitingForLock() {
+		RefreshToken rotated = RefreshTokenFixture.web(USER_ID, RefreshTokenIssuer.hash(RAW_TOKEN));
+		ReflectionTestUtils.setField(rotated, "id", TOKEN_ID);
+		rotated.revoke(NOW);
+		given(refreshTokenRepository.findById(TOKEN_ID)).willReturn(Optional.of(rotated));
+		willAnswer(invocation -> {
+			clock.setTo(RefreshTokenFixture.EXPIRES_AT);
+			return null;
+		}).given(userCommandService).lockUser(USER_ID);
+
+		assertThatThrownBy(() -> authCommandService.reissue(new AuthReissueCommand(RAW_TOKEN)))
+			.isInstanceOf(BusinessException.class)
+			.extracting("resultCode")
+			.isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
+		then(refreshTokenRepository).should().revokeFamily(RefreshTokenFixture.FAMILY_ID, RefreshTokenFixture.EXPIRES_AT);
 		then(refreshTokenIssuer).should(never()).issueForReissue(any(), any(), any());
 	}
 
