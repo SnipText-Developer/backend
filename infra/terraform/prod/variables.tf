@@ -121,7 +121,7 @@ variable "google_redirect_uris" {
   type        = list(string)
   default = [
     "https://sniptext.kr/auth/google/callback",
-    "http://localhost:5173/auth/google/callback",
+    "http://localhost:3000/auth/google/callback",
   ]
 }
 

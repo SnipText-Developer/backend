@@ -162,12 +162,12 @@ sequenceDiagram
 
 ### 4-10. 프론트 주소·출처 허용·쿠키
 
-- **상황**: 웹 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다. 화면과 API의 주소 관계에 따라 쿠키의 `SameSite`와 출처 허용(CORS)이 정해진다. 출시 전에는 프론트가 로컬(`localhost:5173`)에서 서버에 붙어야 한다.
+- **상황**: 웹 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다. 화면과 API의 주소 관계에 따라 쿠키의 `SameSite`와 출처 허용(CORS)이 정해진다. 출시 전에는 프론트가 로컬(`localhost:3000`, 대시보드가 CRA라 기본 포트 3000)에서 서버에 붙어야 한다.
 - **고른 것**: 화면은 `https://sniptext.kr`(랜딩·대시보드), API는 `https://api.sniptext.kr`. 둘은 같은 사이트라 출시 후에는 `SameSite=Lax`로 충분하다. 허용 출처·쿠키 `SameSite`는 **프로필별 설정값**으로 둔다.
 
 | 프로필 | 허용 출처 | 쿠키 `SameSite` | `GOOGLE_REDIRECT_URIS` |
 | --- | --- | --- | --- |
-| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:5173` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:5173/auth/google/callback` |
+| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:3000` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:3000/auth/google/callback` |
 | prod | `https://sniptext.kr` | `Lax` | `https://sniptext.kr/auth/google/callback` |
 
 - **대가**: dev 기간에 로컬 화면 → 서버 API는 다른 사이트 쿠키라서 사파리 등 다른 사이트 쿠키를 막는 브라우저에서는 재발급이 안 될 수 있다(크롬으로 연동 확인). 출처 허용·쿠키 코드는 아직 없다. 들어올 때(`global` 수정이라 해당 이슈에서 허락 후) 위 값을 설정으로 받게 한다. S2의 크롬 확장 출처는 그때 추가한다.
