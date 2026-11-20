@@ -28,6 +28,16 @@ output "deploy_bucket_name" {
   value       = aws_s3_bucket.deploy.bucket
 }
 
+output "db_address" {
+  description = "RDS 주소 (SSM 포트 포워딩 대상)"
+  value       = aws_db_instance.main.address
+}
+
+output "parameter_prefix" {
+  description = "앱 설정·비밀 파라미터 경로"
+  value       = local.parameter_prefix
+}
+
 output "vpc_id" {
   description = "VPC ID (#91 RDS)"
   value       = aws_vpc.main.id

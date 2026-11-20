@@ -122,7 +122,8 @@ sequenceDiagram
 
 - **상황**: 개발 서버가 없어 마이그레이션 실수가 곧 운영 데이터 문제다. 서버 메모리는 2GB뿐이다.
 - **선택지**: RDS / EC2 안 도커 MySQL
-- **고른 것**: **RDS MySQL 8.4 db.t4g.micro**, 단일 AZ, gp3 20GB 암호화, 공개 접근 끔(EC2 보안 그룹에서만 3306), 삭제 방지 + 최종 스냅샷, 자동 백업.
+- **고른 것**: **RDS MySQL 8.4 db.t4g.micro**, 단일 AZ, gp3 20GB 암호화(50GB까지 자동 확장), 공개 접근 끔(EC2 보안 그룹에서만 3306), TLS 접속만 허용(`require_secure_transport`, 앱은 `sslMode=REQUIRED`), 삭제 방지 + 최종 스냅샷, 자동 백업.
+  - 인증서 호스트명 검증(`VERIFY_IDENTITY`)은 이미지에 RDS 인증서를 넣어야 해서 아직 하지 않는다. 같은 VPC 안에서 서버 보안 그룹만 닿을 수 있어 얻는 것이 적다.
 - **대가**: 월 약 $20 추가(추정). 다중 AZ가 아니라 장애 조치는 없다. 로컬에서 접속하려면 SSM 포트 포워딩을 거쳐야 한다. 대신 시점 복구·스냅샷이 공짜에 가깝게 따라오고, 앱과 DB가 메모리를 나눠 쓰지 않는다.
 - **앱은 처음부터 전용 계정 `sniptext_app`으로 접속한다.** 마스터 계정은 관리 작업에만 쓴다.
   - 권한은 앱 스키마(`sniptext_dev`, 출시 후 `sniptext`)에만 준다: `SELECT, INSERT, UPDATE, DELETE`와 플라이웨이에 필요한 `CREATE, ALTER, DROP, INDEX, REFERENCES`
@@ -134,8 +135,10 @@ sequenceDiagram
 - **상황**: 테라폼 상태 파일에는 리소스 속성이 평문으로 저장된다. 비밀값이 들어가면 상태 버킷 접근만으로 키가 샌다.
 - **선택지**: 테라폼 변수로 값 넣기 / Secrets Manager / 파라미터 저장소 + 사람이 값 입력 / 쓰기 전용 인자
 - **고른 것**
-  - DB 마스터 비밀번호: 테라폼 **임시(ephemeral) 난수 → RDS `password_wo`, SSM `value_wo`(`DB_MASTER_PASSWORD`)** 쓰기 전용 인자. 상태 파일에 값이 남지 않는다. 바꿀 때는 버전 숫자를 올린다. 앱은 이 값을 쓰지 않는다(`deploy.sh`가 `.env`로 옮기지 않음).
-  - 그 밖의 비밀(앱 DB 비밀번호, JWT 서명 키, 본문 암호화 키, 구글 클라이언트 비밀, AI 키): 테라폼은 SecureString 자리를 `CHANGE_ME`로 만들고 `ignore_changes = [value]`. 실제 값은 사람이 `aws ssm put-parameter --overwrite`로 넣는다. `deploy.sh`는 `CHANGE_ME`가 남아 있으면 기동하지 않는다.
+  - DB 마스터 비밀번호: 테라폼 **임시(ephemeral) 난수 → RDS `password_wo`, SSM `value_wo`(`/sniptext/admin/DB_MASTER_PASSWORD`)** 쓰기 전용 인자. 상태 파일에 값이 남지 않는다. 바꿀 때는 버전 숫자를 올린다. 앱은 이 값을 쓰지 않는다.
+    - 서버 역할이 읽는 `/sniptext/prod` 밖에 두고, 서버 역할 정책에서 `/sniptext/admin` 조회를 명시적으로 거부한다. `/sniptext/prod` 안에 두면 `deploy.sh`가 `.env`로 옮기지 않아도 서버 역할로 꺼낼 수 있고, Deny는 경로 재귀 조회를 막지 못한다. 경로를 옮겨도 서버에 붙은 `AmazonSSMManagedInstanceCore`가 `ssm:GetParameter`를 모든 파라미터에 허용하므로 Deny가 함께 있어야 한다.
+  - 그 밖의 비밀(앱 DB 비밀번호, JWT 서명 키, 본문 암호화 키, 구글 클라이언트 비밀, AI 키): 테라폼은 SecureString 자리를 **쓰기 전용 인자(`value_wo = "CHANGE_ME"`)**로 만든다. 실제 값은 사람이 `aws ssm put-parameter --overwrite`로 넣는다. `deploy.sh`는 `CHANGE_ME`가 남아 있으면 기동하지 않는다.
+    - 처음 생각한 `value` + `ignore_changes = [value]`는 쓰지 않는다. 공급자가 refresh 때 실제 값을 복호화해 상태 파일에 적기 때문이다(#91에서 공급자 코드로 확인). `value_wo`는 상태에 값을 남기지 않고, 버전 숫자를 올리지 않는 한 사람이 넣은 값을 덮지 않는다.
   - 비밀이 아닌 설정은 테라폼이 값까지 넣는다.
 - **대가**: 쓰기 전용 인자는 테라폼 1.11 이상, AWS 공급자 6.x가 필요하다. 사람 손이 한 번 들어간다. RDS 관리형 마스터 비밀번호(Secrets Manager)는 7일마다 자동 교체되어 실행 중인 앱이 접속을 잃을 수 있고 비밀 하나당 월 $0.4가 붙어 고르지 않았다.
 
@@ -161,12 +164,12 @@ sequenceDiagram
 
 ### 4-10. 프론트 주소·출처 허용·쿠키
 
-- **상황**: 웹 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다. 화면과 API의 주소 관계에 따라 쿠키의 `SameSite`와 출처 허용(CORS)이 정해진다. 출시 전에는 프론트가 로컬(`localhost:5173`)에서 서버에 붙어야 한다.
+- **상황**: 웹 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다. 화면과 API의 주소 관계에 따라 쿠키의 `SameSite`와 출처 허용(CORS)이 정해진다. 출시 전에는 프론트가 로컬(`localhost:3000`, 대시보드가 CRA라 기본 포트 3000)에서 서버에 붙어야 한다.
 - **고른 것**: 화면은 `https://sniptext.kr`(랜딩·대시보드), API는 `https://api.sniptext.kr`. 둘은 같은 사이트라 출시 후에는 `SameSite=Lax`로 충분하다. 허용 출처·쿠키 `SameSite`는 **프로필별 설정값**으로 둔다.
 
 | 프로필 | 허용 출처 | 쿠키 `SameSite` | `GOOGLE_REDIRECT_URIS` |
 | --- | --- | --- | --- |
-| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:5173` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:5173/auth/google/callback` |
+| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:3000` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:3000/auth/google/callback` |
 | prod | `https://sniptext.kr` | `Lax` | `https://sniptext.kr/auth/google/callback` |
 
 - **대가**: dev 기간에 로컬 화면 → 서버 API는 다른 사이트 쿠키라서 사파리 등 다른 사이트 쿠키를 막는 브라우저에서는 재발급이 안 될 수 있다(크롬으로 연동 확인). 출처 허용·쿠키 코드는 아직 없다. 들어올 때(`global` 수정이라 해당 이슈에서 허락 후) 위 값을 설정으로 받게 한다. S2의 크롬 확장 출처는 그때 추가한다.
@@ -205,12 +208,13 @@ sequenceDiagram
 | `DB_URL` | dev·prod | 일반 | 테라폼 | 출시 전 `sniptext_dev` 스키마, 출시 후 `sniptext` |
 | `DB_USERNAME` | dev·prod | 일반 | 테라폼 | `sniptext_app` |
 | `DB_PASSWORD` | dev·prod | SecureString | 사람 | 앱 전용 계정 비밀번호. 계정 만들 때 같이 정함 |
-| `DB_MASTER_PASSWORD` | – (앱이 안 씀) | SecureString | 테라폼(쓰기 전용 인자) | 관리 작업 전용. 상태 파일에 남지 않음. `.env`로 옮기지 않음 |
+| `DB_MASTER_PASSWORD` | – (앱이 안 씀) | SecureString | 테라폼(쓰기 전용 인자) | 관리 작업 전용. `/sniptext/admin` 경로(서버 역할은 조회 거부). 상태 파일에 남지 않음 |
 | `JWT_SECRET` | 전체 | SecureString | 사람 | 32바이트 이상. 출시 전·후 값 다르게 |
 | `CONTENT_ENCRYPTION_KEY` | 전체 | SecureString | 사람 | Base64 32바이트. **잃으면 본문 복구 불가** → 따로 안전하게 보관. 출시 전·후 값 다르게 |
 | `GOOGLE_CLIENT_ID` | 전체 | 일반 | 테라폼(변수) | |
 | `GOOGLE_CLIENT_SECRET` | 전체 | SecureString | 사람 | |
 | `GOOGLE_REDIRECT_URIS` | 전체 | 일반 | 테라폼(변수) | 프로필별 값은 4-10 표 |
+| `AUTH_COOKIE_SAME_SITE` | 전체 | 일반 | 테라폼(변수) | 재발급 토큰 쿠키 `SameSite`. 4-10 표 (출시 전 `None`, 출시 후 `Lax`) |
 | `AI_PROVIDER` | 전체 | 일반 | 테라폼 | prod에서는 `fake` 불가 |
 | `AI_MODEL` | 전체 | 일반 | 테라폼(변수) | |
 | `AI_API_KEY` | 전체 | SecureString | 사람 | |
@@ -262,7 +266,7 @@ sequenceDiagram
 1. 배포 전 RDS 스냅샷을 만든다.
 2. RDS에 새 스키마 `sniptext`를 만들고 `sniptext_app`에 같은 권한을 준다(SSM 포트 포워딩, 마스터 계정).
 3. 새 `JWT_SECRET`·`CONTENT_ENCRYPTION_KEY`를 만들어 파라미터에 넣는다. **출시 전 값과 다르게** 한다(개발 중 발급된 토큰이 운영에서 통하지 않게, 개발 데이터 키와 섞이지 않게). 본문 키는 따로 안전하게 보관한다.
-4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
+4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`·`AUTH_COOKIE_SAME_SITE`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
 5. 현재 커밋 해시로 배포 워크플로를 다시 실행한다. 빈 스키마에 플라이웨이가 `db/migration`만 적용한다(시드 없음).
 6. 확인: `/actuator/health` UP, 스웨거 꺼짐, `dev-token` 경로 없음(404 또는 401), `localhost` 출처 거절, 구글 로그인 → 가입 → 템플릿 생성, 로그에 비밀값·본문 없음.
 7. GitHub 환경 `prod`에 승인자를 켠다(4-14).
