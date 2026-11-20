@@ -1,5 +1,7 @@
 package com.sniptext.domain.auth.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Set;
 
@@ -9,13 +11,17 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.sniptext.domain.auth.entity.RefreshToken;
 import com.sniptext.domain.auth.entity.SocialAccount;
 import com.sniptext.domain.auth.entity.SocialProvider;
 import com.sniptext.domain.auth.exception.AuthErrorCode;
+import com.sniptext.domain.auth.repository.RefreshTokenRepository;
 import com.sniptext.domain.auth.repository.SocialAccountRepository;
 import com.sniptext.domain.auth.service.dto.command.AuthLoginCommand;
+import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthSignUpCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
+import com.sniptext.domain.auth.service.dto.result.AuthReissueResult;
 import com.sniptext.domain.auth.service.dto.result.AuthSignUpResult;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.domain.user.service.UserQueryService;
@@ -44,6 +50,8 @@ public class AuthCommandService {
 
 	private final GoogleAuthCodeClient googleAuthCodeClient;
 	private final SocialAccountRepository socialAccountRepository;
+	private final RefreshTokenRepository refreshTokenRepository;
+	private final Clock clock;
 	private final UserCommandService userCommandService;
 	private final UserQueryService userQueryService;
 	private final RefreshTokenIssuer refreshTokenIssuer;
@@ -100,6 +108,47 @@ public class AuthCommandService {
 			}
 			throw e;
 		}
+	}
+
+	/**
+	 * 재발급 토큰을 새것으로 바꾸고 접근 토큰을 발급한다. 토큰이 없거나 모르는 값이거나 만료면 AUTH401_5.
+	 * 이미 폐기된 토큰이 다시 오거나 같은 토큰으로 동시에 오면 탈취로 보고 계보 전체를 폐기한 뒤 AUTH401_5.
+	 * 트랜잭션 안에서 예외를 던지면 계보 폐기까지 롤백되므로, 폐기를 커밋한 뒤 트랜잭션 바깥에서 던진다.
+	 * 재사용 감지는 응답이 다른 실패와 같은 AUTH401_5라 운영에서 구분할 수 있게 로그를 남긴다 (토큰 값은 넣지 않는다).
+	 * 탈퇴했거나 없는 회원이면 USER404_1이다 (로그인과 같은 코드).
+	 */
+	public AuthReissueResult reissue(AuthReissueCommand command) {
+		RefreshToken token = findToken(command.refreshToken())
+			.orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID));
+		return transactionTemplate.execute(status -> {
+			// 회원 행을 먼저 잠가 같은 회원의 로그아웃과 순서를 정한다. 잠그지 않으면 로그아웃의 전체 폐기 뒤에
+			// 이 요청이 새 토큰을 저장해 로그아웃이 풀린다. 탈퇴한 회원도 여기서 USER404_1로 막는다
+			userCommandService.lockUser(token.getUserId());
+			// 잠금을 기다리는 사이 다른 요청이 이 토큰을 교체했거나 토큰이 만료됐을 수 있다.
+			// 그래서 폐기 여부는 잠금 뒤에 다시 읽은 값으로, 만료와 폐기 시각은 잠금을 얻은 뒤의 시각으로 판단한다
+			RefreshToken current = refreshTokenRepository.findById(token.getId()).orElse(null);
+			LocalDateTime now = LocalDateTime.now(clock);
+			if (current == null || (!current.isRevoked() && current.isExpired(now))) {
+				return Optional.<AuthReissueResult>empty();
+			}
+			if (current.isRevoked() || refreshTokenRepository.revokeIfActive(current.getId(), now) == 0) {
+				refreshTokenRepository.revokeFamily(token.getFamilyId(), now);
+				// 탈취 말고도 로그아웃 뒤 남은 탭·확장의 요청이 같은 경로를 탄다
+				log.warn("폐기된 재발급 토큰으로 재발급 시도(재사용 또는 로그아웃 뒤 요청), 계보 폐기: userId={}, familyId={}",
+					token.getUserId(), token.getFamilyId());
+				return Optional.<AuthReissueResult>empty();
+			}
+			String refreshToken = refreshTokenIssuer.issueForReissue(token.getUserId(), token.getClientType(),
+				token.getFamilyId());
+			return Optional.of(new AuthReissueResult(jwtTokenProvider.issueAccessToken(token.getUserId()), refreshToken));
+		}).orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID));
+	}
+
+	private Optional<RefreshToken> findToken(String rawToken) {
+		if (rawToken == null || rawToken.isBlank()) {
+			return Optional.empty();
+		}
+		return refreshTokenRepository.findByTokenHash(RefreshTokenIssuer.hash(rawToken));
 	}
 
 	// 구글 호출 실패 원인에는 응답 내용이 들어 있을 수 있어 원인으로 붙이지 않는다.
