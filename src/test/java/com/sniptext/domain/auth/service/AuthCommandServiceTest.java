@@ -6,12 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 
-import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -32,6 +32,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.sniptext.domain.auth.entity.ClientType;
 import com.sniptext.domain.auth.entity.RefreshToken;
+import com.sniptext.domain.auth.exception.AuthErrorCode;
 import com.sniptext.domain.auth.repository.RefreshTokenRepository;
 import com.sniptext.domain.auth.repository.SocialAccountRepository;
 import com.sniptext.domain.auth.service.dto.command.AuthLogoutCommand;
@@ -64,7 +65,7 @@ class AuthCommandServiceTest {
 	private RefreshTokenRepository refreshTokenRepository;
 
 	@Spy
-	private Clock clock = new MutableClock(NOW);
+	private MutableClock clock = new MutableClock(NOW);
 
 	@Mock
 	private UserCommandService userCommandService;
@@ -89,6 +90,8 @@ class AuthCommandServiceTest {
 		RefreshToken token = RefreshTokenFixture.web(USER_ID, RefreshTokenIssuer.hash(RAW_TOKEN));
 		ReflectionTestUtils.setField(token, "id", TOKEN_ID);
 		given(refreshTokenRepository.findByTokenHash(RefreshTokenIssuer.hash(RAW_TOKEN))).willReturn(Optional.of(token));
+		// 잠금 뒤 다시 읽는 토큰. 회원이 없으면 잠금에서 끝나 불리지 않는 테스트도 있다
+		lenient().when(refreshTokenRepository.findById(TOKEN_ID)).thenReturn(Optional.of(token));
 		// 재발급은 execute, 로그아웃은 executeWithoutResult를 쓰므로 테스트마다 둘 중 하나만 불린다
 		lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation ->
 			invocation.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
@@ -142,6 +145,43 @@ class AuthCommandServiceTest {
 
 		assertThatCode(() -> authCommandService.logout(new AuthLogoutCommand(RAW_TOKEN))).doesNotThrowAnyException();
 		then(refreshTokenRepository).should(never()).revokeAllByUserId(any(), any());
+	}
+
+	@Test
+	@DisplayName("회원 잠금을 기다리는 사이 만료되면 AUTH401_5이고 토큰을 폐기하거나 새로 만들지 않는다")
+	void expiresWhileWaitingForLock() {
+		willAnswer(invocation -> {
+			clock.setTo(RefreshTokenFixture.EXPIRES_AT);
+			return null;
+		}).given(userCommandService).lockUser(USER_ID);
+
+		assertThatThrownBy(() -> authCommandService.reissue(new AuthReissueCommand(RAW_TOKEN)))
+			.isInstanceOf(BusinessException.class)
+			.extracting("resultCode")
+			.isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
+		then(refreshTokenRepository).should(never()).revokeIfActive(anyLong(), any());
+		then(refreshTokenRepository).should(never()).revokeFamily(any(), any());
+		then(refreshTokenIssuer).should(never()).issueForReissue(any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("잠금을 기다리는 사이 다른 요청이 토큰을 교체했으면 그 사이 만료됐어도 계보 전체를 폐기한다")
+	void rotatedAndExpiredWhileWaitingForLock() {
+		RefreshToken rotated = RefreshTokenFixture.web(USER_ID, RefreshTokenIssuer.hash(RAW_TOKEN));
+		ReflectionTestUtils.setField(rotated, "id", TOKEN_ID);
+		rotated.revoke(NOW);
+		given(refreshTokenRepository.findById(TOKEN_ID)).willReturn(Optional.of(rotated));
+		willAnswer(invocation -> {
+			clock.setTo(RefreshTokenFixture.EXPIRES_AT);
+			return null;
+		}).given(userCommandService).lockUser(USER_ID);
+
+		assertThatThrownBy(() -> authCommandService.reissue(new AuthReissueCommand(RAW_TOKEN)))
+			.isInstanceOf(BusinessException.class)
+			.extracting("resultCode")
+			.isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
+		then(refreshTokenRepository).should().revokeFamily(RefreshTokenFixture.FAMILY_ID, RefreshTokenFixture.EXPIRES_AT);
+		then(refreshTokenIssuer).should(never()).issueForReissue(any(), any(), any());
 	}
 
 }

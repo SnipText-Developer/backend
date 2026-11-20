@@ -19,6 +19,11 @@ logging:
   level:
     org.hibernate.orm.jdbc.error: ERROR
 
+# 운영에서는 Caddy가 https를 받아 앱에 http로 넘긴다. 프록시가 붙인 X-Forwarded-* 헤더로 원래 주소(https)를 판단한다.
+# 톰캣은 내부 주소(127.0.0.1, 도커 네트워크 등)에서 온 헤더만 믿는다. 앱 포트는 서버의 127.0.0.1에만 열려 있다.
+server:
+  forward-headers-strategy: native
+
 management:
   endpoints:
     web:

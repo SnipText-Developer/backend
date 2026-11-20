@@ -76,15 +76,15 @@ sequenceDiagram
         S->>App: GET 127.0.0.1:8080/actuator/health
     end
     alt 정상
-        S-->>GH: 성공 (현재 태그 기록)
+        S-->>GH: 성공 (설정을 *.good으로 남기고 현재 태그 기록)
         GH->>GH: https://api.sniptext.kr/actuator/health 바깥 확인
-    else 실패
-        S->>App: previous_tag 로 다시 띄움
+    else 실패 (Caddy reload 실패 포함)
+        S->>App: 마지막 정상 설정(*.good, 이전 태그 포함)으로 다시 띄움
         S-->>GH: 실패 코드 → 워크플로 실패
     end
 ```
 
-- **되돌리기**: 자동(상태 확인 실패 시 이전 태그)과 수동(배포 워크플로를 이전 커밋 해시로 다시 실행) 두 가지다. `latest`로는 배포하지 않는다. 어느 커밋이 서버에 있는지 항상 태그로 알 수 있어야 하기 때문이다.
+- **되돌리기**: 자동(상태 확인 실패 시 마지막으로 성공한 배포의 설정·태그. 배포가 중간에 끊겨도 성공한 배포만 정상 설정을 덮는다)과 수동(배포 워크플로를 이전 커밋 해시로 다시 실행) 두 가지다. `latest`로는 배포하지 않는다. 어느 커밋이 서버에 있는지 항상 태그로 알 수 있어야 하기 때문이다.
 - **브랜치**: `develop`은 통합 브랜치(배포 없음), `main`이 배포 브랜치다. `main`은 첫 배포 때 만든다.
 
 ## 4. 결정 기록
@@ -122,7 +122,8 @@ sequenceDiagram
 
 - **상황**: 개발 서버가 없어 마이그레이션 실수가 곧 운영 데이터 문제다. 서버 메모리는 2GB뿐이다.
 - **선택지**: RDS / EC2 안 도커 MySQL
-- **고른 것**: **RDS MySQL 8.4 db.t4g.micro**, 단일 AZ, gp3 20GB 암호화, 공개 접근 끔(EC2 보안 그룹에서만 3306), 삭제 방지 + 최종 스냅샷, 자동 백업.
+- **고른 것**: **RDS MySQL 8.4 db.t4g.micro**, 단일 AZ, gp3 20GB 암호화(50GB까지 자동 확장), 공개 접근 끔(EC2 보안 그룹에서만 3306), TLS 접속만 허용(`require_secure_transport`, 앱은 `sslMode=REQUIRED`), 삭제 방지 + 최종 스냅샷, 자동 백업.
+  - 인증서 호스트명 검증(`VERIFY_IDENTITY`)은 이미지에 RDS 인증서를 넣어야 해서 아직 하지 않는다. 같은 VPC 안에서 서버 보안 그룹만 닿을 수 있어 얻는 것이 적다.
 - **대가**: 월 약 $20 추가(추정). 다중 AZ가 아니라 장애 조치는 없다. 로컬에서 접속하려면 SSM 포트 포워딩을 거쳐야 한다. 대신 시점 복구·스냅샷이 공짜에 가깝게 따라오고, 앱과 DB가 메모리를 나눠 쓰지 않는다.
 - **앱은 처음부터 전용 계정 `sniptext_app`으로 접속한다.** 마스터 계정은 관리 작업에만 쓴다.
   - 권한은 앱 스키마(`sniptext_dev`, 출시 후 `sniptext`)에만 준다: `SELECT, INSERT, UPDATE, DELETE`와 플라이웨이에 필요한 `CREATE, ALTER, DROP, INDEX, REFERENCES`
@@ -134,15 +135,17 @@ sequenceDiagram
 - **상황**: 테라폼 상태 파일에는 리소스 속성이 평문으로 저장된다. 비밀값이 들어가면 상태 버킷 접근만으로 키가 샌다.
 - **선택지**: 테라폼 변수로 값 넣기 / Secrets Manager / 파라미터 저장소 + 사람이 값 입력 / 쓰기 전용 인자
 - **고른 것**
-  - DB 마스터 비밀번호: 테라폼 **임시(ephemeral) 난수 → RDS `password_wo`, SSM `value_wo`(`DB_MASTER_PASSWORD`)** 쓰기 전용 인자. 상태 파일에 값이 남지 않는다. 바꿀 때는 버전 숫자를 올린다. 앱은 이 값을 쓰지 않는다(`deploy.sh`가 `.env`로 옮기지 않음).
-  - 그 밖의 비밀(앱 DB 비밀번호, JWT 서명 키, 본문 암호화 키, 구글 클라이언트 비밀, AI 키): 테라폼은 SecureString 자리를 `CHANGE_ME`로 만들고 `ignore_changes = [value]`. 실제 값은 사람이 `aws ssm put-parameter --overwrite`로 넣는다. `deploy.sh`는 `CHANGE_ME`가 남아 있으면 기동하지 않는다.
+  - DB 마스터 비밀번호: 테라폼 **임시(ephemeral) 난수 → RDS `password_wo`, SSM `value_wo`(`/sniptext/admin/DB_MASTER_PASSWORD`)** 쓰기 전용 인자. 상태 파일에 값이 남지 않는다. 바꿀 때는 버전 숫자를 올린다. 앱은 이 값을 쓰지 않는다.
+    - 서버 역할이 읽는 `/sniptext/prod` 밖에 두고, 서버 역할 정책에서 `/sniptext/admin` 조회를 명시적으로 거부한다. `/sniptext/prod` 안에 두면 `deploy.sh`가 `.env`로 옮기지 않아도 서버 역할로 꺼낼 수 있고, Deny는 경로 재귀 조회를 막지 못한다. 경로를 옮겨도 서버에 붙은 `AmazonSSMManagedInstanceCore`가 `ssm:GetParameter`를 모든 파라미터에 허용하므로 Deny가 함께 있어야 한다.
+  - 그 밖의 비밀(앱 DB 비밀번호, JWT 서명 키, 본문 암호화 키, 구글 클라이언트 비밀, AI 키): 테라폼은 SecureString 자리를 **쓰기 전용 인자(`value_wo = "CHANGE_ME"`)**로 만든다. 실제 값은 사람이 `aws ssm put-parameter --overwrite`로 넣는다. `deploy.sh`는 `CHANGE_ME`가 남아 있으면 기동하지 않는다.
+    - 처음 생각한 `value` + `ignore_changes = [value]`는 쓰지 않는다. 공급자가 refresh 때 실제 값을 복호화해 상태 파일에 적기 때문이다(#91에서 공급자 코드로 확인). `value_wo`는 상태에 값을 남기지 않고, 버전 숫자를 올리지 않는 한 사람이 넣은 값을 덮지 않는다.
   - 비밀이 아닌 설정은 테라폼이 값까지 넣는다.
 - **대가**: 쓰기 전용 인자는 테라폼 1.11 이상, AWS 공급자 6.x가 필요하다. 사람 손이 한 번 들어간다. RDS 관리형 마스터 비밀번호(Secrets Manager)는 7일마다 자동 교체되어 실행 중인 앱이 접속을 잃을 수 있고 비밀 하나당 월 $0.4가 붙어 고르지 않았다.
 
 ### 4-7. 테라폼 상태 저장소
 
 - **고른 것**: `infra/terraform/bootstrap/`이 S3 상태 버킷(버전 관리, 암호화, 공개 차단, 삭제 방지)을 만든다. 잠금은 S3 네이티브 잠금(`use_lockfile`)으로 하고 DynamoDB 테이블은 만들지 않는다. 버킷 이름에 계정 ID를 붙여 계정 이전 시 겹치지 않게 한다.
-- **대가**: bootstrap 자체의 상태는 로컬에 둔다(커밋하지 않음). 잃어버리면 import로 되살린다.
+- **대가**: bootstrap 자신의 상태도 처음에는 로컬에서 만들고, 버킷이 생긴 뒤 같은 버킷(`bootstrap/terraform.tfstate`)으로 옮긴다. 로컬 파일을 잃을 위험을 없애는 대신, 새로 만들거나 지울 때 로컬로 되돌리는 단계가 하나 붙는다(`infra/terraform/bootstrap/README.md`).
 - 모든 리소스에 `project=sniptext`, `env=prod`, `managed-by=terraform` 태그를 공급자 `default_tags`로 붙인다. 테라폼·공급자·액션 버전은 고정한다.
 - 변경 흐름: `fmt` → `validate` → `plan` 요약 보고 → 확인 뒤 `apply`. 삭제·교체가 있는 plan은 따로 강조하고 멈춘다.
 
@@ -161,12 +164,12 @@ sequenceDiagram
 
 ### 4-10. 프론트 주소·출처 허용·쿠키
 
-- **상황**: 웹 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다. 화면과 API의 주소 관계에 따라 쿠키의 `SameSite`와 출처 허용(CORS)이 정해진다. 출시 전에는 프론트가 로컬(`localhost:5173`)에서 서버에 붙어야 한다.
+- **상황**: 웹 재발급 토큰은 HttpOnly·Secure 쿠키로만 주고받는다. 화면과 API의 주소 관계에 따라 쿠키의 `SameSite`와 출처 허용(CORS)이 정해진다. 출시 전에는 프론트가 로컬(`localhost:3000`, 대시보드가 CRA라 기본 포트 3000)에서 서버에 붙어야 한다.
 - **고른 것**: 화면은 `https://sniptext.kr`(랜딩·대시보드), API는 `https://api.sniptext.kr`. 둘은 같은 사이트라 출시 후에는 `SameSite=Lax`로 충분하다. 허용 출처·쿠키 `SameSite`는 **프로필별 설정값**으로 둔다.
 
 | 프로필 | 허용 출처 | 쿠키 `SameSite` | `GOOGLE_REDIRECT_URIS` |
 | --- | --- | --- | --- |
-| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:5173` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:5173/auth/google/callback` |
+| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:3000` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:3000/auth/google/callback` |
 | prod | `https://sniptext.kr` | `Lax` | `https://sniptext.kr/auth/google/callback` |
 
 - **대가**: dev 기간에 로컬 화면 → 서버 API는 다른 사이트 쿠키라서 사파리 등 다른 사이트 쿠키를 막는 브라우저에서는 재발급이 안 될 수 있다(크롬으로 연동 확인). 출처 허용·쿠키 코드는 아직 없다. 들어올 때(`global` 수정이라 해당 이슈에서 허락 후) 위 값을 설정으로 받게 한다. S2의 크롬 확장 출처는 그때 추가한다.
@@ -205,12 +208,13 @@ sequenceDiagram
 | `DB_URL` | dev·prod | 일반 | 테라폼 | 출시 전 `sniptext_dev` 스키마, 출시 후 `sniptext` |
 | `DB_USERNAME` | dev·prod | 일반 | 테라폼 | `sniptext_app` |
 | `DB_PASSWORD` | dev·prod | SecureString | 사람 | 앱 전용 계정 비밀번호. 계정 만들 때 같이 정함 |
-| `DB_MASTER_PASSWORD` | – (앱이 안 씀) | SecureString | 테라폼(쓰기 전용 인자) | 관리 작업 전용. 상태 파일에 남지 않음. `.env`로 옮기지 않음 |
+| `DB_MASTER_PASSWORD` | – (앱이 안 씀) | SecureString | 테라폼(쓰기 전용 인자) | 관리 작업 전용. `/sniptext/admin` 경로(서버 역할은 조회 거부). 상태 파일에 남지 않음 |
 | `JWT_SECRET` | 전체 | SecureString | 사람 | 32바이트 이상. 출시 전·후 값 다르게 |
 | `CONTENT_ENCRYPTION_KEY` | 전체 | SecureString | 사람 | Base64 32바이트. **잃으면 본문 복구 불가** → 따로 안전하게 보관. 출시 전·후 값 다르게 |
 | `GOOGLE_CLIENT_ID` | 전체 | 일반 | 테라폼(변수) | |
 | `GOOGLE_CLIENT_SECRET` | 전체 | SecureString | 사람 | |
 | `GOOGLE_REDIRECT_URIS` | 전체 | 일반 | 테라폼(변수) | 프로필별 값은 4-10 표 |
+| `AUTH_COOKIE_SAME_SITE` | 전체 | 일반 | 테라폼(변수) | 재발급 토큰 쿠키 `SameSite`. 4-10 표 (출시 전 `None`, 출시 후 `Lax`) |
 | `AI_PROVIDER` | 전체 | 일반 | 테라폼 | prod에서는 `fake` 불가 |
 | `AI_MODEL` | 전체 | 일반 | 테라폼(변수) | |
 | `AI_API_KEY` | 전체 | SecureString | 사람 | |
@@ -262,7 +266,7 @@ sequenceDiagram
 1. 배포 전 RDS 스냅샷을 만든다.
 2. RDS에 새 스키마 `sniptext`를 만들고 `sniptext_app`에 같은 권한을 준다(SSM 포트 포워딩, 마스터 계정).
 3. 새 `JWT_SECRET`·`CONTENT_ENCRYPTION_KEY`를 만들어 파라미터에 넣는다. **출시 전 값과 다르게** 한다(개발 중 발급된 토큰이 운영에서 통하지 않게, 개발 데이터 키와 섞이지 않게). 본문 키는 따로 안전하게 보관한다.
-4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
+4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`·`AUTH_COOKIE_SAME_SITE`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
 5. 현재 커밋 해시로 배포 워크플로를 다시 실행한다. 빈 스키마에 플라이웨이가 `db/migration`만 적용한다(시드 없음).
 6. 확인: `/actuator/health` UP, 스웨거 꺼짐, `dev-token` 경로 없음(404 또는 401), `localhost` 출처 거절, 구글 로그인 → 가입 → 템플릿 생성, 로그에 비밀값·본문 없음.
 7. GitHub 환경 `prod`에 승인자를 켠다(4-14).
@@ -280,7 +284,7 @@ sequenceDiagram
 
 - **일찍 전환하는 이유**: 전환해도 남은 크레딧은 만료일까지 그대로 쓰여 일찍 바꿔도 손해가 없다. 무료 플랜의 서비스·인스턴스 종류 제한도 풀려, 출시 직전에 제한에 걸리는 일을 막는다.
 
-1. 콘솔에서 유료 플랜으로 전환(손작업, 버튼 한 번).
+1. 콘솔에서 유료 플랜으로 전환(손작업, 버튼 한 번). **2026-11-16 전환 완료**(전환 시점 남은 크레딧 $117).
 2. 예산 경보(크레딧 제외 기준)가 정상인지 확인한다.
 3. 리소스는 그대로다. 코드 변경 없음.
 
@@ -290,7 +294,7 @@ sequenceDiagram
 
 
 1. 새 계정 생성, 루트 2단계 인증, 결제 수단 등록(손작업).
-2. `bootstrap` apply → `prod` apply(계정 ID·도메인 등은 변수).
+2. `bootstrap` apply → `prod` apply(도메인 등은 변수, 계정 ID는 현재 자격에서 읽으므로 고칠 값 없음).
 3. 새 호스팅 영역의 네임서버 4개를 가비아에 다시 등록(반영까지 최대 하루, 이 동안 이전 서버를 유지).
 4. 앱 전용 DB 계정 생성, 비밀값 입력. **`JWT_SECRET`·`CONTENT_ENCRYPTION_KEY`는 반드시 이전 계정과 같은 값**(본문 키가 다르면 저장된 본문을 읽지 못한다).
 5. 이전 계정에서 쓰기를 멈추고(배포 중단 공지) SSM 포트 포워딩으로 `mysqldump` → 새 계정 RDS로 복원. 기본 KMS 키로 암호화된 RDS 스냅샷은 다른 계정과 공유할 수 없어 덤프를 쓴다.
@@ -344,15 +348,15 @@ sequenceDiagram
 | 작업 | 시점 | 이슈 |
 | --- | --- | --- |
 | 루트 계정 2단계 인증, 결제 수단 확인 | 시작 전 | #89 |
-| bootstrap 최초 실행용 관리자 자격 준비(장기 접근 키 대신 IAM Identity Center 또는 임시 자격) | 시작 전 | #89 |
-| 예산 경보 구독 메일 확인 | bootstrap 후 | #89 |
+| bootstrap 최초 실행용 관리자 자격 준비: IAM 사용자 `sniptext-admin`(MFA, 접근 키 없음) + `aws login` 임시 자격. IAM Identity Center는 권한 세트에 AWS Organizations가 필요해 쓰지 않는다(10절) | 시작 전 | #89 |
+| 예산 경보 받는 주소 인증: AWS User Notifications → 전송 채널 → 이메일에서 "활성"으로 만든다(인증 전에는 경보 메일이 오지 않는다). 발신 주소 `budgets@costalerts.amazonaws.com` 스팸 허용. 수신 확인은 한도를 잠깐 낮춰 apply했다가 되돌린다(README) | bootstrap 후 | #89 |
 | 가비아 `sniptext.kr` 네임서버를 Route 53 4개로 변경 | 호스팅 영역 생성 후 | #90 |
 | 앱 전용 DB 계정 `sniptext_app`·스키마 `sniptext_dev` 생성(SSM 포트 포워딩) | RDS 생성 후 | #91 |
 | SecureString 실제 값 입력(앱 DB 비밀번호, JWT, 본문 키, 구글 비밀, AI 키), 본문 키 별도 보관 | RDS·파라미터 생성 후 | #91 |
 | GitHub 환경 `prod` 생성, `main` 브랜치 생성·보호 | 배포 워크플로 전 | #93 |
 | 첫 푸시 뒤 GHCR 패키지 공개로 변경 | 첫 배포 | #93 |
 | 디스코드 웹훅 생성·등록 | 알림 작업 | #95 |
-| 유료 플랜 전환 | 출시 전 (#94 작업 전) | #94 |
+| 유료 플랜 전환 | 출시 전 (#94 작업 전). **2026-11-16 완료** | #94 |
 | 출시 전환 절차 실행, `prod` 승인자 켜기 | 출시일 | #94 |
 
 ## 13. 구현 이슈

@@ -1,0 +1,7 @@
+# API_DOMAIN(api.sniptext.kr)의 인증서를 자동으로 발급·갱신하고 앱으로 넘긴다.
+# DNS(Route 53)가 이 서버의 고정 IP를 가리켜야 발급된다.
+# X-Forwarded-For·Proto·Host는 reverse_proxy가 붙인다 (앱은 server.forward-headers-strategy로 읽는다)
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8080
+}

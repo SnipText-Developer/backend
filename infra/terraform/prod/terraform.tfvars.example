@@ -1,0 +1,27 @@
+# 복사해서 terraform.tfvars로 쓴다 (terraform.tfvars는 커밋하지 않는다). 기본값과 같으면 생략해도 된다
+
+region                     = "ap-northeast-2"
+domain_name                = "sniptext.kr"
+api_subdomain              = "api"
+instance_type              = "t4g.small"
+root_volume_size_gb        = 20
+vpc_cidr                   = "10.20.0.0/16"
+availability_zones         = ["ap-northeast-2a", "ap-northeast-2c"]
+deploy_file_retention_days = 90
+
+# DB (#91)
+db_instance_class           = "db.t4g.micro"
+db_allocated_storage_gb     = 20
+db_max_allocated_storage_gb = 50
+db_backup_retention_days    = 7
+db_master_username          = "sniptext_admin"
+db_master_password_version  = 3 # 올리면 마스터 비밀번호를 새로 만든다
+app_db_schema               = "sniptext_dev"
+app_db_username             = "sniptext_app"
+
+# 앱 설정 (#91). google_client_id는 기본값이 없어 반드시 넣는다
+spring_profile       = "dev"
+google_client_id     = "000000000000-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+google_redirect_uris  = ["https://sniptext.kr/auth/google/callback", "http://localhost:3000/auth/google/callback"]
+auth_cookie_same_site = "None" # 출시 후 Lax
+ai_model              = "claude-haiku-5-5"

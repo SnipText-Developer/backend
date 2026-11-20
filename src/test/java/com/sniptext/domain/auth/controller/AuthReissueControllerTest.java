@@ -32,6 +32,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -122,7 +123,7 @@ class AuthReissueControllerTest extends IntegrationTestSupport {
 			.contains("HttpOnly", "Secure", "SameSite=Lax", "Path=/api/v1/auth", "Max-Age=" + Duration.ofDays(14).toSeconds());
 		assertThat(cookieToken(result)).isNotEqualTo(oldToken);
 
-		List<RefreshToken> tokens = refreshTokenRepository.findAll();
+		List<RefreshToken> tokens = refreshTokenRepository.findAll(Sort.by("id"));
 		assertThat(tokens).hasSize(2);
 		assertThat(tokens.getFirst().getFamilyId()).isEqualTo(tokens.getLast().getFamilyId());
 		assertThat(tokens.getFirst().isRevoked()).isTrue();
