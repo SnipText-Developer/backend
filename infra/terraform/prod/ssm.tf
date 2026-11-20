@@ -4,12 +4,13 @@
 # refresh 때 공급자가 실제 값을 복호화해 상태 파일에 적기 때문이다. value_wo는 상태에 값을 남기지 않는다
 
 locals {
-  parameter_prefix = "/sniptext/prod"
+  parameter_prefix       = "/sniptext/prod"
+  admin_parameter_prefix = "/sniptext/admin"
 
   # 비밀이 아닌 설정: 테라폼이 값까지 넣는다
   app_settings = {
     SPRING_PROFILES_ACTIVE = var.spring_profile
-    DB_URL                 = "jdbc:mysql://${aws_db_instance.main.address}:${aws_db_instance.main.port}/${var.app_db_schema}"
+    DB_URL                 = "jdbc:mysql://${aws_db_instance.main.address}:${aws_db_instance.main.port}/${var.app_db_schema}?sslMode=REQUIRED"
     DB_USERNAME            = var.app_db_username
     API_DOMAIN             = local.api_fqdn
     GOOGLE_CLIENT_ID       = var.google_client_id
@@ -47,9 +48,12 @@ resource "aws_ssm_parameter" "secret" {
   value_wo_version = 1 # 올리면 사람이 넣은 값이 CHANGE_ME로 덮인다. 바꾸지 않는다
 }
 
-# 관리 작업 전용. 앱은 쓰지 않고 deploy.sh도 .env로 옮기지 않는다
+# 관리 작업 전용. 서버 역할이 읽을 수 있는 /sniptext/prod 밖에 둔다
+# (prod 아래에 두면 서버가 털렸을 때 경로 조회로 마스터 비밀번호까지 꺼낼 수 있다. Deny는 경로 재귀 조회를 막지 못한다)
+# 이름 지정 조회는 ec2.tf의 DenyAdminParameters가 막는다
+# 경로를 바꾸면 파라미터가 새 난수로 다시 만들어지므로 db_master_password_version도 함께 올려 RDS와 맞춘다
 resource "aws_ssm_parameter" "db_master_password" {
-  name             = "${local.parameter_prefix}/DB_MASTER_PASSWORD"
+  name             = "${local.admin_parameter_prefix}/DB_MASTER_PASSWORD"
   description      = "RDS master password (admin only, not for the app)"
   type             = "SecureString"
   value_wo         = ephemeral.random_password.db_master.result

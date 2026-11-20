@@ -64,6 +64,12 @@ variable "db_allocated_storage_gb" {
   default     = 20
 }
 
+variable "db_max_allocated_storage_gb" {
+  description = "RDS 저장소 자동 확장 상한(GB). 설정만으로는 요금이 없다"
+  type        = number
+  default     = 50
+}
+
 variable "db_backup_retention_days" {
   description = "RDS 자동 백업 보존 기간(일). 이 기간 안의 시점으로 복구할 수 있다"
   type        = number
@@ -79,7 +85,7 @@ variable "db_master_username" {
 variable "db_master_password_version" {
   description = "마스터 비밀번호 버전. 올리면 새 난수로 RDS와 DB_MASTER_PASSWORD 파라미터를 함께 바꾼다"
   type        = number
-  default     = 1
+  default     = 3 # 3: /sniptext/admin으로 옮길 때 RDS 변경이 실패해 두 값을 다시 맞춤
 }
 
 variable "app_db_schema" {

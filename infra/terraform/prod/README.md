@@ -11,8 +11,8 @@
 | 고정 IP | EC2에 연결 |
 | Route 53 | `sniptext.kr` 호스팅 영역(삭제 방지), `api` A 레코드 → 고정 IP |
 | S3 배포 버킷 | `sniptext-deploy-<계정 ID>`, 공개 차단, 90일 지난 배포 파일 삭제 |
-| RDS | MySQL 8.4 `db.t4g.micro`, 단일 AZ, gp3 20GB 암호화, 공개 접근 끔, 서버 보안 그룹에서만 3306, 삭제 방지·최종 스냅샷, 자동 백업 7일. `utf8mb4_0900_ai_ci`, `time_zone=Asia/Seoul` |
-| 파라미터 저장소 | `/sniptext/prod/*`. 설정 8개는 값까지, 비밀 5개는 `CHANGE_ME` 자리만, `DB_MASTER_PASSWORD`는 난수 |
+| RDS | MySQL 8.4 `db.t4g.micro`, 단일 AZ, gp3 20GB 암호화(50GB까지 자동 확장), 공개 접근 끔, 서버 보안 그룹에서만 3306, TLS 접속만 허용, 삭제 방지·최종 스냅샷, 자동 백업 7일. `utf8mb4_0900_ai_ci`, `time_zone=Asia/Seoul` |
+| 파라미터 저장소 | `/sniptext/prod/*`: 설정 9개는 값까지, 비밀 5개는 `CHANGE_ME` 자리만. `/sniptext/admin/DB_MASTER_PASSWORD`는 난수(서버 역할은 조회 거부) |
 
 ## 실행 (파워셸)
 
@@ -58,7 +58,7 @@ aws ssm start-session --target (terraform output -raw instance_id) `
 다른 창에서 마스터 비밀번호를 꺼내 접속한다(화면·기록에 남기지 않게 바로 클립보드로).
 
 ```powershell
-aws ssm get-parameter --name /sniptext/prod/DB_MASTER_PASSWORD --with-decryption --query Parameter.Value --output text | Set-Clipboard
+aws ssm get-parameter --name /sniptext/admin/DB_MASTER_PASSWORD --with-decryption --query Parameter.Value --output text | Set-Clipboard
 mysql -h 127.0.0.1 -P 13306 -u sniptext_admin -p
 ```
 
@@ -98,7 +98,10 @@ aws ssm get-parameters-by-path --path /sniptext/prod --with-decryption --query "
 ## 알아 둘 것
 
 - 비밀 파라미터는 쓰기 전용 인자(`value_wo`)로 만든다. 일반 `value`에 `ignore_changes`를 걸어도 refresh 때 실제 값이 복호화돼 상태 파일에 적히기 때문이다.
-- 마스터 비밀번호를 바꾸려면 `db_master_password_version`을 올려 apply한다. RDS와 `DB_MASTER_PASSWORD`가 같은 새 난수로 바뀐다.
+- 마스터 비밀번호를 바꾸려면 `db_master_password_version`을 올려 apply한다. RDS와 `DB_MASTER_PASSWORD`가 같은 새 난수로 바뀐다. 마스터 비밀번호 변경은 `apply_immediately`와 상관없이 바로 반영된다.
+- 마스터 비밀번호는 `/sniptext/prod` 밖(`/sniptext/admin`)에 두고, 서버 역할 정책에서 `/sniptext/admin` 조회를 명시적으로 거부한다(`ec2.tf`의 `DenyAdminParameters`). 서버에 붙은 `AmazonSSMManagedInstanceCore`가 `ssm:GetParameter`를 모든 파라미터에 허용하기 때문에, 경로만 옮겨서는 이름을 지정한 조회가 막히지 않는다.
+- 저장 공간은 남은 공간이 10% 아래로 내려가면 `db_max_allocated_storage_gb`(50GB)까지 자동으로 늘어난다. 늘어난 만큼만 요금이 붙고, 한 번 늘어나면 줄일 수 없다.
+- RDS는 `require_secure_transport = 1`이라 평문 접속을 거부한다. 앱은 `DB_URL`의 `sslMode=REQUIRED`로 접속한다. `mysql` 명령도 기본이 TLS라 그대로 접속된다.
 - RDS 설정 변경은 다음 유지 관리 시간(화 03:00~04:00 KST)에 반영된다(`apply_immediately = false`).
 - RDS는 삭제 방지와 `prevent_destroy`가 둘 다 걸려 있다. 지우려면 두 가지를 먼저 풀어야 한다.
 

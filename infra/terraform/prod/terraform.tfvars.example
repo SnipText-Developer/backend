@@ -10,13 +10,14 @@ availability_zones         = ["ap-northeast-2a", "ap-northeast-2c"]
 deploy_file_retention_days = 90
 
 # DB (#91)
-db_instance_class          = "db.t4g.micro"
-db_allocated_storage_gb    = 20
-db_backup_retention_days   = 7
-db_master_username         = "sniptext_admin"
-db_master_password_version = 1 # 올리면 마스터 비밀번호를 새로 만든다
-app_db_schema              = "sniptext_dev"
-app_db_username            = "sniptext_app"
+db_instance_class           = "db.t4g.micro"
+db_allocated_storage_gb     = 20
+db_max_allocated_storage_gb = 50
+db_backup_retention_days    = 7
+db_master_username          = "sniptext_admin"
+db_master_password_version  = 3 # 올리면 마스터 비밀번호를 새로 만든다
+app_db_schema               = "sniptext_dev"
+app_db_username             = "sniptext_app"
 
 # 앱 설정 (#91). google_client_id는 기본값이 없어 반드시 넣는다
 spring_profile       = "dev"

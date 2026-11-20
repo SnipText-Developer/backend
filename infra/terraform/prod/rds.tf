@@ -47,6 +47,12 @@ resource "aws_db_parameter_group" "main" {
     value = "Asia/Seoul"
   }
 
+  # 평문 접속을 거부한다. 앱은 DB_URL의 sslMode=REQUIRED로 TLS 접속한다 (동적 값이라 재부팅 없이 반영)
+  parameter {
+    name  = "require_secure_transport"
+    value = "1"
+  }
+
   tags = { Name = local.name }
 }
 
@@ -67,9 +73,12 @@ resource "aws_db_instance" "main" {
   instance_class             = var.db_instance_class
   parameter_group_name       = aws_db_parameter_group.main.name
 
-  allocated_storage = var.db_allocated_storage_gb
-  storage_type      = "gp3"
-  storage_encrypted = true
+  # 남은 공간이 10% 아래로 내려가면 상한까지 자동으로 늘린다 (늘어난 만큼만 요금, 줄일 수는 없다)
+  # 자동 확장으로 생긴 allocated_storage 차이는 공급자가 무시한다
+  allocated_storage     = var.db_allocated_storage_gb
+  max_allocated_storage = var.db_max_allocated_storage_gb
+  storage_type          = "gp3"
+  storage_encrypted     = true
 
   username = var.db_master_username
   # 쓰기 전용 인자: 버전 숫자를 올릴 때만 새 값을 보낸다

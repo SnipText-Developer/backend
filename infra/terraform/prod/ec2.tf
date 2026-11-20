@@ -38,6 +38,19 @@ data "aws_iam_policy_document" "app_runtime" {
     ]
   }
 
+  # AmazonSSMManagedInstanceCore가 ssm:GetParameter(s)를 모든 파라미터에 허용하므로,
+  # 관리 작업 전용 경로(/sniptext/admin)는 이름 지정 조회를 명시적으로 거부한다.
+  # 경로 조회(GetParametersByPath)는 /sniptext/admin·/sniptext에 허용이 없어 이미 막혀 있다
+  statement {
+    sid     = "DenyAdminParameters"
+    effect  = "Deny"
+    actions = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
+    resources = [
+      "arn:aws:ssm:${var.region}:${local.account_id}:parameter${local.admin_parameter_prefix}",
+      "arn:aws:ssm:${var.region}:${local.account_id}:parameter${local.admin_parameter_prefix}/*",
+    ]
+  }
+
   statement {
     sid       = "ListDeployBucket"
     actions   = ["s3:ListBucket"]
