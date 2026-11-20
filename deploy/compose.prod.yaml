@@ -1,0 +1,49 @@
+# 운영 서버(EC2) 실행 구성. deploy.sh가 /opt/sniptext로 복사해 실행한다 (설계: docs/deploy-design.md)
+# 변수(APP_TAG, API_DOMAIN 등)는 deploy.sh가 만든 /opt/sniptext/.env에서 읽는다.
+name: sniptext
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  caddy:
+    # 태그와 다이제스트를 함께 고정한다. 올릴 때는 두 값을 같이 바꾼다
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN이 .env에 없습니다}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 인증서. 잃으면 다시 발급받아야 한다 (발급 횟수 제한 주의)
+      - caddy-data:/data
+      - caddy-config:/config
+    mem_limit: 128m
+    logging: *logging
+
+  app:
+    # APP_IMAGE는 평소 비워 둔다 (저장소를 ECR 등으로 옮기거나 로컬에서 시험할 때만 지정)
+    image: ${APP_IMAGE:-ghcr.io/sniptext-developer/backend}:${APP_TAG:?APP_TAG가 .env에 없습니다}
+    restart: unless-stopped
+    # 비밀값이 들어 있다. deploy.sh가 권한 600으로 만든다
+    env_file: .env
+    environment:
+      # 힙을 컨테이너 한도 기준으로 잡는다 (설계 4-11)
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+    # 바깥에는 Caddy(80·443)만 연다. 앱 포트는 서버 안에서 상태 확인용으로만 쓴다
+    ports:
+      - "127.0.0.1:8080:8080"
+    mem_limit: 1200m
+    # 스프링 종료 대기(spring.lifecycle.timeout-per-shutdown-phase, 기본 30초)보다 길게 둔다.
+    # compose 기본값(10초)이면 교체 때 진행 중인 요청(AI 톤 교정 최대 20초)이 강제 종료되고 사용량 반환도 실행되지 않는다
+    stop_grace_period: 40s
+    logging: *logging
+
+volumes:
+  caddy-data:
+  caddy-config:
