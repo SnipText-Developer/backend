@@ -9,20 +9,24 @@ on:
 permissions:
   contents: read
 
+# 외부 액션은 태그 대신 커밋 SHA로 고정한다. 태그는 옮길 수 있어 액션 저장소가 털리면 바뀐 코드가 그대로 실행된다.
+# 올릴 때는 릴리스 태그가 가리키는 커밋을 확인하고 SHA와 뒤의 버전 주석을 함께 바꾼다
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: 자바 21 설치
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: '21'
 
       - name: 그래들 설정 (캐시)
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: 빌드 및 테스트
         run: ./gradlew build
@@ -31,7 +35,9 @@ jobs:
   shellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: 셸 스크립트 검사
         run: |
@@ -42,10 +48,12 @@ jobs:
   image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: 이미지 빌더 설정
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # x86 실행기에서 arm64 이미지를 빌드한다. 빌드 단계는 실행기 아키텍처에서 돌고
       # 실행 단계에는 RUN이 없어 에뮬레이터(QEMU) 설정 없이 빌드된다 (Dockerfile 주석 참고)
