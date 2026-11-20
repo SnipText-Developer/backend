@@ -147,3 +147,16 @@ variable "ai_model" {
   type        = string
   default     = "claude-haiku-5-5"
 }
+
+# ---------- GitHub 배포 역할 (#93) ----------
+variable "github_repository" {
+  description = "배포 역할을 위임받을 GitHub 저장소 (소유자/이름, 대소문자 그대로)"
+  type        = string
+  default     = "SnipText-Developer/backend"
+}
+
+variable "github_environment" {
+  description = "배포 역할을 위임받을 GitHub 환경. 이 환경을 쓰는 작업만 위임된다"
+  type        = string
+  default     = "prod"
+}
