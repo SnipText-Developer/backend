@@ -98,7 +98,14 @@ aws ssm get-parameters-by-path --path /sniptext/prod --with-decryption --query "
 
 ## 배포 역할 apply 뒤 (#93)
 
-GitHub 저장소 → Settings → Environments → `prod`의 **Variables**(Secrets 아님)에 넣는다.
+GitHub 저장소 → Settings → Environments에서 `prod`를 만든다.
+
+- **Deployment branches**: Selected branches로 `develop`만 허용한다(출시 때 `main`만으로 바꾼다).
+  - 배포 역할의 신뢰 조건은 `repo:<저장소>:environment:prod`라 브랜치 정보가 없다. **브랜치 제한은 이 규칙이 맡는다.** 허용되지 않은 브랜치의 작업은 GitHub가 시작 전에 거부해 `environment:prod` 토큰이 발급되지 않는다. 이 규칙을 비우면 저장소 쓰기 권한만으로 어느 브랜치에서든 운영 서버에 명령을 보낼 수 있다.
+  - 확인: `gh api repos/<저장소>/environments/prod/deployment-branch-policies --jq '.branch_policies[].name'` → `develop`
+- **Required reviewers**: 출시 전에는 두지 않고 출시 전환 때 켠다.
+
+그다음 `prod`의 **Variables**(Secrets 아님)에 넣는다.
 
 | 변수 | 값 |
 | --- | --- |

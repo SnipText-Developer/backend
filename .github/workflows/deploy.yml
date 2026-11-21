@@ -150,8 +150,9 @@ jobs:
           while :; do
             read -r status target_count < <(aws ssm list-commands --command-id "$cmd_id" \
               --query 'Commands[0].[Status,TargetCount]' --output text)
+            # None·빈 값: 막 보낸 명령이 아직 조회되지 않음(최종 일관성) 또는 조회 일시 실패 → 다시 조회
             case "$status" in
-              Pending | InProgress | Cancelling) ;;
+              Pending | InProgress | Cancelling | None | "") ;;
               *) break ;;
             esac
             if ((SECONDS >= deadline)); then
