@@ -12,6 +12,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -136,6 +137,19 @@ class AuthCommandServiceTest {
 		InOrder inOrder = inOrder(userCommandService, refreshTokenRepository);
 		inOrder.verify(userCommandService).lockUser(USER_ID);
 		inOrder.verify(refreshTokenRepository).revokeAllByUserId(USER_ID, NOW);
+	}
+
+	@Test
+	@DisplayName("로그아웃의 폐기 시각은 재발급처럼 회원 잠금을 얻은 뒤의 시각이다")
+	void logoutRevokesAtTimeAfterLock() {
+		willAnswer(invocation -> {
+			clock.advance(Duration.ofSeconds(1));
+			return null;
+		}).given(userCommandService).lockUser(USER_ID);
+
+		authCommandService.logout(new AuthLogoutCommand(RAW_TOKEN));
+
+		then(refreshTokenRepository).should().revokeAllByUserId(USER_ID, NOW.plusSeconds(1));
 	}
 
 	@Test

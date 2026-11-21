@@ -155,19 +155,20 @@ public class AuthCommandService {
 		LocalDateTime now = LocalDateTime.now(clock);
 		findToken(command.refreshToken())
 			.filter(token -> !token.isRevoked() && !token.isExpired(now))
-			.ifPresent(token -> revokeAllOf(token.getUserId(), now));
+			.ifPresent(token -> revokeAllOf(token.getUserId()));
 	}
 
 	/**
 	 * 회원 행을 먼저 잠가 같은 회원의 재발급과 순서를 정한다. 잠그지 않으면 재발급이 이 폐기 뒤에 새 토큰을 저장해 로그아웃이 풀린다.
+	 * 폐기 시각은 재발급과 같이 잠금을 얻은 뒤의 시각으로 정한다.
 	 * 탈퇴한 회원이면 잠금이 USER404_1을 던지는데, 그 회원의 재발급은 이미 막혀 있으므로 폐기 없이 성공으로 둔다.
 	 * 예외가 난 트랜잭션은 롤백 전용이 되므로 트랜잭션이 끝난 뒤 바깥에서 거른다.
 	 */
-	private void revokeAllOf(Long userId, LocalDateTime now) {
+	private void revokeAllOf(Long userId) {
 		try {
 			transactionTemplate.executeWithoutResult(status -> {
 				userCommandService.lockUser(userId);
-				refreshTokenRepository.revokeAllByUserId(userId, now);
+				refreshTokenRepository.revokeAllByUserId(userId, LocalDateTime.now(clock));
 			});
 		} catch (BusinessException e) {
 			if (e.getResultCode() != UserErrorCode.USER_NOT_FOUND) {
