@@ -62,7 +62,7 @@ com.sniptext
 
 ```
 domain/{도메인}/
-├── controller/      # {도메인}SuccessCode (성공 결과 코드 열거형)
+├── controller/      # {도메인}SuccessCode (성공 결과 코드 열거형) · {컨트롤러}Docs (스웨거 설명)
 │   └── dto/         # {도메인}{행위}Request · {도메인}{행위}Response
 ├── service/         # {도메인}CommandService (쓰기) · {도메인}QueryService (조회)
 │   └── dto/
@@ -86,6 +86,9 @@ domain/{도메인}/
 - 성공 코드는 컨트롤러가, 에러 코드는 서비스가 쓴다. 서비스는 성공 코드를 모른다.
 - 버전 구분(`V2`)이 필요하면 컨트롤러의 요청·응답 객체에만 붙인다.
 - 엔티티의 규칙을 쓰는 요청 검증 어노테이션은 `annotation`에 둔다. `controller/dto`에 두면 컨트롤러가 엔티티를 쓰게 되어 ArchUnit에 걸린다. `annotation`은 `entity`·`exception`만 쓰고 `controller`·`service`는 부르지 않는다.
+- 스웨거 어노테이션(`@Tag`·`@Operation`·`@ApiResponse`·`@Parameter`)은 `controller` 패키지의 `{컨트롤러}Docs` 인터페이스에 두고, 컨트롤러가 구현하며 메서드에 `@Override`를 붙인다 (예: `TemplateControllerDocs`). 에러 응답 표시 방식은 아직 정하지 않았다.
+- 스프링 어노테이션(매핑, `@RequestParam`·`@PathVariable`·`@RequestBody`, `@Valid`, 검증 어노테이션)은 컨트롤러에만 둔다. 메서드 모양은 두 곳이 같고, `@LoginUser Long userId`도 인터페이스에 쓴다.
+  - 쿼리 파라미터에 검증이 필요하면 요청 record로 묶어 필드에 검증을 단다 (인터페이스에는 `@ParameterObject`, 필드 설명은 record 필드의 `@Parameter`. 예: `TrashListRequest`). 메서드 파라미터에 `@Min` 등을 바로 붙이면 하이버네이트 검증기가 그 API의 모든 요청을 500으로 만든다 (HV000151)
 - `support`에는 다른 도메인이 써도 되는 순수 규칙만 둔다 (상태·DB·스프링 빈 없음). `service`·`repository`·`controller`를 참조하지 않는다 (ArchUnit이 강제).
 - 값을 나타내는 열거형(카테고리, 약관 종류 등)은 그 값을 저장하는 엔티티의 도메인 `entity` 패키지에 둔다. 저장하지 않는 값은 그 값을 쓰는 도메인의 `entity` 패키지에 둔다.
 - `entity` 패키지의 열거형은 컨트롤러와 다른 도메인에서 직접 써도 된다. 엔티티 클래스는 안 된다.
