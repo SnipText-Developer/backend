@@ -13,6 +13,7 @@
 | S3 배포 버킷 | `sniptext-deploy-<계정 ID>`, 공개 차단, 90일 지난 배포 파일 삭제 |
 | RDS | MySQL 8.4 `db.t4g.micro`, 단일 AZ, gp3 20GB 암호화(50GB까지 자동 확장), 공개 접근 끔, 서버 보안 그룹에서만 3306, TLS 접속만 허용, 삭제 방지·최종 스냅샷, 자동 백업 7일. `utf8mb4_0900_ai_ci`, `time_zone=Asia/Seoul` |
 | 파라미터 저장소 | `/sniptext/prod/*`: 설정 9개는 값까지, 비밀 5개는 `CHANGE_ME` 자리만. `/sniptext/admin/DB_MASTER_PASSWORD`는 난수(서버 역할은 조회 거부) |
+| GitHub 배포 역할 | OIDC 공급자 + `sniptext-prod-github-deploy`. 이 저장소의 `prod` 환경 작업만 위임. 권한은 배포 파일 올리기·운영 서버 명령·결과 조회뿐 (#93) |
 
 ## 실행 (파워셸)
 
@@ -94,6 +95,26 @@ $b = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($b);
 ```powershell
 aws ssm get-parameters-by-path --path /sniptext/prod --with-decryption --query "Parameters[?Value=='CHANGE_ME'].Name"
 ```
+
+## 배포 역할 apply 뒤 (#93)
+
+GitHub 저장소 → Settings → Environments에서 `prod`를 만든다.
+
+- **Deployment branches**: Selected branches로 `develop`만 허용한다(출시 때 `main`만으로 바꾼다).
+  - 배포 역할의 신뢰 조건은 `repo:<저장소>:environment:prod`라 브랜치 정보가 없다. **브랜치 제한은 이 규칙이 맡는다.** 허용되지 않은 브랜치의 작업은 GitHub가 시작 전에 거부해 `environment:prod` 토큰이 발급되지 않는다. 이 규칙을 비우면 저장소 쓰기 권한만으로 어느 브랜치에서든 운영 서버에 명령을 보낼 수 있다.
+  - 확인: `gh api repos/<저장소>/environments/prod/deployment-branch-policies --jq '.branch_policies[].name'` → `develop`
+- **Required reviewers**: 출시 전에는 두지 않고 출시 전환 때 켠다.
+
+그다음 `prod`의 **Variables**(Secrets 아님)에 넣는다.
+
+| 변수 | 값 |
+| --- | --- |
+| `AWS_DEPLOY_ROLE_ARN` | `terraform output -raw github_deploy_role_arn` |
+| `AWS_REGION` | `ap-northeast-2` |
+| `DEPLOY_BUCKET` | `terraform output -raw deploy_bucket_name` |
+
+계정에 GitHub OIDC 공급자가 이미 있으면 apply가 실패한다. 그때는 만들지 말고 가져온다:
+`terraform import aws_iam_openid_connect_provider.github arn:aws:iam::<계정 ID>:oidc-provider/token.actions.githubusercontent.com`
 
 ## 알아 둘 것
 

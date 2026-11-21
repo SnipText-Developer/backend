@@ -26,7 +26,7 @@
 flowchart LR
     dev[개발자] -->|PR| gh[GitHub<br/>SnipText-Developer/backend]
     gh -->|PR 검사| ci[CI<br/>빌드·테스트컨테이너·이미지 빌드 확인]
-    gh -->|main 푸시| cd[배포 워크플로<br/>환경 prod]
+    gh -->|배포 브랜치 푸시<br/>출시 전 develop · 출시 후 main| cd[배포 워크플로<br/>환경 prod]
     cd -->|이미지 푸시<br/>태그=커밋 해시| ghcr[(GHCR<br/>공개 패키지)]
     cd -->|OIDC 임시 권한| iam[IAM 배포 역할]
     iam -->|배포 파일 업로드| s3d[(S3 배포 버킷)]
@@ -63,7 +63,7 @@ sequenceDiagram
 
     D->>GH: PR (develop 또는 main 대상)
     GH->>GH: ./gradlew build (테스트컨테이너 MySQL 8.4로 전체 마이그레이션 검증) + 이미지 빌드 확인
-    D->>GH: develop → main 병합
+    D->>GH: 배포 브랜치에 병합 (출시 전 develop, 출시 후 develop → main)
     GH->>R: arm64 이미지 빌드·푸시 (태그 = 커밋 해시)
     GH->>A: OIDC 토큰으로 배포 역할 위임
     GH->>A: deploy/ 파일을 S3 <커밋 해시>/ 에 업로드
@@ -85,7 +85,10 @@ sequenceDiagram
 ```
 
 - **되돌리기**: 자동(상태 확인 실패 시 마지막으로 성공한 배포의 설정·태그. 배포가 중간에 끊겨도 성공한 배포만 정상 설정을 덮는다)과 수동(배포 워크플로를 이전 커밋 해시로 다시 실행) 두 가지다. `latest`로는 배포하지 않는다. 어느 커밋이 서버에 있는지 항상 태그로 알 수 있어야 하기 때문이다.
-- **브랜치**: `develop`은 통합 브랜치(배포 없음), `main`이 배포 브랜치다. `main`은 첫 배포 때 만든다.
+- **브랜치**: 배포 브랜치는 **출시 전 `develop`, 출시 후 `main`**이다.
+  - 출시 전에는 develop에 병합하자마자 서버에서 확인한다. develop → main을 매번 올려야 서버에서 볼 수 있으면 프론트 연동이 번거롭다. 서버는 한 대뿐이라 이때의 배포 대상도 운영 서버다(dev 프로필, 7절).
+  - 출시 전환(#94) 때 `main`을 만들어 보호 규칙을 걸고, 워크플로의 `push` 브랜치와 GitHub 환경 `prod`의 배포 브랜치를 `main`으로 바꾼다. 그 뒤 `develop`은 통합 브랜치(배포 없음)다.
+  - AWS 배포 역할의 신뢰 조건은 브랜치가 아니라 환경(`environment:prod`) 기준이라 전환 때 테라폼은 바꾸지 않는다.
 
 ## 4. 결정 기록
 
@@ -110,6 +113,7 @@ sequenceDiagram
 - **선택지**: SSH 배포 / CodeDeploy / SSM 명령 실행
 - **고른 것**: GitHub Actions가 OIDC로 배포 역할을 위임받아 `aws ssm send-command`로 `deploy.sh <태그>`를 실행한다. 역할 신뢰 조건은 `repo:SnipText-Developer/backend:environment:prod`로 좁히고, 권한은 운영 인스턴스(태그로 한정) 명령 실행·결과 조회·배포 버킷 쓰기뿐이다.
 - **대가**: SSH보다 결과 확인이 번거롭다(명령 완료를 기다리고 출력을 가져오는 단계가 필요). 출력 크기 제한이 있어 긴 로그는 서버에서 따로 본다.
+- 이 역할은 운영 서버에서 셸 명령을 실행할 수 있다. 그래서 워크플로(CI 포함)의 외부 액션은 태그가 아니라 **커밋 SHA로 고정**한다. 태그는 옮길 수 있어, 액션 저장소가 털리면 바뀐 코드가 이 권한을 가진 채 실행된다. 버전을 올릴 때는 SHA와 버전 주석을 함께 바꾼다.
 
 ### 4-4. 배포 파일 전달: S3 배포 버킷
 
@@ -195,7 +199,7 @@ sequenceDiagram
 
 ### 4-14. 승인
 
-- 배포 작업은 GitHub 환경 `prod`에서 돈다(배포 브랜치는 `main`만).
+- 배포 작업은 GitHub 환경 `prod`에서 돈다. 환경의 배포 브랜치는 출시 전 `develop`만, 출시 후 `main`만이다(3절).
 - **출시 전에는 승인자를 두지 않고, 출시 전환 때 켠다.** 출시 전에는 프론트 연동으로 배포가 잦아 승인이 부담만 된다. 출시 후에는 배포마다 클릭 한 번이 늘지만, 실수로 병합된 변경이 바로 사용자에게 나가지 않는다.
 
 ## 5. 환경 변수·비밀값 목록
@@ -269,12 +273,13 @@ sequenceDiagram
 4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`·`AUTH_COOKIE_SAME_SITE`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
 5. 현재 커밋 해시로 배포 워크플로를 다시 실행한다. 빈 스키마에 플라이웨이가 `db/migration`만 적용한다(시드 없음).
 6. 확인: `/actuator/health` UP, 스웨거 꺼짐, `dev-token` 경로 없음(404 또는 401), `localhost` 출처 거절, 구글 로그인 → 가입 → 템플릿 생성, 로그에 비밀값·본문 없음.
-7. GitHub 환경 `prod`에 승인자를 켠다(4-14).
-8. 하루 이상 문제가 없으면 `sniptext_dev` 스키마를 지우고 `sniptext_app`의 해당 권한을 회수한다.
+7. 배포 브랜치를 `main`으로 바꾼다(3절): `develop`에서 `main`을 만들어 보호 규칙을 걸고, `deploy.yml`의 `push` 브랜치를 `main`으로 바꾸는 PR을 병합한 뒤, GitHub 환경 `prod`의 배포 브랜치를 `main`만으로 바꾼다.
+8. GitHub 환경 `prod`에 승인자를 켠다(4-14).
+9. 하루 이상 문제가 없으면 `sniptext_dev` 스키마를 지우고 `sniptext_app`의 해당 권한을 회수한다.
 
 ### 되돌리기
 
-- 4~6단계에서 문제가 나면 `DB_URL`·프로필·키를 이전 값으로 돌리고 다시 배포한다. 출시 전 스키마는 8단계 전까지 그대로 있다.
+- 4~6단계에서 문제가 나면 `DB_URL`·프로필·키를 이전 값으로 돌리고 다시 배포한다. 출시 전 스키마는 9단계 전까지 그대로 있다.
 
 ## 8. 2027-01-17 계정 처리
 
@@ -353,11 +358,11 @@ sequenceDiagram
 | 가비아 `sniptext.kr` 네임서버를 Route 53 4개로 변경 | 호스팅 영역 생성 후 | #90 |
 | 앱 전용 DB 계정 `sniptext_app`·스키마 `sniptext_dev` 생성(SSM 포트 포워딩) | RDS 생성 후 | #91 |
 | SecureString 실제 값 입력(앱 DB 비밀번호, JWT, 본문 키, 구글 비밀, AI 키), 본문 키 별도 보관 | RDS·파라미터 생성 후 | #91 |
-| GitHub 환경 `prod` 생성, `main` 브랜치 생성·보호 | 배포 워크플로 전 | #93 |
+| GitHub 환경 `prod` 생성(배포 브랜치 `develop`만, 승인자 없음)과 환경 변수 3개(`AWS_DEPLOY_ROLE_ARN`·`AWS_REGION`·`DEPLOY_BUCKET`) 등록 | 배포 역할 apply 후, 배포 워크플로 전 | #93 |
 | 첫 푸시 뒤 GHCR 패키지 공개로 변경 | 첫 배포 | #93 |
 | 디스코드 웹훅 생성·등록 | 알림 작업 | #95 |
 | 유료 플랜 전환 | 출시 전 (#94 작업 전). **2026-11-16 완료** | #94 |
-| 출시 전환 절차 실행, `prod` 승인자 켜기 | 출시일 | #94 |
+| 출시 전환 절차 실행: `main` 생성·보호, `prod` 배포 브랜치 `main`으로 변경, `prod` 승인자 켜기 | 출시일 | #94 |
 
 ## 13. 구현 이슈
 

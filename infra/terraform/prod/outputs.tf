@@ -38,6 +38,11 @@ output "parameter_prefix" {
   value       = local.parameter_prefix
 }
 
+output "github_deploy_role_arn" {
+  description = "배포 역할 ARN (#93 GitHub 환경 변수 AWS_DEPLOY_ROLE_ARN)"
+  value       = aws_iam_role.github_deploy.arn
+}
+
 output "vpc_id" {
   description = "VPC ID (#91 RDS)"
   value       = aws_vpc.main.id
