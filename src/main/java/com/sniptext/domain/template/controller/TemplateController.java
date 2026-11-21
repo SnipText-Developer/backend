@@ -45,11 +45,12 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/templates")
 @RequiredArgsConstructor
-public class TemplateController {
+public class TemplateController implements TemplateControllerDocs {
 
 	private final TemplateCommandService templateCommandService;
 	private final TemplateQueryService templateQueryService;
 
+	@Override
 	@GetMapping
 	public ResponseEntity<ApiResponse<TemplateListResponse>> getTemplates(@LoginUser Long userId) {
 		TemplateListResult result = templateQueryService.getTemplates(userId);
@@ -57,6 +58,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_LIST_FOUND, TemplateListResponse.from(result));
 	}
 
+	@Override
 	@GetMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateDetailResponse>> getTemplate(
 		@LoginUser Long userId,
@@ -67,6 +69,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_FOUND, TemplateDetailResponse.from(result));
 	}
 
+	@Override
 	@PostMapping
 	public ResponseEntity<ApiResponse<TemplateCreateResponse>> createTemplate(
 		@LoginUser Long userId,
@@ -77,6 +80,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_CREATED, TemplateCreateResponse.from(result));
 	}
 
+	@Override
 	@PutMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateUpdateResponse>> updateTemplate(
 		@LoginUser Long userId,
@@ -88,6 +92,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_UPDATED, TemplateUpdateResponse.from(result));
 	}
 
+	@Override
 	@DeleteMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateDeleteResponse>> deleteTemplate(
 		@LoginUser Long userId,
@@ -102,6 +107,7 @@ public class TemplateController {
 	 * 단축어 확인. 형식 오류·예약어·중복도 200 + reason이라 shortcut에 검증 어노테이션을 붙이지 않는다.
 	 * shortcut 파라미터가 없거나 excludeTemplateId가 숫자가 아니면 스프링이 COMMON400_1로 응답한다.
 	 */
+	@Override
 	@GetMapping("/shortcuts/availability")
 	public ResponseEntity<ApiResponse<TemplateShortcutAvailabilityResponse>> checkShortcutAvailability(
 		@LoginUser Long userId,
@@ -115,6 +121,7 @@ public class TemplateController {
 			TemplateShortcutAvailabilityResponse.from(result));
 	}
 
+	@Override
 	@PostMapping("/{templateId}/usages")
 	public ResponseEntity<ApiResponse<TemplateUsageResponse>> recordUsage(
 		@LoginUser Long userId,
