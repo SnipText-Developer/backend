@@ -13,10 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -56,6 +54,7 @@ import com.sniptext.domain.user.repository.UserRepository;
 import com.sniptext.domain.user.repository.UserTermsAgreementRepository;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.fixture.SocialAccountFixture;
+import com.sniptext.fixture.RefreshTokenFixture;
 import com.sniptext.fixture.UserFixture;
 import com.sniptext.global.client.google.GoogleAccount;
 import com.sniptext.global.client.google.GoogleAuthCodeClient;
@@ -441,10 +440,7 @@ class AuthControllerTest extends IntegrationTestSupport {
 		Matcher matcher = REFRESH_COOKIE.matcher(result.getResponse().getHeader(HttpHeaders.SET_COOKIE));
 		assertThat(matcher.find()).isTrue();
 		String rawToken = matcher.group(1);
-		String hash = HexFormat.of().formatHex(
-			MessageDigest.getInstance("SHA-256").digest(rawToken.getBytes(StandardCharsets.UTF_8)));
-
-		RefreshToken saved = refreshTokenRepository.findByTokenHash(hash).orElseThrow();
+		RefreshToken saved = refreshTokenRepository.findByTokenHash(RefreshTokenFixture.hashOf(rawToken)).orElseThrow();
 		assertThat(saved.getTokenHash()).isNotEqualTo(rawToken);
 		assertThat(saved.getUserId()).isEqualTo(userId);
 		assertThat(saved.getClientType()).isEqualTo(ClientType.WEB);

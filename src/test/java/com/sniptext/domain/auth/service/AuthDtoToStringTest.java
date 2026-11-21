@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.sniptext.domain.auth.service.dto.command.AuthLoginCommand;
+import com.sniptext.domain.auth.service.dto.command.AuthLogoutCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthSignUpCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
@@ -36,6 +37,12 @@ class AuthDtoToStringTest {
 		assertThat(new AuthReissueCommand("secret-refresh").toString()).doesNotContain("secret-refresh");
 		assertThat(new AuthReissueResult("secret-access", "secret-refresh").toString())
 			.doesNotContain("secret-access", "secret-refresh");
+	}
+
+	@Test
+	@DisplayName("로그아웃 입력 객체의 toString에 토큰이 나오지 않는다")
+	void logout() {
+		assertThat(new AuthLogoutCommand("secret-refresh").toString()).doesNotContain("secret-refresh");
 	}
 
 	@Test
