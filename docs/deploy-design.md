@@ -111,7 +111,7 @@ sequenceDiagram
 
 - **상황**: 22번 포트와 장기 접근 키를 쓰지 않기로 했다.
 - **선택지**: SSH 배포 / CodeDeploy / SSM 명령 실행
-- **고른 것**: GitHub Actions가 OIDC로 배포 역할을 위임받아 `aws ssm send-command`로 `deploy.sh <태그>`를 실행한다. 역할 신뢰 조건은 `repo:SnipText-Developer/backend:environment:prod`로 좁히고, 권한은 운영 인스턴스(태그로 한정) 명령 실행·결과 조회·배포 버킷 쓰기뿐이다.
+- **고른 것**: GitHub Actions가 OIDC로 배포 역할을 위임받아 `aws ssm send-command`로 `deploy.sh <태그>`를 실행한다. 역할 신뢰 조건은 `repo:SnipText-Developer@<소유자 ID>/backend@<저장소 ID>:environment:prod`로 좁히고(저장소가 GitHub의 변하지 않는 식별자 형식 `sub`를 쓴다. 숫자 ID가 들어가 같은 이름으로 다시 만든 저장소는 위임받지 못한다), 권한은 운영 인스턴스(태그로 한정) 명령 실행·결과 조회·배포 버킷 쓰기뿐이다.
 - **대가**: SSH보다 결과 확인이 번거롭다(명령 완료를 기다리고 출력을 가져오는 단계가 필요). 출력 크기 제한이 있어 긴 로그는 서버에서 따로 본다.
 - 이 역할은 운영 서버에서 셸 명령을 실행할 수 있다. 그래서 워크플로(CI 포함)의 외부 액션은 태그가 아니라 **커밋 SHA로 고정**한다. 태그는 옮길 수 있어, 액션 저장소가 털리면 바뀐 코드가 이 권한을 가진 채 실행된다. 버전을 올릴 때는 SHA와 버전 주석을 함께 바꾼다.
 
