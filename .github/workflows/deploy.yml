@@ -149,8 +149,9 @@ jobs:
           deadline=$((SECONDS + 960))
           while :; do
             read -r status target_count < <(aws ssm list-commands --command-id "$cmd_id" \
-              --query 'Commands[0].[Status,TargetCount]' --output text)
-            # None·빈 값: 막 보낸 명령이 아직 조회되지 않음(최종 일관성) 또는 조회 일시 실패 → 다시 조회
+              --query 'Commands[0].[Status,TargetCount]' --output text) || status=""
+            # None: 막 보낸 명령이 아직 조회되지 않음(최종 일관성) → 다시 조회
+            # 빈 값: aws 호출 실패로 출력이 없음. read가 EOF로 1을 돌려줘 set -e로 끝나지 않게 위에서 받는다 → 다시 조회
             case "$status" in
               Pending | InProgress | Cancelling | None | "") ;;
               *) break ;;
