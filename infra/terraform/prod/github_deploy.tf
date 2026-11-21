@@ -10,6 +10,12 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 # ---------- 배포 역할 ----------
+locals {
+  github_owner          = split("/", var.github_repository)[0]
+  github_repo_name      = split("/", var.github_repository)[1]
+  github_deploy_subject = "repo:${local.github_owner}@${var.github_owner_id}/${local.github_repo_name}@${var.github_repository_id}:environment:${var.github_environment}"
+}
+
 # 이 저장소의 prod 환경에서 도는 작업만 위임받는다.
 # 브랜치가 아니라 환경 기준이라 출시 때(develop → main) 바꾸지 않는다. 어느 브랜치가 prod 환경을 쓸지는 GitHub 환경 설정이 정한다
 data "aws_iam_policy_document" "github_deploy_assume" {
@@ -28,10 +34,12 @@ data "aws_iam_policy_document" "github_deploy_assume" {
     }
 
     # 와일드카드(StringLike) 없이 정확히 일치. 다른 저장소·포크·다른 환경·환경 없는 작업은 모두 거부된다
+    # sub 형식: repo:<소유자>@<소유자 ID>/<저장소>@<저장소 ID>:environment:<환경> (변하지 않는 식별자 형식)
+    # 숫자 ID가 들어가 저장소 이름을 바꾸거나 지운 뒤 같은 이름으로 다시 만든 저장소는 위임받지 못한다
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:environment:${var.github_environment}"]
+      values   = [local.github_deploy_subject]
     }
   }
 }

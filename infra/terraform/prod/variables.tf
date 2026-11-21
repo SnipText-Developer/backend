@@ -155,6 +155,20 @@ variable "github_repository" {
   default     = "SnipText-Developer/backend"
 }
 
+# 저장소가 변하지 않는 식별자 형식(use_immutable_subject)이라 OIDC sub에 소유자·저장소 숫자 ID가 붙는다.
+# 확인: gh api repos/<저장소>/actions/oidc/customization/sub → sub_claim_prefix
+variable "github_owner_id" {
+  description = "GitHub 소유자(조직) 숫자 ID"
+  type        = number
+  default     = 340844684
+}
+
+variable "github_repository_id" {
+  description = "GitHub 저장소 숫자 ID. 저장소를 지우고 같은 이름으로 다시 만들면 바뀐다"
+  type        = number
+  default     = 1431886104
+}
+
 variable "github_environment" {
   description = "배포 역할을 위임받을 GitHub 환경. 이 환경을 쓰는 작업만 위임된다"
   type        = string
