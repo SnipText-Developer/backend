@@ -70,4 +70,6 @@ tasks.named('test') {
 	environment 'GOOGLE_CLIENT_ID', 'test-google-client-id'
 	environment 'GOOGLE_CLIENT_SECRET', 'test-google-client-secret'
 	environment 'GOOGLE_REDIRECT_URIS', 'http://localhost:5173/auth/google/callback'
+	// 테스트 전용 허용 출처
+	environment 'CORS_ALLOWED_ORIGINS', 'https://sniptext.kr,http://localhost:3000'
 }
