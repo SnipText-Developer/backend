@@ -1,4 +1,4 @@
-package com.sniptext.global.security;
+package com.sniptext.global.config;
 
 import java.util.List;
 

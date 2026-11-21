@@ -72,22 +72,29 @@ class CorsTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("허용하지 않은 출처의 사전 요청은 403이고 허용 헤더가 붙지 않는다")
+	@DisplayName("허용하지 않은 출처의 사전 요청은 공통 형식의 COMMON403_1이고 허용 헤더가 붙지 않는다")
 	void preflightFromDisallowedOrigin() throws Exception {
 		mockMvc.perform(options("/api/v1/test/ping")
 				.header(HttpHeaders.ORIGIN, DISALLOWED_ORIGIN)
 				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
 			.andExpect(status().isForbidden())
-			.andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+			.andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN))
+			.andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
+			.andExpect(jsonPath("$.isSuccess").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON403_1"))
+			.andExpect(jsonPath("$.result").isEmpty());
 	}
 
 	@Test
-	@DisplayName("허용하지 않은 출처의 실제 요청은 403이고 허용 헤더가 붙지 않는다")
+	@DisplayName("허용하지 않은 출처의 갤러리 GET은 공개 캐시가 아닌 no-store의 COMMON403_1이고 허용 헤더가 붙지 않는다")
 	void actualRequestFromDisallowedOrigin() throws Exception {
 		mockMvc.perform(get("/api/v1/gallery/test/ping")
 				.header(HttpHeaders.ORIGIN, DISALLOWED_ORIGIN))
 			.andExpect(status().isForbidden())
-			.andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+			.andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN))
+			.andExpect(header().stringValues(HttpHeaders.CACHE_CONTROL, "no-store"))
+			.andExpect(jsonPath("$.code").value("COMMON403_1"))
+			.andExpect(jsonPath("$.message").value("접근 권한이 없어요."));
 	}
 
 	@Test

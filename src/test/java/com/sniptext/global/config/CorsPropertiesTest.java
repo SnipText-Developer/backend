@@ -1,4 +1,4 @@
-package com.sniptext.global.security;
+package com.sniptext.global.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
