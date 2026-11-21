@@ -176,7 +176,8 @@ sequenceDiagram
 | dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:3000` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:3000/auth/google/callback` |
 | prod | `https://sniptext.kr` | `Lax` | `https://sniptext.kr/auth/google/callback` |
 
-- **대가**: dev 기간에 로컬 화면 → 서버 API는 다른 사이트 쿠키라서 사파리 등 다른 사이트 쿠키를 막는 브라우저에서는 재발급이 안 될 수 있다(크롬으로 연동 확인). 출처 허용·쿠키 코드는 아직 없다. 들어올 때(`global` 수정이라 해당 이슈에서 허락 후) 위 값을 설정으로 받게 한다. S2의 크롬 확장 출처는 그때 추가한다.
+- **대가**: dev 기간에 로컬 화면 → 서버 API는 다른 사이트 쿠키라서 사파리 등 다른 사이트 쿠키를 막는 브라우저에서는 재발급이 안 될 수 있다(크롬으로 연동 확인). S2의 크롬 확장 출처는 그때 추가한다.
+- 구현(#119): 허용 출처는 `CORS_ALLOWED_ORIGINS`(쉼표 구분, 기본값 없음 → 빠뜨리면 기동 실패)로 받는다. 자격 증명을 허용하므로 `*`와 경로가 붙은 값은 기동 때 거절한다. 시큐리티 필터 체인 맨 앞에서 처리해 로그인이 필요한 경로의 사전 요청도 토큰 없이 통과하고, 401 등 에러 응답에도 허용 헤더가 붙는다. 허용하지 않은 출처의 요청은 `COMMON403_1`(`no-store`, 갤러리 경로도 같음)이다. prod 프로필에서 로컬 주소나 http 출처가 있으면 기동에 실패한다(출시 때 값 변경을 빠뜨리지 않게).
 
 ### 4-11. 메모리
 
@@ -218,6 +219,7 @@ sequenceDiagram
 | `GOOGLE_CLIENT_ID` | 전체 | 일반 | 테라폼(변수) | |
 | `GOOGLE_CLIENT_SECRET` | 전체 | SecureString | 사람 | |
 | `GOOGLE_REDIRECT_URIS` | 전체 | 일반 | 테라폼(변수) | 프로필별 값은 4-10 표 |
+| `CORS_ALLOWED_ORIGINS` | 전체 | 일반 | 테라폼(변수) | 허용 출처(쉼표 구분). 4-10 표 |
 | `AUTH_COOKIE_SAME_SITE` | 전체 | 일반 | 테라폼(변수) | 재발급 토큰 쿠키 `SameSite`. 4-10 표 (출시 전 `None`, 출시 후 `Lax`) |
 | `AI_PROVIDER` | 전체 | 일반 | 테라폼 | prod에서는 `fake` 불가 |
 | `AI_MODEL` | 전체 | 일반 | 테라폼(변수) | |
@@ -270,7 +272,7 @@ sequenceDiagram
 1. 배포 전 RDS 스냅샷을 만든다.
 2. RDS에 새 스키마 `sniptext`를 만들고 `sniptext_app`에 같은 권한을 준다(SSM 포트 포워딩, 마스터 계정).
 3. 새 `JWT_SECRET`·`CONTENT_ENCRYPTION_KEY`를 만들어 파라미터에 넣는다. **출시 전 값과 다르게** 한다(개발 중 발급된 토큰이 운영에서 통하지 않게, 개발 데이터 키와 섞이지 않게). 본문 키는 따로 안전하게 보관한다.
-4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`·`AUTH_COOKIE_SAME_SITE`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
+4. `DB_URL`을 `sniptext`로, `SPRING_PROFILES_ACTIVE`를 `prod`로, `GOOGLE_REDIRECT_URIS`·`CORS_ALLOWED_ORIGINS`·`AUTH_COOKIE_SAME_SITE`를 prod 값(4-10 표)으로 바꾼다(테라폼 변수 → plan → apply).
 5. 현재 커밋 해시로 배포 워크플로를 다시 실행한다. 빈 스키마에 플라이웨이가 `db/migration`만 적용한다(시드 없음).
 6. 확인: `/actuator/health` UP, 스웨거 꺼짐, `dev-token` 경로 없음(404 또는 401), `localhost` 출처 거절, 구글 로그인 → 가입 → 템플릿 생성, 로그에 비밀값·본문 없음.
 7. 배포 브랜치를 `main`으로 바꾼다(3절): `develop`에서 `main`을 만들어 보호 규칙을 걸고, `deploy.yml`의 `push` 브랜치를 `main`으로 바꾸는 PR을 병합한 뒤, GitHub 환경 `prod`의 배포 브랜치를 `main`만으로 바꾼다.
