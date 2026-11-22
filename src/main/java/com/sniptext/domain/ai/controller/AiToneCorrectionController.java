@@ -22,10 +22,11 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/ai/tone-corrections")
 @RequiredArgsConstructor
-public class AiToneCorrectionController {
+public class AiToneCorrectionController implements AiToneCorrectionControllerDocs {
 
 	private final AiToneCorrectionCommandService aiToneCorrectionCommandService;
 
+	@Override
 	@PostMapping
 	public ResponseEntity<ApiResponse<AiToneCorrectResponse>> correct(
 		@LoginUser Long userId,
