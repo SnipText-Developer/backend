@@ -18,11 +18,13 @@ import com.sniptext.domain.auth.exception.AuthErrorCode;
 import com.sniptext.domain.auth.repository.RefreshTokenRepository;
 import com.sniptext.domain.auth.repository.SocialAccountRepository;
 import com.sniptext.domain.auth.service.dto.command.AuthLoginCommand;
+import com.sniptext.domain.auth.service.dto.command.AuthLogoutCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthSignUpCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
 import com.sniptext.domain.auth.service.dto.result.AuthReissueResult;
 import com.sniptext.domain.auth.service.dto.result.AuthSignUpResult;
+import com.sniptext.domain.user.exception.UserErrorCode;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.domain.user.service.UserQueryService;
 import com.sniptext.domain.user.service.dto.command.UserSignUpCommand;
@@ -142,6 +144,37 @@ public class AuthCommandService {
 				token.getFamilyId());
 			return Optional.of(new AuthReissueResult(jwtTokenProvider.issueAccessToken(token.getUserId()), refreshToken));
 		}).orElseThrow(() -> new BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID));
+	}
+
+	/**
+	 * 쿠키의 재발급 토큰이 유효(폐기·만료 전)하면 그 회원의 재발급 토큰을 웹·확장 모두 폐기한다.
+	 * 쿠키가 없거나 모르는·폐기된·만료된 토큰이면 폐기하지 않고 그대로 성공이다 (명세 4번).
+	 * 폐기·만료 토큰까지 받아 주면, 예전에 샌 토큰 하나로 누구든 그 회원을 언제든 강제 로그아웃시킬 수 있다.
+	 */
+	public void logout(AuthLogoutCommand command) {
+		LocalDateTime now = LocalDateTime.now(clock);
+		findToken(command.refreshToken())
+			.filter(token -> !token.isRevoked() && !token.isExpired(now))
+			.ifPresent(token -> revokeAllOf(token.getUserId()));
+	}
+
+	/**
+	 * 회원 행을 먼저 잠가 같은 회원의 재발급과 순서를 정한다. 잠그지 않으면 재발급이 이 폐기 뒤에 새 토큰을 저장해 로그아웃이 풀린다.
+	 * 폐기 시각은 재발급과 같이 잠금을 얻은 뒤의 시각으로 정한다.
+	 * 탈퇴한 회원이면 잠금이 USER404_1을 던지는데, 그 회원의 재발급은 이미 막혀 있으므로 폐기 없이 성공으로 둔다.
+	 * 예외가 난 트랜잭션은 롤백 전용이 되므로 트랜잭션이 끝난 뒤 바깥에서 거른다.
+	 */
+	private void revokeAllOf(Long userId) {
+		try {
+			transactionTemplate.executeWithoutResult(status -> {
+				userCommandService.lockUser(userId);
+				refreshTokenRepository.revokeAllByUserId(userId, LocalDateTime.now(clock));
+			});
+		} catch (BusinessException e) {
+			if (e.getResultCode() != UserErrorCode.USER_NOT_FOUND) {
+				throw e;
+			}
+		}
 	}
 
 	private Optional<RefreshToken> findToken(String rawToken) {

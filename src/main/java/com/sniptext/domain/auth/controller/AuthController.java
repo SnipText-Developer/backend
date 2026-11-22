@@ -18,6 +18,7 @@ import com.sniptext.domain.auth.controller.dto.AuthSignUpRequest;
 import com.sniptext.domain.auth.controller.dto.AuthSignUpResponse;
 import com.sniptext.domain.auth.service.AuthCommandService;
 import com.sniptext.domain.auth.service.RefreshTokenIssuer;
+import com.sniptext.domain.auth.service.dto.command.AuthLogoutCommand;
 import com.sniptext.domain.auth.service.dto.command.AuthReissueCommand;
 import com.sniptext.domain.auth.service.dto.result.AuthLoginResult;
 import com.sniptext.domain.auth.service.dto.result.AuthReissueResult;
@@ -31,7 +32,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 로그인·가입·재발급 (로그인 불필요, 캐시 금지). 재발급 토큰은 본문이 아니라 HttpOnly·Secure 쿠키로만 내보낸다.
+ * 로그인·가입·재발급·로그아웃 (로그인 불필요, 캐시 금지). 재발급 토큰은 본문이 아니라 HttpOnly·Secure 쿠키로만 내보낸다.
  * 쿠키 경로를 인증 API로 좁혀 다른 API 요청에는 재발급 토큰이 실려 가지 않게 한다.
  */
 @RestController
@@ -81,6 +82,16 @@ public class AuthController {
 		}
 
 		return withRefreshToken(AuthSuccessCode.TOKEN_REISSUED, AuthReissueResponse.from(result), result.refreshToken());
+	}
+
+	/** 접근 토큰 없이 쿠키만으로 처리한다. 쿠키가 없거나 이미 폐기된 토큰이어도 성공이고, 쿠키는 항상 지운다. */
+	@PostMapping("/logout")
+	public ResponseEntity<ApiResponse<Void>> logout(
+		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {
+
+		authCommandService.logout(new AuthLogoutCommand(refreshToken));
+
+		return withRefreshTokenCookie(AuthSuccessCode.LOGGED_OUT, null, refreshTokenCookie("", Duration.ZERO));
 	}
 
 	private <T> ResponseEntity<ApiResponse<T>> withRefreshToken(ResultCode resultCode, T response, String refreshToken) {
