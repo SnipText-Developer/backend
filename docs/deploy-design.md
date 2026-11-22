@@ -173,10 +173,11 @@ sequenceDiagram
 
 | 프로필 | 허용 출처 | 쿠키 `SameSite` | `GOOGLE_REDIRECT_URIS` |
 | --- | --- | --- | --- |
-| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:3000` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:3000/auth/google/callback` |
-| prod | `https://sniptext.kr` | `Lax` | `https://sniptext.kr/auth/google/callback` |
+| dev(출시 전 서버) | `https://sniptext.kr`, `http://localhost:3000`, `chrome-extension://<확장 ID>` | `None` (+`Secure`) | `https://sniptext.kr/auth/google/callback`, `http://localhost:3000/auth/google/callback` |
+| prod | `https://sniptext.kr`, `chrome-extension://<확장 ID>` | `Lax` | `https://sniptext.kr/auth/google/callback` |
 
-- **대가**: dev 기간에 로컬 화면 → 서버 API는 다른 사이트 쿠키라서 사파리 등 다른 사이트 쿠키를 막는 브라우저에서는 재발급이 안 될 수 있다(크롬으로 연동 확인). S2의 크롬 확장 출처는 그때 추가한다.
+- **대가**: dev 기간에 로컬 화면 → 서버 API는 다른 사이트 쿠키라서 사파리 등 다른 사이트 쿠키를 막는 브라우저에서는 재발급이 안 될 수 있다(크롬으로 연동 확인).
+- **크롬 확장(S2, #129)**: dev·prod 모두 `chrome-extension://<확장 ID>`를 허용 출처에 더한다. 확장 ID는 manifest `key`로 고정한 값(웹스토어 등록 후에는 그 ID)이다. 형식은 `chrome-extension://` + a~p 소문자 32자만 받고(앱 기동 검사·테라폼 변수 검사 같음), prod의 "로컬이 아닌 https만" 검사에서 제외한다. 확장은 쿠키를 쓰지 않지만 허용 설정은 한 벌이라 자격 증명 허용도 같이 적용된다.
 - 구현(#119): 허용 출처는 `CORS_ALLOWED_ORIGINS`(쉼표 구분, 기본값 없음 → 빠뜨리면 기동 실패)로 받는다. 자격 증명을 허용하므로 `*`와 경로가 붙은 값은 기동 때 거절한다. 시큐리티 필터 체인 맨 앞에서 처리해 로그인이 필요한 경로의 사전 요청도 토큰 없이 통과하고, 401 등 에러 응답에도 허용 헤더가 붙는다. 허용하지 않은 출처의 요청은 `COMMON403_1`(`no-store`, 갤러리 경로도 같음)이다. prod 프로필에서 로컬 주소나 http 출처가 있으면 기동에 실패한다(출시 때 값 변경을 빠뜨리지 않게).
 
 ### 4-11. 메모리

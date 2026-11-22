@@ -132,7 +132,7 @@ variable "google_redirect_uris" {
 }
 
 variable "cors_allowed_origins" {
-  description = "브라우저에서 API를 부를 수 있는 화면 주소(출처) 목록. 출시 전 값(설계 문서 4-10). 출시 때 sniptext.kr만 남긴다"
+  description = "브라우저에서 API를 부를 수 있는 화면 주소(출처) 목록. 출시 전 값(설계 문서 4-10). 출시 때 sniptext.kr과 크롬 확장 출처만 남긴다"
   type        = list(string)
   default = [
     "https://sniptext.kr",
@@ -140,9 +140,10 @@ variable "cors_allowed_origins" {
   ]
 
   validation {
-    # 앱도 기동 때 같은 형식을 검사한다. 자격 증명을 허용하므로 *는 안 되고, 경로·끝 슬래시가 붙으면 브라우저 Origin과 맞지 않는다
-    condition     = length(var.cors_allowed_origins) > 0 && alltrue([for o in var.cors_allowed_origins : can(regex("^https?://[A-Za-z0-9.-]+(:[0-9]+)?$", o))])
-    error_message = "cors_allowed_origins는 비어 있지 않아야 하고, 각 값은 경로 없이 스킴://호스트[:포트] 형식이어야 합니다 (* 불가)."
+    # 앱도 기동 때 같은 형식을 검사한다 (CorsProperties.ORIGIN_PATTERN). 자격 증명을 허용하므로 *는 안 되고, 경로·끝 슬래시가 붙으면 브라우저 Origin과 맞지 않는다
+    # 크롬 확장은 chrome-extension://확장 ID(a~p 소문자 32자)
+    condition     = length(var.cors_allowed_origins) > 0 && alltrue([for o in var.cors_allowed_origins : can(regex("^(https?://[A-Za-z0-9.-]+(:[0-9]+)?|chrome-extension://[a-p]{32})$", o))])
+    error_message = "cors_allowed_origins는 비어 있지 않아야 하고, 각 값은 경로 없이 스킴://호스트[:포트] 또는 chrome-extension://확장ID(a~p 32자) 형식이어야 합니다 (* 불가)."
   }
 }
 

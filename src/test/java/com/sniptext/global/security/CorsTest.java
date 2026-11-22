@@ -17,14 +17,16 @@ import org.springframework.http.HttpHeaders;
 import com.sniptext.support.IntegrationTestSupport;
 
 /**
- * 허용 출처는 build.gradle 테스트 환경 변수 CORS_ALLOWED_ORIGINS (https://sniptext.kr, http://localhost:3000).
+ * 허용 출처는 build.gradle 테스트 환경 변수 CORS_ALLOWED_ORIGINS
+ * (https://sniptext.kr, http://localhost:3000, 크롬 확장 {@link #EXTENSION_ORIGIN}).
  */
 class CorsTest extends IntegrationTestSupport {
 
 	private static final String DISALLOWED_ORIGIN = "https://evil.example.com";
+	private static final String EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop";
 
 	@ParameterizedTest
-	@ValueSource(strings = {"https://sniptext.kr", "http://localhost:3000"})
+	@ValueSource(strings = {"https://sniptext.kr", "http://localhost:3000", EXTENSION_ORIGIN})
 	@DisplayName("허용 출처의 사전 요청은 로그인이 필요한 경로라도 토큰 없이 통과하고 자격 증명 허용 헤더가 붙는다")
 	void preflightFromAllowedOrigin(String origin) throws Exception {
 		mockMvc.perform(options("/api/v1/test/ping")
@@ -48,6 +50,26 @@ class CorsTest extends IntegrationTestSupport {
 			.andExpect(status().isOk())
 			.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://sniptext.kr"))
 			.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+	}
+
+	@Test
+	@DisplayName("크롬 확장 출처의 인증된 요청에 허용 헤더가 붙는다")
+	void actualRequestFromExtensionOrigin() throws Exception {
+		mockMvc.perform(get("/api/v1/test/ping")
+				.header(HttpHeaders.ORIGIN, EXTENSION_ORIGIN)
+				.header(HttpHeaders.AUTHORIZATION, bearer(1L)))
+			.andExpect(status().isOk())
+			.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, EXTENSION_ORIGIN));
+	}
+
+	@Test
+	@DisplayName("허용 목록에 없는 다른 확장 출처는 COMMON403_1로 거절된다")
+	void requestFromOtherExtensionIsRejected() throws Exception {
+		mockMvc.perform(get("/api/v1/test/ping")
+				.header(HttpHeaders.ORIGIN, "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba")
+				.header(HttpHeaders.AUTHORIZATION, bearer(1L)))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("COMMON403_1"));
 	}
 
 	@Test
