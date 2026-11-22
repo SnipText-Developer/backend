@@ -1,16 +1,17 @@
-# SNIPTEXT ERD (S1 대시보드)
+# SNIPTEXT ERD (S1 대시보드 + S2 크롬 확장)
 
 | 항목 | 내용 |
 | --- | --- |
-| 버전 | v0.8 (2026-11-01, PRO 결제 기능 제거·정렬 고정 반영) |
-| v0.7 대비 | `users.plan_override` 삭제(플랜 구분 없음). `users.template_sort` 삭제(내 템플릿 정렬을 생성 순으로 고정). 템플릿 한도 50개·AI 하루 5회로 설계 메모 수정, 결제·구독 관련 "나중에 추가할 것" 삭제. `social_accounts.provider_user_id`를 `VARCHAR(255)`·`ascii_bin`으로 변경(구글 `sub` 규격). 모두 새 마이그레이션으로 반영 (아래 "마이그레이션" 참고) |
+| 버전 | v0.9 (2026-11-22, S2 크롬 확장 반영) |
+| v0.8 대비 | `extension_link_codes` 추가(웹 → 확장 연결 코드, 3-8). 확장 재발급 토큰은 기존 `refresh_tokens`에 `client_type = EXTENSION`으로 저장(테이블 변경 없음, 설명만 보강). `templates.updated_at`이 확장 동기화(S2 27번) 버전 기준임을 명시. 04:00 배치에 만료된 연결 코드 정리 추가. 갤러리 카테고리 표시 이름 "고객 응대" → "고객응대"(저장 값 `CUSTOMER_SERVICE`는 그대로). 확장 팝업 최근 사용 개수 설명을 기능명세 기준으로 변경 |
+| v0.7 → v0.8 | `users.plan_override` 삭제(플랜 구분 없음). `users.template_sort` 삭제(내 템플릿 정렬을 생성 순으로 고정). 템플릿 한도 50개·AI 하루 5회로 설계 메모 수정, 결제·구독 관련 "나중에 추가할 것" 삭제. `social_accounts.provider_user_id`를 `VARCHAR(255)`·`ascii_bin`으로 변경(구글 `sub` 규격). 모두 새 마이그레이션으로 반영 (아래 "마이그레이션" 참고) |
 | v0.6 → v0.7 | 설명만 보강: `users.profile_image_url`(500자 초과 시 저장 안 함), `users.last_login_at`(가입도 로그인으로 기록), `refresh_tokens.revoked_at`(재사용 감지 시 계보 폐기), 설계 메모 "가입"(인가 코드 방식). 테이블·컬럼·인덱스 변경 없음 |
 | v0.5 → v0.6 | 같은 갤러리 템플릿 여러 번 저장 허용 → `source_gallery_template_id`는 출처 기록·집계용으로만 사용, 인덱스를 `(source_gallery_template_id)` 하나로 변경. 테이블·컬럼 변경 없음 |
 | v0.4 → v0.5 | `user_terms_agreements` 추가(약관 버전별 동의 기록), `users.terms_agreed_at` 삭제 |
 | DB | MySQL 8.4 / JPA |
 | 문자셋 | utf8mb4 |
 | 시간 | 모든 시각 컬럼은 KST 기준 `DATETIME(6)` |
-| 범위 | S1 대시보드. 결제·구독은 기획에서 제거됨 (2026-10-31) |
+| 범위 | S1 대시보드, S2 크롬 확장. 결제·구독은 기획에서 제거됨 (2026-10-31). S3 랜딩(네이버 로그인·1:1 문의)은 보류 |
 
 ## 1. 관계도
 
@@ -19,6 +20,7 @@ erDiagram
     users ||--o{ social_accounts : "소셜 연결"
     users ||--o{ user_terms_agreements : "약관 동의"
     users ||--o{ refresh_tokens : "로그인 세션"
+    users ||--o{ extension_link_codes : "확장 연결 (S2)"
     users ||--o{ templates : "보유"
     users ||--o{ ai_tone_daily_usages : "AI 사용량"
     gallery_templates |o--o{ templates : "갤러리에서 저장"
@@ -56,6 +58,14 @@ erDiagram
         DATETIME revoked_at "폐기 시각"
         DATETIME created_at
     }
+    extension_link_codes {
+        BIGINT id PK
+        BIGINT user_id FK "회원"
+        CHAR code_hash UK "연결 코드 해시 (원문 저장 안 함)"
+        DATETIME expires_at "만료 (발급 + 1분)"
+        DATETIME used_at "사용 시각 (한 번만)"
+        DATETIME created_at
+    }
     templates {
         BIGINT id PK "템플릿 ID"
         BIGINT user_id FK "주인"
@@ -65,15 +75,15 @@ erDiagram
         VARCHAR shortcut_key "비교용 (정규화 + 소문자)"
         VARCHAR active_shortcut_key "휴지통 아니면 shortcut_key (중복 검사용)"
         TEXT content "본문 (암호화)"
-        DATETIME last_used_at "최근 사용 (확장 팝업 최근 5개)"
+        DATETIME last_used_at "최근 사용 (확장 팝업 최근 사용 목록)"
         DATETIME edited_at "제목·단축어·본문 수정 시각"
         DATETIME deleted_at "휴지통 이동 시각"
         DATETIME created_at
-        DATETIME updated_at "모든 변경 (확장 동기화용)"
+        DATETIME updated_at "모든 변경 (확장 동기화 버전 기준)"
     }
     gallery_templates {
         BIGINT id PK
-        VARCHAR category "업무 / 영업 / 고객 응대 / 개인"
+        VARCHAR category "업무 / 영업 / 고객응대 / 개인"
         VARCHAR title
         VARCHAR shortcut "기본 단축어"
         TEXT content "본문 (공개, 암호화 안 함)"
@@ -99,7 +109,8 @@ erDiagram
 | `users` | 회원 |  |
 | `social_accounts` | 소셜 로그인 연결 |  |
 | `user_terms_agreements` | 약관 동의 기록 | 약관 종류·버전별 1행. 약관 본문은 DB에 두지 않음 |
-| `refresh_tokens` | 재발급 토큰 | Redis를 쓰면 이 테이블은 Redis로 대체 가능 |
+| `refresh_tokens` | 재발급 토큰 (웹·확장) | Redis를 쓰면 이 테이블은 Redis로 대체 가능 |
+| `extension_link_codes` | 확장 연결 코드 (S2) | 웹에 로그인된 상태에서 확장을 로그인시키는 1분짜리 일회용 코드 |
 | `gallery_templates` | 갤러리 템플릿 | 운영자가 DB에 직접 등록. 공개 데이터라 암호화하지 않음 |
 | `templates` | 내 템플릿 (휴지통 포함) |  |
 | `ai_tone_daily_usages` | AI 톤 교정 일일 사용량 | 날짜별 1행이라 자정 리셋 배치가 필요 없음. 원문·결과는 저장하지 않음 |
@@ -143,7 +154,7 @@ erDiagram
 | --- | --- | --- | --- | --- | --- |
 | `id` | BIGINT | N |  | PK | ID |
 | `user_id` | BIGINT | N |  | FK | 회원 ID |
-| `client_type` | VARCHAR(20) | N |  |  | WEB / EXTENSION |
+| `client_type` | VARCHAR(20) | N |  |  | WEB(쿠키로 주고받음) / EXTENSION(응답 본문으로 주고받음, S2) |
 | `token_hash` | CHAR(64) | N |  | UK | 토큰 원문 대신 SHA-256 해시 저장 |
 | `family_id` | CHAR(36) | N |  |  | 재발급 계보. 이미 쓴 토큰이 다시 오면 계보 전체 폐기 |
 | `expires_at` | DATETIME(6) | N |  |  | 만료 시각 |
@@ -154,6 +165,9 @@ erDiagram
 - 인덱스 `idx_refresh_user` (user_id)
 - 인덱스 `idx_refresh_family` (family_id)
 - 외래키 `user_id` → `users.id` (삭제 시 CASCADE)
+- 확장 토큰(S2): 연결 코드 교환(24번)마다 새 계보로 저장. 웹 세션과 계보가 달라 서로 영향이 없음
+- 폐기 범위: 웹 로그아웃(4번)은 그 회원의 웹·확장 토큰 전체, 확장 로그아웃(26번)은 그 확장의 계보만
+- 확장 재발급(25번)은 EXTENSION 토큰만 받음 (S2 명세). 웹 재발급(3번)은 지금 토큰 종류를 보지 않고 같은 종류로 재발급하므로, 25번을 만들 때 3번도 WEB만 받도록 맞춤
 
 ### 3-4. `gallery_templates` — 갤러리 템플릿
 
@@ -162,7 +176,7 @@ erDiagram
 | 컬럼 | 타입 | NULL | 기본값 | 키 | 설명 |
 | --- | --- | --- | --- | --- | --- |
 | `id` | BIGINT | N |  | PK | 갤러리 템플릿 ID |
-| `category` | VARCHAR(20) | N |  |  | WORK / SALES / CUSTOMER_SERVICE / PERSONAL |
+| `category` | VARCHAR(20) | N |  |  | WORK(업무) / SALES(영업) / CUSTOMER_SERVICE(고객응대) / PERSONAL(개인). 저장 값은 영문, 표시 이름은 서버 열거형 |
 | `title` | VARCHAR(50) | N |  |  | 제목 |
 | `shortcut` | VARCHAR(11) | N |  |  | 기본 단축어 (/ 포함) |
 | `content` | TEXT | N |  |  | 본문 |
@@ -187,15 +201,15 @@ erDiagram
 | `shortcut_key` | VARCHAR(11) | N |  |  | 비교용 단축어. NFC 정규화 + 소문자 (/quote) |
 | `active_shortcut_key` | VARCHAR(11) (생성 컬럼) | Y |  |  | 생성 컬럼. 휴지통이면 NULL → 단축어 점유 해제 |
 | `content` | TEXT | N |  |  | 본문 3000자. 서버에서 암호화해 저장 |
-| `last_used_at` | DATETIME(6) | Y |  |  | 최근 사용 시각 → 확장 팝업 최근 사용 5개 (S2) |
+| `last_used_at` | DATETIME(6) | Y |  |  | 최근 사용 시각 → 확장 슬래시 팝업 "최근 사용" 목록 (S2 MINI-01, 개수는 화면 상수) |
 | `edited_at` | DATETIME(6) | N |  |  | 제목·단축어·본문을 고친 시각. 사용 기록으로는 안 바뀜 |
 | `deleted_at` | DATETIME(6) | Y |  |  | 휴지통 이동 시각. 30일 뒤 배치로 영구 삭제 |
 | `created_at` | DATETIME(6) | N |  |  | 생성 시각 |
-| `updated_at` | DATETIME(6) | N |  |  | 모든 변경(사용 기록·삭제 포함) → 확장 동기화 기준 |
+| `updated_at` | DATETIME(6) | N |  |  | 모든 변경(사용 기록·삭제·복구 포함) → 확장 동기화(S2 27번) 버전 기준. 대량 갱신 쿼리도 직접 넣어야 함 |
 
 - 유니크 `uk_templates_user_active_shortcut` (user_id, active_shortcut_key)
 - 인덱스 `idx_templates_user_deleted` (user_id, deleted_at)
-- 인덱스 `idx_templates_user_updated` (user_id, updated_at)
+- 인덱스 `idx_templates_user_updated` (user_id, updated_at): 확장 동기화 버전(가장 늦은 `updated_at`)을 한 번에 구함
 - 인덱스 `idx_templates_gallery` (source_gallery_template_id): 외래키용 + 갤러리 템플릿별 저장 수 집계
 - 인덱스 `idx_templates_deleted_at` (deleted_at)
 - 외래키 `user_id` → `users.id` (삭제 시 CASCADE)
@@ -231,6 +245,26 @@ erDiagram
 - 가입 완료 시 SERVICE·PRIVACY 두 줄을 현재 버전으로 저장. 회원과 같은 트랜잭션
 - 약관이 바뀌면 설정값의 버전만 올림. 로그인 때 "회원의 최신 동의 버전 < 현재 버전"이면 재동의 필요 (재동의 화면·API는 약관 변경이 생길 때 추가)
 
+### 3-8. `extension_link_codes` — 확장 연결 코드 (S2)
+
+> 웹(대시보드)에 로그인된 상태에서 확장을 로그인시키는 1분짜리 일회용 코드. 웹이 발급(23번)해 확장에 메시지로 넘기고, 확장이 토큰으로 교환(24번)한다. Redis를 쓰면 이 테이블은 Redis로 대체 가능
+
+| 컬럼 | 타입 | NULL | 기본값 | 키 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | BIGINT | N |  | PK | ID |
+| `user_id` | BIGINT | N |  | FK | 회원 ID |
+| `code_hash` | CHAR(64) | N |  | UK | 연결 코드 원문 대신 SHA-256 해시 |
+| `expires_at` | DATETIME(6) | N |  |  | 만료 시각 (발급 + 1분) |
+| `used_at` | DATETIME(6) | Y |  |  | 사용 시각. 값이 있으면 다시 못 씀 |
+| `created_at` | DATETIME(6) | N |  |  | 발급 시각 |
+
+- 유니크 `uk_link_code_hash` (code_hash)
+- 인덱스 `idx_link_code_user` (user_id)
+- 외래키 `user_id` → `users.id` (삭제 시 CASCADE)
+- 사용 처리는 `used_at IS NULL AND expires_at > 지금` 조건부 수정으로 한다. 같은 코드로 동시에 두 번 와도 하나만 성공
+- 같은 회원이 여러 번 발급해도 이전 코드를 지우지 않음 (각자 1분 뒤 만료)
+- 만료된 코드는 매일 04:00 배치로 삭제 (UT 뒤 추가. 1분 뒤에는 쓸 수 없으므로 남아 있어도 동작에 문제 없음)
+
 ## 4. 설계 메모
 
 | 주제 | 내용 |
@@ -244,7 +278,10 @@ erDiagram
 | 본문 암호화 | `templates.content`만 AES-GCM 암호화(JPA 변환기). DB 본문 검색은 하지 않음 |
 | 상단 통합 검색 (DSH-09) | DB 변경 없음. 화면이 내 템플릿 전체 + 갤러리 전체를 받아서 검색 (본문 암호화 때문에 서버 검색 불가) |
 | 카드 변수명 (MYT-05) | 컬럼 없음. 조회할 때 복호화한 본문에서 변수 정규식으로 뽑아 응답의 `variables`로 내려줌 |
-| 카드 표시 변경 (MYT-05) | 최근 사용 시각은 카드에서 빠졌지만 `last_used_at`은 확장 팝업 "최근 사용 5개"(S2) 기준이라 유지 |
+| 카드 표시 변경 (MYT-05) | 최근 사용 시각은 카드에서 빠졌지만 `last_used_at`은 확장 슬래시 팝업 "최근 사용"(S2 MINI-01) 기준이라 유지 |
+| 확장 로그인 (S2) | 확장에는 로그인 화면이 없음. 웹이 연결 코드를 발급(23번)해 확장에 메시지로 넘기고, 확장이 교환(24번)해 `refresh_tokens`에 EXTENSION 토큰을 받음. 코드는 해시만 저장하고 1분 안에 한 번만 사용 |
+| 확장 동기화 (S2) | 버전 = 회원 템플릿(휴지통 포함)의 가장 늦은 `updated_at` + 휴지통 제외 개수. 바뀌었으면 전체 목록(최대 50개)을 내려줌. 변경분만 보내지 않으므로 삭제 기록 테이블이 필요 없음. 휴지통 영구 삭제는 목록에 영향이 없어 버전이 바뀌지 않아도 됨 |
+| 확장 검색 (S2) | DB 변경 없음. 확장이 받은 목록으로 화면에서 검색 (대시보드 통합 검색과 같은 이유) |
 | 가입 | 구글 로그인(인가 코드 교환 → ID 토큰 검증) → (처음 온 사용자) 약관 동의 화면 → 동의 시 회원 생성 + 소셜 계정 연결 + 약관 동의 기록 저장(한 트랜잭션). 동의 전에는 회원 정보를 저장하지 않음 |
 | 탈퇴 (화면 미정) | 템플릿·토큰·AI 사용량 삭제. 약관 동의 기록 보존 기간은 탈퇴 정책 정할 때 같이 결정 |
 | 시간대 | KST로 저장하므로 서버(JVM)와 DB 접속 시간대를 `Asia/Seoul`로 고정해야 함 |
@@ -255,7 +292,7 @@ erDiagram
 | 시각 (KST) | 작업 |
 | --- | --- |
 | 매일 00:10 | 휴지통 30일 지난 템플릿 영구 삭제 |
-| 매일 04:00 | 만료된 재발급 토큰 정리 |
+| 매일 04:00 | 만료된 재발급 토큰 정리, 만료된 확장 연결 코드 정리 (연결 코드는 S2, UT 뒤 추가) |
 
 ## 6. 확정 사항과 나중에 추가할 것
 
@@ -274,6 +311,10 @@ erDiagram
 | 템플릿 한도 | 모든 사용자 50개 | 컬럼 없음 (서버 설정값) |
 | AI 톤 교정 | 모든 사용자 하루 5회 | `ai_tone_daily_usages` 그대로 (한도 숫자만 변경) |
 | 내 템플릿 정렬 | 생성 순 고정 (정렬 드롭다운 삭제, 11/1) | `users.template_sort` 삭제 |
+| 확장 로그인 방식 (S2) | 웹 로그인 + 일회용 연결 코드 (확장에 로그인 화면 없음) | `extension_link_codes` 추가 |
+| 확장 로그아웃 범위 (S2) | 확장 로그아웃은 확장만, 웹 로그아웃은 확장까지 (기능명세 EXT-02·DSH-07) | `refresh_tokens` 그대로 (폐기 범위만 다름) |
+| 확장 동기화 (S2) | 바뀌었을 때만 전체 목록 (같은 브라우저는 즉시, 다른 기기는 1분 이내) | 컬럼 없음. `templates.updated_at` + `idx_templates_user_updated` 사용 |
+| 갤러리 카테고리 표시 이름 | "고객응대" (기획 표기, 11/22) | 저장 값 `CUSTOMER_SERVICE` 그대로. 서버 열거형 표시 이름만 변경 |
 
 ### 마이그레이션
 
@@ -297,10 +338,32 @@ ALTER TABLE social_accounts
         COMMENT '구글 계정 고유값(ID 토큰의 sub, 대소문자 구분)';
 ```
 
+### S2 마이그레이션
+
+새 테이블 하나만 추가합니다. 기존 테이블은 바뀌지 않습니다.
+
+```sql
+-- V{yyyyMMddHHmm}__create_extension_link_codes.sql
+CREATE TABLE extension_link_codes (
+    id                           BIGINT NOT NULL AUTO_INCREMENT COMMENT 'ID',
+    user_id                      BIGINT NOT NULL COMMENT '회원 ID',
+    code_hash                    CHAR(64) NOT NULL COMMENT '연결 코드 원문 대신 SHA-256 해시',
+    expires_at                   DATETIME(6) NOT NULL COMMENT '만료 시각 (발급 + 1분)',
+    used_at                      DATETIME(6) NULL COMMENT '사용 시각. 값이 있으면 다시 못 씀',
+    created_at                   DATETIME(6) NOT NULL COMMENT '발급 시각',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_link_code_hash (code_hash),
+    KEY idx_link_code_user (user_id),
+    CONSTRAINT fk_link_code_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '확장 연결 코드';
+```
+
+- UT용 갤러리 템플릿 27개는 스키마 변경이 아니라 데이터 마이그레이션(`V{yyyyMMddHHmm}__insert_gallery_templates.sql`)으로 넣습니다. 출시 전 서버에 있던 개발용 샘플 갤러리는 이 마이그레이션에서 지웁니다.
+
 ## 부록. DDL (MySQL 8.4)
 
 ```sql
--- SNIPTEXT S1 ERD - MySQL 8.4 / v0.8 (2026-11-01, plan_override·template_sort 삭제 반영한 최종 모양)
+-- SNIPTEXT ERD - MySQL 8.4 / v0.9 (2026-11-22, S2 확장 연결 코드 추가까지 반영한 최종 모양)
 -- 시간 컬럼은 모두 KST 기준. 결제·구독은 기획에서 제거됨
 
 -- 회원
@@ -359,10 +422,24 @@ CREATE TABLE refresh_tokens (
     CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '재발급 토큰';
 
+-- 확장 연결 코드 (S2) : 1분짜리 일회용 코드. Redis를 쓰면 이 테이블은 Redis로 대체 가능
+CREATE TABLE extension_link_codes (
+    id                           BIGINT NOT NULL AUTO_INCREMENT COMMENT 'ID',
+    user_id                      BIGINT NOT NULL COMMENT '회원 ID',
+    code_hash                    CHAR(64) NOT NULL COMMENT '연결 코드 원문 대신 SHA-256 해시',
+    expires_at                   DATETIME(6) NOT NULL COMMENT '만료 시각 (발급 + 1분)',
+    used_at                      DATETIME(6) NULL COMMENT '사용 시각. 값이 있으면 다시 못 씀',
+    created_at                   DATETIME(6) NOT NULL COMMENT '발급 시각',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_link_code_hash (code_hash),
+    KEY idx_link_code_user (user_id),
+    CONSTRAINT fk_link_code_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '확장 연결 코드';
+
 -- 갤러리 템플릿 : 운영자가 DB에 직접 등록. 공개 데이터라 암호화하지 않음
 CREATE TABLE gallery_templates (
     id                           BIGINT NOT NULL AUTO_INCREMENT COMMENT '갤러리 템플릿 ID',
-    category                     VARCHAR(20) NOT NULL COMMENT 'WORK / SALES / CUSTOMER_SERVICE / PERSONAL',
+    category                     VARCHAR(20) NOT NULL COMMENT 'WORK(업무) / SALES(영업) / CUSTOMER_SERVICE(고객응대) / PERSONAL(개인)',
     title                        VARCHAR(50) NOT NULL COMMENT '제목',
     shortcut                     VARCHAR(11) NOT NULL COMMENT '기본 단축어 (/ 포함)',
     content                      TEXT NOT NULL COMMENT '본문',
@@ -386,11 +463,11 @@ CREATE TABLE templates (
     shortcut_key                 VARCHAR(11) COLLATE utf8mb4_bin NOT NULL COMMENT '비교용 단축어. NFC 정규화 + 소문자 (/quote)',
     active_shortcut_key          VARCHAR(11) COLLATE utf8mb4_bin GENERATED ALWAYS AS (IF(deleted_at IS NULL, shortcut_key, NULL)) STORED COMMENT '생성 컬럼. 휴지통이면 NULL → 단축어 점유 해제',
     content                      TEXT NOT NULL COMMENT '본문 3000자. 서버에서 암호화해 저장',
-    last_used_at                 DATETIME(6) NULL COMMENT '최근 사용 시각 → 확장 팝업 최근 사용 5개 (S2)',
+    last_used_at                 DATETIME(6) NULL COMMENT '최근 사용 시각 → 확장 슬래시 팝업 최근 사용 목록 (S2)',
     edited_at                    DATETIME(6) NOT NULL COMMENT '제목·단축어·본문을 고친 시각. 사용 기록으로는 안 바뀜',
     deleted_at                   DATETIME(6) NULL COMMENT '휴지통 이동 시각. 30일 뒤 배치로 영구 삭제',
     created_at                   DATETIME(6) NOT NULL COMMENT '생성 시각',
-    updated_at                   DATETIME(6) NOT NULL COMMENT '모든 변경(사용 기록·삭제 포함) → 확장 동기화 기준',
+    updated_at                   DATETIME(6) NOT NULL COMMENT '모든 변경(사용 기록·삭제·복구 포함) → 확장 동기화 버전 기준',
     PRIMARY KEY (id),
     UNIQUE KEY uk_templates_user_active_shortcut (user_id, active_shortcut_key),
     KEY idx_templates_user_deleted (user_id, deleted_at),
