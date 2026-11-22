@@ -250,6 +250,30 @@ class TemplateSyncControllerTest extends IntegrationTestSupport {
 		assertThat(syncResult(get(SYNC_PATH), userId).get("templates")).isEqualTo(before);
 	}
 
+	/**
+	 * 영구 삭제는 가장 늦은 updated_at을 뒤로 돌릴 수 있다. 시각만으로는 휴지통 이동 전 버전과 같아지므로 개수가 막아야 한다
+	 * (TemplateSyncVersion 주석 참고).
+	 */
+	@Test
+	@DisplayName("휴지통 이동 뒤 영구 삭제로 가장 늦은 시각이 이동 전으로 돌아가도 개수가 달라 이동 전 버전과 겹치지 않는다")
+	void purgeRollsBackLatestButCountDiffers() throws Exception {
+		Long first = save(userId, "/첫째");
+		clock.advance(STEP);
+		Long second = save(userId, "/둘째");
+		String beforeTrash = version(userId);
+		clock.advance(STEP);
+
+		perform(delete(TEMPLATE_PATH, first), userId);
+		perform(delete(PURGE_PATH, first), userId);
+
+		JsonNode result = expectChanged(beforeTrash);
+		String latestPart = beforeTrash.substring(beforeTrash.lastIndexOf('.'));
+		assertThat(result.get("version").asString())
+			.as("최댓값은 휴지통 이동 전과 같고 개수만 다르다")
+			.isEqualTo("v1.1" + latestPart);
+		assertThat(templateIds(result)).containsExactly(second);
+	}
+
 	@Test
 	@DisplayName("다른 회원의 생성·수정·사용 기록은 내 버전에 영향이 없다")
 	void othersChangesDoNotAffectMyVersion() throws Exception {
