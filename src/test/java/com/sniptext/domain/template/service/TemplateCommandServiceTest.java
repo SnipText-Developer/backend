@@ -368,14 +368,16 @@ class TemplateCommandServiceTest {
 		}
 
 		@Test
-		@DisplayName("개수가 바뀌지 않으므로 회원을 잠그지 않는다")
-		void doesNotLockUser() {
+		@DisplayName("확장 동기화 버전이 수정을 놓치지 않게 회원 행을 먼저 잠근 뒤 템플릿을 찾는다")
+		void locksUserFirst() {
 			givenActiveTemplate();
 			givenUpdateSaved();
 
 			templateCommandService.update(UPDATE_COMMAND);
 
-			then(userCommandService).shouldHaveNoInteractions();
+			InOrder inOrder = inOrder(userCommandService, templateQueryService);
+			inOrder.verify(userCommandService).lockUser(USER_ID);
+			inOrder.verify(templateQueryService).getActiveTemplate(USER_ID, TEMPLATE_ID);
 		}
 
 		@ParameterizedTest
@@ -533,13 +535,15 @@ class TemplateCommandServiceTest {
 		}
 
 		@Test
-		@DisplayName("개수가 바뀌지 않으므로 회원을 잠그지 않고, 변경 감지로 쓰므로 레포지토리를 직접 부르지 않는다")
-		void doesNotLockUserOrCallRepository() {
+		@DisplayName("확장 동기화 버전이 사용 기록을 놓치지 않게 회원 행을 먼저 잠그고, 변경 감지로 쓰므로 레포지토리를 직접 부르지 않는다")
+		void locksUserFirstAndDoesNotCallRepository() {
 			given(templateQueryService.getActiveTemplate(USER_ID, TEMPLATE_ID)).willReturn(template);
 
 			templateCommandService.recordUsage(USAGE_COMMAND);
 
-			then(userCommandService).shouldHaveNoInteractions();
+			InOrder inOrder = inOrder(userCommandService, templateQueryService);
+			inOrder.verify(userCommandService).lockUser(USER_ID);
+			inOrder.verify(templateQueryService).getActiveTemplate(USER_ID, TEMPLATE_ID);
 			then(templateRepository).shouldHaveNoInteractions();
 		}
 

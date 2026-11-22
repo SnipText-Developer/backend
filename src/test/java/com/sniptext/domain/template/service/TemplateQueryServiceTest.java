@@ -2,10 +2,14 @@ package com.sniptext.domain.template.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.text.Normalizer;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -25,11 +29,14 @@ import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
 import com.sniptext.domain.template.service.dto.query.TemplateShortcutAvailabilityQuery;
+import com.sniptext.domain.template.service.dto.query.TemplateSyncQuery;
 import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
 import com.sniptext.domain.template.service.dto.result.TemplateListItemResult;
 import com.sniptext.domain.template.service.dto.result.TemplateListResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAvailabilityResult;
+import com.sniptext.domain.template.service.dto.result.TemplateSyncResult;
 import com.sniptext.fixture.TemplateFixture;
+import com.sniptext.global.config.TimeConfig;
 import com.sniptext.global.exception.BusinessException;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +51,10 @@ class TemplateQueryServiceTest {
 
 	@InjectMocks
 	private TemplateQueryService templateQueryService;
+
+	private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 15, 20, 31, 10);
+	private static final LocalDateTime LATEST_UPDATED_AT = LocalDateTime.of(2024, 11, 15, 20, 11, 1);
+	private static final String CURRENT_VERSION = "v1.1.1731669061000000";
 
 	@Test
 	@DisplayName("보유 개수는 휴지통을 제외한 개수다")
@@ -226,6 +237,72 @@ class TemplateQueryServiceTest {
 		assertThat(result.shortcut()).isEqualTo(shortcut);
 		assertThat(result.available()).isFalse();
 		assertThat(result.reason()).isEqualTo(reason);
+	}
+
+	@Test
+	@DisplayName("동기화: 보낸 버전이 지금 버전과 같으면 목록을 읽지 않고 changed = false, 목록 null, 시각은 Clock 기준")
+	void syncUnchanged() {
+		givenCurrentVersion();
+
+		TemplateSyncResult result = syncService().sync(new TemplateSyncQuery(USER_ID, CURRENT_VERSION));
+
+		assertThat(result.changed()).isFalse();
+		assertThat(result.version()).isEqualTo(CURRENT_VERSION);
+		assertThat(result.syncedAt()).isEqualTo(NOW);
+		assertThat(result.templates()).isNull();
+		verify(templateRepository, never()).findAllByUserIdAndDeletedAtIsNullOrderByIdAsc(anyLong());
+	}
+
+	@ParameterizedTest(name = "\"{0}\"")
+	@ValueSource(strings = {"", "v1.1.1731669061000001", "v1.2.1731669061000000", "잘못된 값"})
+	@DisplayName("동기화: 보낸 버전이 지금 버전과 다르면 changed = true와 8번 목록 전체")
+	void syncChanged(String version) {
+		givenCurrentVersion();
+		given(templateRepository.findAllByUserIdAndDeletedAtIsNullOrderByIdAsc(USER_ID))
+			.willReturn(List.of(TemplateFixture.template(USER_ID)));
+
+		TemplateSyncResult result = syncService().sync(new TemplateSyncQuery(USER_ID, version));
+
+		assertThat(result.changed()).isTrue();
+		assertThat(result.version()).isEqualTo(CURRENT_VERSION);
+		assertThat(result.templates().totalCount()).isEqualTo(1);
+		assertThat(result.templates().templates()).extracting(TemplateListItemResult::shortcut)
+			.containsExactly(TemplateFixture.SHORTCUT);
+	}
+
+	@Test
+	@DisplayName("동기화: 버전 없이 부르면(처음 요청) 항상 changed = true")
+	void syncWithoutVersion() {
+		givenCurrentVersion();
+		given(templateRepository.findAllByUserIdAndDeletedAtIsNullOrderByIdAsc(USER_ID)).willReturn(List.of());
+
+		TemplateSyncResult result = syncService().sync(new TemplateSyncQuery(USER_ID, null));
+
+		assertThat(result.changed()).isTrue();
+		assertThat(result.templates()).isNotNull();
+	}
+
+	@Test
+	@DisplayName("동기화: 템플릿이 하나도 없으면 버전은 v1.0.0")
+	void syncEmpty() {
+		given(templateRepository.countByUserIdAndDeletedAtIsNull(USER_ID)).willReturn(0L);
+		given(templateRepository.findLatestUpdatedAt(USER_ID)).willReturn(Optional.empty());
+
+		TemplateSyncResult result = syncService().sync(new TemplateSyncQuery(USER_ID, "v1.0.0"));
+
+		assertThat(result.changed()).isFalse();
+		assertThat(result.version()).isEqualTo("v1.0.0");
+	}
+
+	private void givenCurrentVersion() {
+		given(templateRepository.countByUserIdAndDeletedAtIsNull(USER_ID)).willReturn(1L);
+		given(templateRepository.findLatestUpdatedAt(USER_ID)).willReturn(Optional.of(LATEST_UPDATED_AT));
+	}
+
+	/** 동기화는 현재 시각이 필요해 고정 Clock을 넣어 직접 만든다 */
+	private TemplateQueryService syncService() {
+		Clock clock = Clock.fixed(NOW.atZone(TimeConfig.KST).toInstant(), TimeConfig.KST);
+		return new TemplateQueryService(templateRepository, clock);
 	}
 
 }
