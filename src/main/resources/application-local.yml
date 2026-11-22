@@ -13,6 +13,9 @@ sniptext:
   # 로컬은 외부를 부르지 않는 가짜 언어 모델이 기본이다
   ai:
     provider: ${AI_PROVIDER:fake}
+  # 대시보드 로컬 주소(CRA 기본 포트 3000)
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   # 실제 구글 로그인을 확인하려면 GOOGLE_CLIENT_ID·GOOGLE_CLIENT_SECRET 환경 변수로 진짜 값을 넣는다.
   # redirect-uris 기본값은 대시보드 로컬 주소(CRA 기본 포트 3000)다
   google:
