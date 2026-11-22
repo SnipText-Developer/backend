@@ -42,6 +42,13 @@ public interface TemplateRepository extends JpaRepository<Template, Long> {
 	long countByUserIdAndDeletedAtIsNull(Long userId);
 
 	/**
+	 * 회원 템플릿(휴지통 포함)의 가장 늦은 updated_at. 확장 동기화 버전에 쓴다. 템플릿이 없으면 비어 있다.
+	 * idx_templates_user_updated (user_id, updated_at)의 끝 값을 읽으므로 행을 훑지 않는다
+	 */
+	@Query("select max(t.updatedAt) from Template t where t.userId = :userId")
+	Optional<LocalDateTime> findLatestUpdatedAt(@Param("userId") Long userId);
+
+	/**
 	 * 활성 템플릿(휴지통 제외)에 같은 단축어 비교 키가 있는지. 생성 컬럼 active_shortcut_key는 휴지통이면 NULL이라
 	 * 휴지통 조건을 따로 걸지 않아도 되고, 유니크 인덱스 uk_templates_user_active_shortcut을 그대로 탄다
 	 */
