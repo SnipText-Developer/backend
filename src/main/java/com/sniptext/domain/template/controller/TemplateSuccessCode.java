@@ -17,6 +17,7 @@ public enum TemplateSuccessCode implements ResultCode {
 	TEMPLATE_DELETED(HttpStatus.OK, "TEMPLATE200_4", "템플릿을 휴지통으로 옮겼습니다."),
 	SHORTCUT_AVAILABILITY_CHECKED(HttpStatus.OK, "TEMPLATE200_5", "단축어 확인에 성공했습니다."),
 	TEMPLATE_USAGE_RECORDED(HttpStatus.OK, "TEMPLATE200_6", "사용 기록이 저장되었습니다."),
+	TEMPLATES_SYNCED(HttpStatus.OK, "TEMPLATE200_7", "템플릿 동기화에 성공했습니다."),
 	TEMPLATE_CREATED(HttpStatus.CREATED, "TEMPLATE201_1", "템플릿이 저장되었습니다.");
 
 	private final HttpStatus httpStatus;

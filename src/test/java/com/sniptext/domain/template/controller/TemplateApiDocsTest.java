@@ -18,7 +18,7 @@ import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
 import com.sniptext.support.IntegrationTestSupport;
 
-/** 명세 8~18번의 스웨거 문서(/v3/api-docs). Docs 인터페이스의 설명이 실제 문서에 들어가는지 확인한다. */
+/** 명세 8~18번과 S2 27번의 스웨거 문서(/v3/api-docs). Docs 인터페이스의 설명이 실제 문서에 들어가는지 확인한다. */
 class TemplateApiDocsTest extends IntegrationTestSupport {
 
 	private static final String TEMPLATE_TAG = "내 템플릿";
@@ -36,9 +36,10 @@ class TemplateApiDocsTest extends IntegrationTestSupport {
 		"15, get, /api/v1/trash/templates, 휴지통",
 		"16, post, /api/v1/trash/templates/{templateId}/restore, 휴지통",
 		"17, delete, /api/v1/trash/templates/{templateId}, 휴지통",
-		"18, delete, /api/v1/trash/templates, 휴지통"
+		"18, delete, /api/v1/trash/templates, 휴지통",
+		"27, get, /api/v1/templates/sync, 내 템플릿"
 	})
-	@DisplayName("8~18번은 화면 단위 태그에 들어 있고 summary가 있으며 로그인 회원 번호를 요청 파라미터로 노출하지 않는다")
+	@DisplayName("8~18번·27번은 화면 단위 태그에 들어 있고 summary가 있으며 로그인 회원 번호를 요청 파라미터로 노출하지 않는다")
 	void operationHasTagSummaryAndHidesLoginUser(int number, String method, String path, String tag)
 		throws Exception {
 		Map<String, Object> operation = apiDocs().read("$.paths['" + path + "']." + method);
@@ -72,7 +73,7 @@ class TemplateApiDocsTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("13번·15번의 쿼리 파라미터는 설명과 함께 노출된다")
+	@DisplayName("13번·15번·27번의 쿼리 파라미터는 설명과 함께 노출된다")
 	void queryParametersHaveDescriptions() throws Exception {
 		DocumentContext docs = apiDocs();
 
@@ -80,6 +81,8 @@ class TemplateApiDocsTest extends IntegrationTestSupport {
 			.containsOnlyKeys("shortcut", "excludeTemplateId");
 		assertThat(parameterDescriptions(docs, "/api/v1/trash/templates"))
 			.containsOnlyKeys("cursor", "size");
+		assertThat(parameterDescriptions(docs, "/api/v1/templates/sync"))
+			.containsOnlyKeys("version");
 	}
 
 	@Test

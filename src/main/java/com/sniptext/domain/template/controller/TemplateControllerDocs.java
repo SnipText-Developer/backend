@@ -8,6 +8,7 @@ import com.sniptext.domain.template.controller.dto.TemplateDeleteResponse;
 import com.sniptext.domain.template.controller.dto.TemplateDetailResponse;
 import com.sniptext.domain.template.controller.dto.TemplateListResponse;
 import com.sniptext.domain.template.controller.dto.TemplateShortcutAvailabilityResponse;
+import com.sniptext.domain.template.controller.dto.TemplateSyncResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUsageRequest;
@@ -21,9 +22,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 내 템플릿 API의 스웨거 설명. 매핑·검증은 {@link TemplateController}에 있다.
- * 자세한 규칙은 docs/s1-api-spec.md 8~14번이 기준이다.
+ * 자세한 규칙은 docs/s1-api-spec.md 8~14번, 확장 동기화는 docs/s2-api-spec.md 27번이 기준이다.
  */
-@Tag(name = "내 템플릿", description = "내 템플릿 조회·저장·수정·삭제와 단축어 확인")
+@Tag(name = "내 템플릿", description = "내 템플릿 조회·저장·수정·삭제와 단축어 확인, 확장 동기화")
 public interface TemplateControllerDocs {
 
 	@Operation(summary = "내 템플릿 목록 조회",
@@ -66,5 +67,12 @@ public interface TemplateControllerDocs {
 		@LoginUser Long userId,
 		Long templateId,
 		TemplateUsageRequest request);
+
+	@Operation(summary = "확장 템플릿 동기화",
+		description = "확장이 가진 목록의 버전과 지금 버전을 비교해, 바뀐 게 있을 때만 휴지통을 뺀 전체 목록(필드·정렬은 목록 조회와 같음)을 내려줍니다. "
+			+ "바뀐 게 없으면 totalCount·templates가 null입니다. version이 없거나 형식이 틀려도 에러 없이 전체를 내려줍니다.")
+	ResponseEntity<ApiResponse<TemplateSyncResponse>> syncTemplates(
+		@LoginUser Long userId,
+		@Parameter(description = "확장이 갖고 있는 목록의 버전 (직전 응답의 version). 처음이면 비움. 화면에서 해석하지 않음") String version);
 
 }
