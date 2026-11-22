@@ -4,6 +4,7 @@
 | --- | --- |
 | 버전 | v0.8 (2026-11-01, PRO 결제 기능 제거·정렬 고정 반영) |
 | v0.7 대비 변경 | 플랜 구분 삭제. 템플릿 한도는 모든 사용자 50개, AI 톤 교정은 모든 사용자 하루 5회 (기능명세서 COM-03·05). 6번 사용량 응답에서 `plan`·`aiTone.available` 삭제, 22번 `AI403_1` 삭제, 공통 규칙 3·6·7·9장 정리. **내 템플릿 정렬을 생성 순(오래된 것 먼저)으로 고정**(기능명세서 MYT-03 삭제): 7번 정렬 저장 API 삭제, 5번 `templateSort`·8번 `sort` 파라미터와 응답 필드·`TEMPLATE400_8` 삭제. API는 21개 (번호는 그대로 두고 7번을 비움) |
+| v0.8 수정 (2026-11-22) | 갤러리 카테고리 표시 이름 "고객 응대" → "고객응대" (공통 규칙 6장, 19번 `categoryName`). API 값 `CUSTOMER_SERVICE`는 그대로 |
 | v0.8 수정 (2026-11-13) | 22번 비고: 서버 내부 오류(500)도 횟수를 차감하지 않음 (선점한 1회를 되돌림, PR #86 리뷰) |
 | v0.8 수정 (2026-11-10) | 22번 비고: 출력 토큰 상한 4,000 → 6,000 (#64 실제 모델 확인에서 3000자 원문 보고/공문 교정이 4,000에 잘림), 처리 중 이탈은 감지하지 않아 차감됨으로 변경 |
 | v0.8 수정 (2026-11-10) | AI 톤 교정: 감성/에세이 문체(`ESSAY`) 삭제, 문체 6개 (공통 규칙 6장, 22번 `style`). 욕설·비속어도 혐오 표현과 같이 차단하고 22번 `AI422_1` 문구·설명 변경 |
@@ -190,7 +191,7 @@ POST /api/v1/auth/dev-token
 | 이름 | 값 |
 | --- | --- |
 | 사용 채널 | `DASHBOARD_COPY` / `POPUP_COPY` / `EMAIL_INLINE` |
-| 갤러리 카테고리 | `WORK` 업무 / `SALES` 영업 / `CUSTOMER_SERVICE` 고객 응대 / `PERSONAL` 개인 (전체 탭은 화면에서 처리) |
+| 갤러리 카테고리 | `WORK` 업무 / `SALES` 영업 / `CUSTOMER_SERVICE` 고객응대 / `PERSONAL` 개인 (전체 탭은 화면에서 처리) |
 | 문체 | `BOSS_EXTERNAL` 상사/외부용 / `REPORT_OFFICIAL` 보고/공문용 / `MARKETING` 마케팅/설득 / `NOTICE` 공지/안내 / `SOFT_POLITE` 부드러운 존댓말 / `CASUAL` 편한 반말 |
 | 로그인 제공자 | `GOOGLE` |
 
@@ -2038,7 +2039,7 @@ GET /api/v1/gallery/templates
 | totalCount | Integer | 전체 개수 |
 | templates[].galleryTemplateId | Long | 갤러리 템플릿 ID |
 | templates[].category | String | WORK / SALES / CUSTOMER_SERVICE / PERSONAL |
-| templates[].categoryName | String | 카테고리 칩 이름 (업무 / 영업 / 고객 응대 / 개인) |
+| templates[].categoryName | String | 카테고리 칩 이름 (업무 / 영업 / 고객응대 / 개인) |
 | templates[].title | String | 제목 |
 | templates[].shortcut | String | 기본 단축어 |
 | templates[].content | String | 본문 전체 (카드에서 3줄 말줄임) |

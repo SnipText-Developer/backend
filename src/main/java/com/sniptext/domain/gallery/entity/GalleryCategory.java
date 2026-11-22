@@ -10,7 +10,7 @@ public enum GalleryCategory {
 
 	WORK("업무"),
 	SALES("영업"),
-	CUSTOMER_SERVICE("고객 응대"),
+	CUSTOMER_SERVICE("고객응대"),
 	PERSONAL("개인");
 
 	/** 카테고리 칩에 보이는 이름 */
