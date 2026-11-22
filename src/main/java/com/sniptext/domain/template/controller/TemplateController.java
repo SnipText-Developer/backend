@@ -17,6 +17,7 @@ import com.sniptext.domain.template.controller.dto.TemplateDeleteResponse;
 import com.sniptext.domain.template.controller.dto.TemplateDetailResponse;
 import com.sniptext.domain.template.controller.dto.TemplateListResponse;
 import com.sniptext.domain.template.controller.dto.TemplateShortcutAvailabilityResponse;
+import com.sniptext.domain.template.controller.dto.TemplateSyncResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateRequest;
 import com.sniptext.domain.template.controller.dto.TemplateUpdateResponse;
 import com.sniptext.domain.template.controller.dto.TemplateUsageRequest;
@@ -26,11 +27,13 @@ import com.sniptext.domain.template.service.TemplateQueryService;
 import com.sniptext.domain.template.service.dto.command.TemplateDeleteCommand;
 import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
 import com.sniptext.domain.template.service.dto.query.TemplateShortcutAvailabilityQuery;
+import com.sniptext.domain.template.service.dto.query.TemplateSyncQuery;
 import com.sniptext.domain.template.service.dto.result.TemplateCreateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateDeleteResult;
 import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
 import com.sniptext.domain.template.service.dto.result.TemplateListResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAvailabilityResult;
+import com.sniptext.domain.template.service.dto.result.TemplateSyncResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
 import com.sniptext.global.response.ApiResponse;
@@ -40,16 +43,17 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 내 템플릿 (로그인 필요, 캐시 금지).
+ * 내 템플릿 (로그인 필요, 캐시 금지). 확장 동기화(S2 27번)도 여기 있다.
  */
 @RestController
 @RequestMapping("/api/v1/templates")
 @RequiredArgsConstructor
-public class TemplateController {
+public class TemplateController implements TemplateControllerDocs {
 
 	private final TemplateCommandService templateCommandService;
 	private final TemplateQueryService templateQueryService;
 
+	@Override
 	@GetMapping
 	public ResponseEntity<ApiResponse<TemplateListResponse>> getTemplates(@LoginUser Long userId) {
 		TemplateListResult result = templateQueryService.getTemplates(userId);
@@ -57,6 +61,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_LIST_FOUND, TemplateListResponse.from(result));
 	}
 
+	@Override
 	@GetMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateDetailResponse>> getTemplate(
 		@LoginUser Long userId,
@@ -67,6 +72,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_FOUND, TemplateDetailResponse.from(result));
 	}
 
+	@Override
 	@PostMapping
 	public ResponseEntity<ApiResponse<TemplateCreateResponse>> createTemplate(
 		@LoginUser Long userId,
@@ -77,6 +83,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_CREATED, TemplateCreateResponse.from(result));
 	}
 
+	@Override
 	@PutMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateUpdateResponse>> updateTemplate(
 		@LoginUser Long userId,
@@ -88,6 +95,7 @@ public class TemplateController {
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_UPDATED, TemplateUpdateResponse.from(result));
 	}
 
+	@Override
 	@DeleteMapping("/{templateId}")
 	public ResponseEntity<ApiResponse<TemplateDeleteResponse>> deleteTemplate(
 		@LoginUser Long userId,
@@ -102,6 +110,7 @@ public class TemplateController {
 	 * 단축어 확인. 형식 오류·예약어·중복도 200 + reason이라 shortcut에 검증 어노테이션을 붙이지 않는다.
 	 * shortcut 파라미터가 없거나 excludeTemplateId가 숫자가 아니면 스프링이 COMMON400_1로 응답한다.
 	 */
+	@Override
 	@GetMapping("/shortcuts/availability")
 	public ResponseEntity<ApiResponse<TemplateShortcutAvailabilityResponse>> checkShortcutAvailability(
 		@LoginUser Long userId,
@@ -115,6 +124,7 @@ public class TemplateController {
 			TemplateShortcutAvailabilityResponse.from(result));
 	}
 
+	@Override
 	@PostMapping("/{templateId}/usages")
 	public ResponseEntity<ApiResponse<TemplateUsageResponse>> recordUsage(
 		@LoginUser Long userId,
@@ -124,6 +134,21 @@ public class TemplateController {
 		TemplateUsageResult result = templateCommandService.recordUsage(request.toCommand(userId, templateId));
 
 		return ApiResponse.success(TemplateSuccessCode.TEMPLATE_USAGE_RECORDED, TemplateUsageResponse.from(result));
+	}
+
+	/**
+	 * 확장 템플릿 동기화. version은 해석하지 않고 서버 값과 같은지만 보므로 형식 검증을 붙이지 않는다
+	 * (없거나 틀리면 에러 없이 전체 목록). "/sync"는 고정 경로라 "/{templateId}"보다 먼저 매핑된다.
+	 */
+	@Override
+	@GetMapping("/sync")
+	public ResponseEntity<ApiResponse<TemplateSyncResponse>> syncTemplates(
+		@LoginUser Long userId,
+		@RequestParam(required = false) String version) {
+
+		TemplateSyncResult result = templateQueryService.sync(new TemplateSyncQuery(userId, version));
+
+		return ApiResponse.success(TemplateSuccessCode.TEMPLATES_SYNCED, TemplateSyncResponse.from(result));
 	}
 
 }

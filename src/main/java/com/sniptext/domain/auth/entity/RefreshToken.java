@@ -102,6 +102,7 @@ public class RefreshToken extends BaseCreatedTimeEntity {
 
 	/** 만료 시각과 같으면 만료다. */
 	public boolean isExpired(LocalDateTime now) {
+		require(now != null, "기준 시각이 없다");
 		return !now.isBefore(expiresAt);
 	}
 

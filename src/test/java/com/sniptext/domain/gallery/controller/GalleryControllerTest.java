@@ -48,6 +48,8 @@ class GalleryControllerTest extends IntegrationTestSupport {
 
 	@BeforeEach
 	void setUp() {
+		// 마이그레이션으로 들어간 갤러리 데이터를 비우고 시작한다 (테스트 트랜잭션이 끝나면 되돌아간다)
+		galleryTemplateRepository.deleteAllInBatch();
 		thanks = galleryTemplateRepository.saveAndFlush(GalleryTemplateFixture.galleryTemplate(
 			GalleryCategory.CUSTOMER_SERVICE, "문의 접수 확인", "/문의접수", "문의가 접수되었습니다.", 20, true));
 		hidden = galleryTemplateRepository.saveAndFlush(GalleryTemplateFixture.unpublished(1));
@@ -74,7 +76,7 @@ class GalleryControllerTest extends IntegrationTestSupport {
 			.andExpect(jsonPath("$.result.templates[0].variables", contains("고객명", "작업범위", "금액", "기간")))
 			.andExpect(jsonPath("$.result.templates[1].galleryTemplateId").value(thanks.getId()))
 			.andExpect(jsonPath("$.result.templates[1].category").value("CUSTOMER_SERVICE"))
-			.andExpect(jsonPath("$.result.templates[1].categoryName").value("고객 응대"))
+			.andExpect(jsonPath("$.result.templates[1].categoryName").value("고객응대"))
 			.andExpect(jsonPath("$.result.templates[1].variables", hasSize(0)))
 			.andReturn();
 

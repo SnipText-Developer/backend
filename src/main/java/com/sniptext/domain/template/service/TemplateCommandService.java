@@ -28,9 +28,9 @@ import com.sniptext.domain.template.service.dto.result.TemplateDeleteResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAssignResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUpdateResult;
 import com.sniptext.domain.template.service.dto.result.TemplateUsageResult;
+import com.sniptext.domain.template.support.TemplateLimit;
 import com.sniptext.domain.user.service.UserCommandService;
 import com.sniptext.global.exception.BusinessException;
-import com.sniptext.global.policy.UsageLimits;
 
 import lombok.RequiredArgsConstructor;
 
@@ -102,13 +102,15 @@ public class TemplateCommandService {
 
 	/**
 	 * 템플릿 수정. 없거나 다른 회원 것이면 TEMPLATE404_1, 휴지통에 있으면 TEMPLATE404_2, 내 다른 활성 템플릿과 단축어가 겹치면 TEMPLATE409_1.
-	 * 개수가 바뀌지 않으므로 회원을 잠그지 않고, 동시에 고치면 나중 저장이 덮어쓴다.
+	 * 개수는 바뀌지 않지만 회원 행을 먼저 잠근다 (lockUserBeforeTouchingUpdatedAt 참고). 동시에 고치면 나중 저장이 덮어쓴다.
 	 * 조회 뒤 저장 전에 휴지통으로 옮겨지면 TEMPLATE404_2 대신 200이고 수정은 휴지통 행에 남는다.
 	 * 휴지통은 단축어를 점유하지 않아 충돌이 없고 복구하면 고친 내용이 남는 정도라 허용한다.
 	 * 막아야 하면 수정용 조회만 FOR UPDATE로 잠근다. 변경 감지는 그대로 두고, 휴지통 이동이 먼저 끝난 경우 TEMPLATE404_2를 낼 수 있다.
 	 */
 	@Transactional
 	public TemplateUpdateResult update(TemplateUpdateCommand command) {
+		lockUserBeforeTouchingUpdatedAt(command.userId());
+
 		Template template = templateQueryService.getActiveTemplate(command.userId(), command.templateId());
 
 		TemplateTitle title = TemplateTitle.create(command.title());
@@ -123,13 +125,16 @@ public class TemplateCommandService {
 
 	/**
 	 * 템플릿 사용 기록. 최근 사용 시각(last_used_at)만 Clock 시각으로 바꾸고 수정 시각(edited_at)은 그대로 둔다.
-	 * 없거나 다른 회원 것이면 TEMPLATE404_1, 휴지통에 있으면 TEMPLATE404_2. 개수가 바뀌지 않으므로 회원을 잠그지 않는다.
+	 * 없거나 다른 회원 것이면 TEMPLATE404_1, 휴지통에 있으면 TEMPLATE404_2. 개수는 바뀌지 않지만 회원 행을 먼저 잠근다
+	 * (lockUserBeforeTouchingUpdatedAt 참고).
 	 * 변경 감지로 쓴다. @DynamicUpdate라 UPDATE에는 last_used_at과 감사 기능이 채우는 updated_at만 들어가고,
 	 * 읽은 뒤 다른 요청이 고친 이름·본문을 덮어쓰지 않는다. 엔티티를 읽으므로 본문 복호화에 실패하는 행이면 500이다.
 	 * 조회 뒤 커밋 전에 휴지통으로 옮겨지면 휴지통 행의 last_used_at이 바뀐다. 표시하지 않는 값이고 복구 시 그대로 남는 정도라 허용한다.
 	 */
 	@Transactional
 	public TemplateUsageResult recordUsage(TemplateUsageCommand command) {
+		lockUserBeforeTouchingUpdatedAt(command.userId());
+
 		Template template = templateQueryService.getActiveTemplate(command.userId(), command.templateId());
 
 		template.markUsed(LocalDateTime.now(clock));
@@ -159,6 +164,18 @@ public class TemplateCommandService {
 		return TemplateDeleteResult.from(template);
 	}
 
+	/**
+	 * 확장 동기화 버전(S2 27번)은 회원 템플릿의 가장 늦은 updated_at이라, 같은 회원의 쓰기는 updated_at 순서대로 커밋돼야 한다.
+	 * 잠그지 않으면 시각을 먼저 받은 쓰기가 더 늦은 시각의 쓰기보다 나중에 커밋될 수 있고, 그러면 최댓값이 이미 지나가 버전이 바뀌지 않는다.
+	 * 확장은 이 회원의 다음 변경 전까지 옛 내용을 보여 주고, 1분 주기 동기화로도 회복되지 않는다.
+	 * 회원 행을 커밋까지 잠그면 updated_at(감사 기능이 flush 때 채움)이 잠금을 얻은 뒤에 정해지므로 순서가 맞는다.
+	 * 생성·삭제·복구·갤러리 저장·영구 삭제는 한도·중복 때문에 이미 같은 잠금을 잡는다. 잠금 순서(회원 행 → 템플릿 행)도 같다.
+	 * 잠금이 트랜잭션의 첫 조회여야 이어지는 일반 조회가 앞 요청의 커밋을 본다
+	 */
+	private void lockUserBeforeTouchingUpdatedAt(Long userId) {
+		userCommandService.lockUser(userId);
+	}
+
 	private static void requireNoOuterTransaction() {
 		if (TransactionSynchronizationManager.isActualTransactionActive()) {
 			throw new IllegalStateException("갤러리 저장은 호출자 트랜잭션 밖에서 불러야 한다");
@@ -174,7 +191,7 @@ public class TemplateCommandService {
 
 	/** 활성 템플릿(휴지통 제외)이 한도 이상이면 TEMPLATE403_1 */
 	void validateTemplateLimit(Long userId) {
-		if (templateRepository.countByUserIdAndDeletedAtIsNull(userId) >= UsageLimits.TEMPLATE_LIMIT) {
+		if (TemplateLimit.isReached(templateRepository.countByUserIdAndDeletedAtIsNull(userId))) {
 			throw new BusinessException(TemplateErrorCode.TEMPLATE_LIMIT_REACHED);
 		}
 	}

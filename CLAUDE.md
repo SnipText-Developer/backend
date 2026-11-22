@@ -1,7 +1,7 @@
 # SNIPTEXT 백엔드
 
 한글 특화 템플릿 클립보드 매니저(웹 대시보드 + 크롬 확장)의 API 서버. 실제 출시해 사용자를 받는 서비스다.
-현재 범위는 S1(대시보드). 결제·구독, 확장 동기화(S2), 탈퇴는 아직 구현하지 않는다.
+현재 범위는 S1(대시보드)과 S2(크롬 확장). 결제·구독, S3(랜딩: 네이버 로그인·1:1 문의), 탈퇴는 아직 구현하지 않는다.
 
 ## 명령어
 
@@ -33,8 +33,9 @@ docker compose up -d                                   # 로컬 MySQL
 구현 전에 해당 부분을 먼저 읽는다. 문서와 코드가 다르면 임의로 고르지 말고 물어본다.
 
 - `docs/s1-api-spec.md`: S1(대시보드) API 명세 v0.8. 경로, 요청·응답 필드, 결과 코드와 에러 문구가 전부 여기 있다. 공통 규칙(응답 형식, 결과 코드, 시간, 입력 검증, 캐시)도 이 문서 앞부분에 있다.
-- 이후 스프린트 명세는 `docs/s2-api-spec.md`처럼 추가된다. 작업 중인 API가 어느 문서에 있는지 먼저 확인한다.
-- `docs/erd.md`: ERD v0.8과 DDL. 컬럼 의미, 인덱스, 설계 메모
+- `docs/s2-api-spec.md`: S2(크롬 확장) API 명세 v0.2. 23~27번(확장 연결 코드 로그인·재발급·로그아웃, 템플릿 동기화)과 확장 공통 규칙. S1 공통 규칙에 더하는 내용만 있다.
+- 이후 스프린트 명세도 `docs/s{번호}-api-spec.md`로 추가된다. 작업 중인 API가 어느 문서에 있는지 먼저 확인한다.
+- `docs/erd.md`: ERD v0.9와 DDL. 컬럼 의미, 인덱스, 설계 메모
 - 구현 후에는 스웨거가 기준이다. 명세와 달라지는 변경은 PR 설명에 적는다.
 
 ## 패키지 구조
@@ -62,7 +63,7 @@ com.sniptext
 
 ```
 domain/{도메인}/
-├── controller/      # {도메인}SuccessCode (성공 결과 코드 열거형)
+├── controller/      # {도메인}SuccessCode (성공 결과 코드 열거형) · {컨트롤러}Docs (스웨거 설명)
 │   └── dto/         # {도메인}{행위}Request · {도메인}{행위}Response
 ├── service/         # {도메인}CommandService (쓰기) · {도메인}QueryService (조회)
 │   └── dto/
@@ -86,6 +87,10 @@ domain/{도메인}/
 - 성공 코드는 컨트롤러가, 에러 코드는 서비스가 쓴다. 서비스는 성공 코드를 모른다.
 - 버전 구분(`V2`)이 필요하면 컨트롤러의 요청·응답 객체에만 붙인다.
 - 엔티티의 규칙을 쓰는 요청 검증 어노테이션은 `annotation`에 둔다. `controller/dto`에 두면 컨트롤러가 엔티티를 쓰게 되어 ArchUnit에 걸린다. `annotation`은 `entity`·`exception`만 쓰고 `controller`·`service`는 부르지 않는다.
+- 스웨거 어노테이션(`@Tag`·`@Operation`·`@ApiResponse`·`@Parameter`)은 `controller` 패키지의 `{컨트롤러}Docs` 인터페이스에 두고, 컨트롤러가 구현하며 메서드에 `@Override`를 붙인다 (예: `TemplateControllerDocs`). 에러 응답 표시 방식은 아직 정하지 않았다.
+- 스프링 어노테이션(매핑, `@RequestParam`·`@PathVariable`·`@RequestBody`, `@Valid`, 검증 어노테이션)은 컨트롤러에만 둔다. 메서드 모양은 두 곳이 같고, `@LoginUser Long userId`도 인터페이스에 쓴다.
+  - 쿼리 파라미터에 검증이 필요하면 요청 record로 묶어 필드에 검증을 단다 (인터페이스에는 `@ParameterObject`, 필드 설명은 record 필드의 `@Parameter`. 예: `TrashListRequest`). 메서드 파라미터에 `@Min` 등을 바로 붙이면 하이버네이트 검증기가 그 API의 모든 요청을 500으로 만든다 (HV000151)
+  - 요청 본문 필드 설명은 `controller/dto` 요청 record 필드에 `@Schema`로 단다 (Docs 인터페이스에서는 필드 단위로 설명할 수 없다)
 - `support`에는 다른 도메인이 써도 되는 순수 규칙만 둔다 (상태·DB·스프링 빈 없음). `service`·`repository`·`controller`를 참조하지 않는다 (ArchUnit이 강제).
 - 값을 나타내는 열거형(카테고리, 약관 종류 등)은 그 값을 저장하는 엔티티의 도메인 `entity` 패키지에 둔다. 저장하지 않는 값은 그 값을 쓰는 도메인의 `entity` 패키지에 둔다.
 - `entity` 패키지의 열거형은 컨트롤러와 다른 도메인에서 직접 써도 된다. 엔티티 클래스는 안 된다.
@@ -100,6 +105,8 @@ domain/{도메인}/
 | 보유 템플릿 개수 | `long countActive(Long userId)` | template → user |
 | AI 오늘 사용량 | `AiToneUsageResult getTodayUsage(Long userId)` (`AiToneUsageQueryService`) | ai → user |
 | 가입 시 회원 생성 | `Long signUp(UserSignUpCommand)` | user → auth |
+| 로그인 시각 기록 | `void recordLogin(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → auth |
+| 닉네임 조회 | `String getNickname(Long userId)` (`UserQueryService`) | user → auth |
 | 회원 행 잠금 | `void lockUser(Long userId)` (`UserCommandService`, 호출자 트랜잭션 필수) | user → template |
 | 회원 존재 확인 | `void validateActive(Long userId)` (`UserQueryService`, 없거나 탈퇴면 `USER404_1`) | user → ai |
 

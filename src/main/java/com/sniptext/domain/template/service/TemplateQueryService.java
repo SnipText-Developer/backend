@@ -1,5 +1,7 @@
 package com.sniptext.domain.template.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,10 +16,12 @@ import com.sniptext.domain.template.exception.TemplateErrorCode;
 import com.sniptext.domain.template.repository.TemplateRepository;
 import com.sniptext.domain.template.service.dto.query.TemplateDetailQuery;
 import com.sniptext.domain.template.service.dto.query.TemplateShortcutAvailabilityQuery;
+import com.sniptext.domain.template.service.dto.query.TemplateSyncQuery;
 import com.sniptext.domain.template.service.dto.result.TemplateDetailResult;
 import com.sniptext.domain.template.service.dto.result.TemplateListItemResult;
 import com.sniptext.domain.template.service.dto.result.TemplateListResult;
 import com.sniptext.domain.template.service.dto.result.TemplateShortcutAvailabilityResult;
+import com.sniptext.domain.template.service.dto.result.TemplateSyncResult;
 import com.sniptext.global.exception.BusinessException;
 
 import lombok.RequiredArgsConstructor;
@@ -28,6 +32,7 @@ import lombok.RequiredArgsConstructor;
 public class TemplateQueryService {
 
 	private final TemplateRepository templateRepository;
+	private final Clock clock;
 
 	/** 휴지통을 제외한 보유 템플릿 개수. 사용량 API가 부른다 */
 	public long countActive(Long userId) {
@@ -41,6 +46,25 @@ public class TemplateQueryService {
 			.map(TemplateListItemResult::from)
 			.toList();
 		return TemplateListResult.from(templates);
+	}
+
+	/**
+	 * 확장 템플릿 동기화 (S2 명세 27번). 보낸 버전이 지금 버전과 같으면 목록 없이, 다르거나 없으면 8번 목록 전체를 돌려준다.
+	 * 버전 계산(개수·가장 늦은 updated_at)과 목록 조회는 반드시 이 메서드의 읽기 전용 트랜잭션 하나에서 한다.
+	 * MySQL 기본 격리 수준(REPEATABLE READ)은 첫 조회 시점의 스냅샷을 트랜잭션 끝까지 쓰므로 세 조회가 같은 시점을 본다.
+	 * 따로 읽으면 그 사이 다른 기기의 변경이 커밋될 때 "새 버전 + 옛 목록"이 나가고, 확장은 새 버전을 저장해
+	 * 그 변경을 다음 변경 전까지 놓친다. 목록을 다른 트랜잭션(별도 빈 호출 등)으로 옮기지 않는다
+	 */
+	public TemplateSyncResult sync(TemplateSyncQuery query) {
+		LocalDateTime syncedAt = LocalDateTime.now(clock);
+		String version = TemplateSyncVersion.of(
+			templateRepository.countByUserIdAndDeletedAtIsNull(query.userId()),
+			templateRepository.findLatestUpdatedAt(query.userId()).orElse(null));
+
+		if (version.equals(query.version())) {
+			return TemplateSyncResult.unchanged(version, syncedAt);
+		}
+		return TemplateSyncResult.of(version, syncedAt, getTemplates(query.userId()));
 	}
 
 	/** 내 템플릿 상세. 없거나 다른 회원 것이면 TEMPLATE404_1, 휴지통에 있으면 TEMPLATE404_2 */

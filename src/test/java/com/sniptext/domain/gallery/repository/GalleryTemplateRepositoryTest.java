@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,12 @@ class GalleryTemplateRepositoryTest extends IntegrationTestSupport {
 
 	@Autowired
 	private EntityManager entityManager;
+
+	@BeforeEach
+	void setUp() {
+		// 마이그레이션으로 들어간 갤러리 데이터를 비우고 시작한다 (테스트 트랜잭션이 끝나면 되돌아간다)
+		galleryTemplateRepository.deleteAllInBatch();
+	}
 
 	@Test
 	@DisplayName("목록은 비공개를 빼고 노출 순서, 같으면 ID 순으로 돌려준다")

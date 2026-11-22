@@ -1,0 +1,5 @@
+# 복사해서 terraform.tfvars로 쓴다 (terraform.tfvars는 커밋하지 않는다)
+# budget_email은 여기에 쓰지 않고 환경 변수 TF_VAR_budget_email로 넣는다
+
+region           = "ap-northeast-2"
+budget_limit_usd = 60
