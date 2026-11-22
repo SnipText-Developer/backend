@@ -27,17 +27,19 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/gallery/templates")
 @RequiredArgsConstructor
-public class GalleryController {
+public class GalleryController implements GalleryControllerDocs {
 
 	private final GalleryQueryService galleryQueryService;
 	private final GalleryCommandService galleryCommandService;
 
+	@Override
 	@GetMapping
 	public ResponseEntity<ApiResponse<GalleryTemplateListResponse>> getGalleryTemplates() {
 		return ApiResponse.success(GallerySuccessCode.GALLERY_TEMPLATES_FOUND,
 			GalleryTemplateListResponse.from(galleryQueryService.getGalleryTemplates()));
 	}
 
+	@Override
 	@GetMapping("/{galleryTemplateId}")
 	public ResponseEntity<ApiResponse<GalleryTemplateResponse>> getGalleryTemplate(
 		@PathVariable Long galleryTemplateId) {
@@ -45,6 +47,7 @@ public class GalleryController {
 			GalleryTemplateResponse.from(galleryQueryService.getGalleryTemplate(galleryTemplateId)));
 	}
 
+	@Override
 	@PostMapping("/{galleryTemplateId}/save")
 	public ResponseEntity<ApiResponse<GallerySaveResponse>> saveToMyTemplates(
 		@LoginUser Long userId,
