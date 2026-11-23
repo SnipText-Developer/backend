@@ -22,11 +22,12 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
-public class UserController {
+public class UserController implements UserControllerDocs {
 
 	private final UserQueryService userQueryService;
 	private final UserUsageQueryService userUsageQueryService;
 
+	@Override
 	@GetMapping("/me")
 	public ResponseEntity<ApiResponse<UserDetailResponse>> getMe(@LoginUser Long userId) {
 		UserDetailResult result = userQueryService.getDetail(userId);
@@ -34,6 +35,7 @@ public class UserController {
 		return ApiResponse.success(UserSuccessCode.USER_FOUND, UserDetailResponse.from(result));
 	}
 
+	@Override
 	@GetMapping("/me/usage")
 	public ResponseEntity<ApiResponse<UserUsageResponse>> getUsage(@LoginUser Long userId) {
 		UserUsageResult result = userUsageQueryService.getUsage(userId);
