@@ -30,8 +30,10 @@ class CorsPropertiesTest {
 
 	@ParameterizedTest
 	@ValueSource(strings = {"*", "https://*.sniptext.kr", "https://sniptext.kr/", "https://sniptext.kr/dashboard",
-		"sniptext.kr"})
-	@DisplayName("전체 허용(*)이나 경로·끝 슬래시가 붙은 출처는 기동에 실패한다")
+		"sniptext.kr", "chrome-extension://*", "chrome-extension://abcdefghijklmnop",
+		"chrome-extension://ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP", "chrome-extension://abcdefghijklmnopabcdefghijklmnoz",
+		"chrome-extension://abcdefghijklmnopabcdefghijklmnop/"})
+	@DisplayName("전체 허용(*)이나 경로·끝 슬래시가 붙은 출처, 확장 ID 형식(a~p 소문자 32자)이 아닌 확장 출처는 기동에 실패한다")
 	void startupFailsWithInvalidOrigin(String origin) {
 		runner.withPropertyValues("sniptext.cors.allowed-origins=https://sniptext.kr," + origin)
 			.run(context -> assertThat(context).hasFailed());
@@ -43,6 +45,15 @@ class CorsPropertiesTest {
 		runner.withPropertyValues("sniptext.cors.allowed-origins=https://sniptext.kr, http://localhost:3000")
 			.run(context -> assertThat(context.getBean(CorsProperties.class).allowedOrigins())
 				.containsExactly("https://sniptext.kr", "http://localhost:3000"));
+	}
+
+	@Test
+	@DisplayName("크롬 확장 출처(chrome-extension://확장 ID)를 함께 넣어도 기동한다")
+	void startsWithExtensionOrigin() {
+		runner.withPropertyValues(
+				"sniptext.cors.allowed-origins=https://sniptext.kr,chrome-extension://abcdefghijklmnopabcdefghijklmnop")
+			.run(context -> assertThat(context.getBean(CorsProperties.class).allowedOrigins())
+				.containsExactly("https://sniptext.kr", "chrome-extension://abcdefghijklmnopabcdefghijklmnop"));
 	}
 
 	@Configuration

@@ -41,6 +41,15 @@ class CorsConfigTest {
 	}
 
 	@Test
+	@DisplayName("prod 프로필에서 크롬 확장 출처는 https가 아니어도 기동한다")
+	void prodAllowsExtensionOrigin() {
+		runner.withInitializer(context -> context.getEnvironment().setActiveProfiles("prod"))
+			.withPropertyValues(
+				"sniptext.cors.allowed-origins=https://sniptext.kr,chrome-extension://abcdefghijklmnopabcdefghijklmnop")
+			.run(context -> assertThat(context).hasSingleBean(CorsConfigurationSource.class));
+	}
+
+	@Test
 	@DisplayName("dev 프로필에서는 로컬 http 출처로도 기동한다 (출시 전 프론트 로컬 연동)")
 	void devAllowsLocalOrigin() {
 		runner.withInitializer(context -> context.getEnvironment().setActiveProfiles("dev"))
