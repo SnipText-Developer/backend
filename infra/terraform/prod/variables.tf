@@ -190,3 +190,17 @@ variable "github_environment" {
   type        = string
   default     = "prod"
 }
+
+# ---------- 대시보드 배포 역할 (#131) ----------
+# 소유자·환경은 백엔드와 같은 값(github_owner_id, github_environment)을 쓴다
+variable "dashboard_github_repository" {
+  description = "대시보드 배포 역할을 위임받을 GitHub 저장소 (소유자/이름, 대소문자 그대로)"
+  type        = string
+  default     = "SnipText-Developer/snip-text-dashboard"
+}
+
+variable "dashboard_github_repository_id" {
+  description = "대시보드 GitHub 저장소 숫자 ID. 저장소를 지우고 같은 이름으로 다시 만들면 바뀐다"
+  type        = number
+  default     = 1438261282
+}
