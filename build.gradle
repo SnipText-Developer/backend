@@ -21,6 +21,7 @@ ext {
 	springdocVersion = '3.1.1'
 	querydslVersion = '7.7'
 	archunitVersion = '1.5.1'
+	shedlockVersion = '7.11.0'
 }
 
 dependencies {
@@ -35,6 +36,9 @@ dependencies {
 	implementation 'org.flywaydb:flyway-mysql'
 	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
 	implementation "io.github.openfeign.querydsl:querydsl-jpa:${querydslVersion}"
+	// 배치가 서버 여러 대(배포 중 겹치는 컨테이너 포함)에서 한 번만 돌도록 DB 잠금 테이블로 막는다
+	implementation "net.javacrumbs.shedlock:shedlock-spring:${shedlockVersion}"
+	implementation "net.javacrumbs.shedlock:shedlock-provider-jdbc-template:${shedlockVersion}"
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-docker-compose'
 	runtimeOnly 'com.mysql:mysql-connector-j'
@@ -72,4 +76,7 @@ tasks.named('test') {
 	environment 'GOOGLE_REDIRECT_URIS', 'http://localhost:5173/auth/google/callback'
 	// 테스트 전용 허용 출처
 	environment 'CORS_ALLOWED_ORIGINS', 'https://sniptext.kr,http://localhost:3000,chrome-extension://abcdefghijklmnopabcdefghijklmnop'
+	// 테스트 중에 실제 시각(00:10, 04:00)이 되어 배치가 테스트 데이터를 지우지 않게 스케줄을 끈다.
+	// 배치 메서드는 테스트에서 직접 부르고, 잠금(셰드락)은 켜진 그대로 쓴다
+	environment 'SNIPTEXT_SCHEDULING_ENABLED', 'false'
 }

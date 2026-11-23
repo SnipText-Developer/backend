@@ -15,7 +15,7 @@ import com.sniptext.global.security.JwtTokenProvider;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, TestApiController.class, TestExceptionController.class,
-	TestTimeController.class})
+	TestTimeController.class, TestLockedTask.class})
 public abstract class IntegrationTestSupport {
 
 	@Autowired
