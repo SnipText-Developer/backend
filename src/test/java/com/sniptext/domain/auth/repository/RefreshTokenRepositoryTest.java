@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static com.sniptext.fixture.RefreshTokenFixture.hash;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -91,6 +92,42 @@ class RefreshTokenRepositoryTest extends IntegrationTestSupport {
 		assertThat(revokedAt(hash(1))).isEqualTo(NOW);
 		assertThat(revokedAt(hash(2))).isEqualTo(NOW);
 		assertThat(revokedAt(hash(3))).isNull();
+	}
+
+	@Test
+	@DisplayName("만료 정리는 만료 시각이 지났거나 같은 토큰만 지우고, 폐기됐어도 만료 전인 토큰은 남긴다")
+	void deleteExpiredBoundary() {
+		RefreshToken revokedAndExpired = RefreshTokenFixture.webExpiringAt(userId, hash(4), NOW.minusDays(1));
+		revokedAndExpired.revoke(NOW.minusDays(2));
+		RefreshToken revokedNotExpired = RefreshTokenFixture.webExpiringAt(userId, hash(5), NOW.plusDays(1));
+		revokedNotExpired.revoke(NOW.minusDays(1));
+		refreshTokenRepository.saveAllAndFlush(List.of(
+			RefreshTokenFixture.webExpiringAt(userId, hash(1), NOW.minusNanos(1_000)),
+			RefreshTokenFixture.webExpiringAt(otherUserId, hash(2), NOW),
+			RefreshTokenFixture.webExpiringAt(userId, hash(3), NOW.plusNanos(1_000)),
+			revokedAndExpired,
+			revokedNotExpired));
+
+		int deleted = refreshTokenRepository.deleteExpired(NOW, 10);
+
+		assertThat(deleted).isEqualTo(3);
+		assertThat(refreshTokenRepository.findAll()).extracting(RefreshToken::getTokenHash)
+			.containsExactlyInAnyOrder(hash(3), hash(5));
+	}
+
+	@Test
+	@DisplayName("만료 정리는 한 번에 정한 개수까지만, 가장 먼저 만료된 토큰부터 지운다")
+	void deleteExpiredLimit() {
+		refreshTokenRepository.saveAllAndFlush(List.of(
+			// 저장 순서(id)와 만료 순서를 일부러 다르게 둔다. id 순으로 지우면 hash(3)이 남는다
+			RefreshTokenFixture.webExpiringAt(userId, hash(1), NOW.minusDays(1)),
+			RefreshTokenFixture.webExpiringAt(userId, hash(2), NOW.minusDays(3)),
+			RefreshTokenFixture.webExpiringAt(userId, hash(3), NOW.minusDays(2))));
+
+		int deleted = refreshTokenRepository.deleteExpired(NOW, 2);
+
+		assertThat(deleted).isEqualTo(2);
+		assertThat(refreshTokenRepository.findAll()).extracting(RefreshToken::getTokenHash).containsExactly(hash(1));
 	}
 
 	private LocalDateTime revokedAt(String tokenHash) {
