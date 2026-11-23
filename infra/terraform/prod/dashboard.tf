@@ -197,6 +197,68 @@ resource "aws_cloudfront_distribution" "dashboard" {
   }
 }
 
+# ---------- 대시보드 저장소 배포 역할 ----------
+# 대시보드 저장소의 prod 환경에서 도는 워크플로만 위임받는다 (백엔드 배포 역할과 같은 방식, github_deploy.tf)
+# 어느 브랜치가 prod 환경을 쓸지는 대시보드 저장소의 GitHub 환경 설정(배포 브랜치 main만)이 정한다
+locals {
+  dashboard_github_subject = "repo:${split("/", var.dashboard_github_repository)[0]}@${var.github_owner_id}/${split("/", var.dashboard_github_repository)[1]}@${var.dashboard_github_repository_id}:environment:${var.github_environment}"
+}
+
+data "aws_iam_policy_document" "dashboard_deploy_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = [local.dashboard_github_subject]
+    }
+  }
+}
+
+resource "aws_iam_role" "dashboard_deploy" {
+  name               = "${local.name}-dashboard-deploy"
+  assume_role_policy = data.aws_iam_policy_document.dashboard_deploy_assume.json
+}
+
+# 빌드 결과 올리기(s3 sync --delete: 목록·올리기·지우기)와 이 배포의 캐시 비우기만
+data "aws_iam_policy_document" "dashboard_deploy" {
+  statement {
+    sid       = "ListDashboardBucket"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.dashboard.arn]
+  }
+
+  statement {
+    sid       = "SyncDashboardObjects"
+    actions   = ["s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.dashboard.arn}/*"]
+  }
+
+  statement {
+    sid       = "InvalidateDashboardCache"
+    actions   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
+    resources = [aws_cloudfront_distribution.dashboard.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "dashboard_deploy" {
+  name   = "deploy"
+  role   = aws_iam_role.dashboard_deploy.id
+  policy = data.aws_iam_policy_document.dashboard_deploy.json
+}
+
 # ---------- sniptext.kr → CloudFront ----------
 resource "aws_route53_record" "dashboard" {
   for_each = toset(["A", "AAAA"])

@@ -38,6 +38,11 @@ output "dashboard_distribution_id" {
   value       = aws_cloudfront_distribution.dashboard.id
 }
 
+output "dashboard_deploy_role_arn" {
+  description = "대시보드 저장소 배포 워크플로가 위임받는 역할 (prod 환경 변수 AWS_ROLE_ARN에 넣는다)"
+  value       = aws_iam_role.dashboard_deploy.arn
+}
+
 output "dashboard_url" {
   description = "대시보드 주소"
   value       = "https://${var.domain_name}"
