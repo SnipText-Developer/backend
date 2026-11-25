@@ -368,7 +368,7 @@ CREATE TABLE extension_link_codes (
 만료된 재발급 토큰을 인덱스로 찾아 나눠 지우기 위해 인덱스만 추가합니다 (#133).
 
 ```sql
--- V202611231600__add_refresh_tokens_expires_index.sql
+-- V202611251400__add_refresh_tokens_expires_index.sql
 ALTER TABLE refresh_tokens
     ADD INDEX idx_refresh_expires (expires_at);
 ```
