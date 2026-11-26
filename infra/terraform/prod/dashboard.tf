@@ -127,15 +127,23 @@ resource "aws_cloudfront_origin_access_control" "dashboard" {
 # 화면 주소(/templates, /auth/google/callback 등)로 바로 들어오거나 새로고침해도 index.html을 준다.
 # 마지막 경로에 점(.)이 있는 요청(/static/js/main.js 등)은 파일 그대로 찾는다.
 # 404·403을 index.html로 바꾸는 방식은 없는 파일까지 200으로 숨기므로 쓰지 않는다
+# /dashboard 아래는 버킷의 dashboard/ 에 올린 새 대시보드(PUBLIC_URL=/dashboard)를 준다 (#138, 전환 전 미리 확인용)
 resource "aws_cloudfront_function" "dashboard_spa" {
   name    = "${local.name}-dashboard-spa"
   runtime = "cloudfront-js-2.0"
-  comment = "Rewrite page routes to /index.html"
+  comment = "Rewrite page routes to /index.html or /dashboard/index.html"
   publish = true
   code    = <<-EOT
     function handler(event) {
       var request = event.request;
-      var last = request.uri.split('/').pop();
+      var uri = request.uri;
+      var last = uri.split('/').pop();
+      if (uri === '/dashboard' || uri.indexOf('/dashboard/') === 0) {
+        if (last.indexOf('.') === -1) {
+          request.uri = '/dashboard/index.html';
+        }
+        return request;
+      }
       if (last.indexOf('.') === -1) {
         request.uri = '/index.html';
       }

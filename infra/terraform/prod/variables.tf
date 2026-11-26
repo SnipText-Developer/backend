@@ -128,6 +128,9 @@ variable "google_redirect_uris" {
   default = [
     "https://sniptext.kr/auth/google/callback",
     "http://localhost:3000/auth/google/callback",
+    # 대시보드가 /dashboard 아래로 옮겨 간 뒤의 주소 (#138). 옮긴 뒤 위 두 개는 뺀다
+    "https://sniptext.kr/dashboard/auth/google/callback",
+    "http://localhost:3000/dashboard/auth/google/callback",
   ]
 }
 
@@ -206,4 +209,17 @@ variable "dashboard_github_repository_id" {
   description = "대시보드 GitHub 저장소 숫자 ID. 저장소를 지우고 같은 이름으로 다시 만들면 바뀐다"
   type        = number
   default     = 1438261282
+}
+
+# ---------- 랜딩 배포 역할 (#138) ----------
+variable "landing_github_repository" {
+  description = "랜딩 배포 역할을 위임받을 GitHub 저장소 (소유자/이름, 대소문자 그대로)"
+  type        = string
+  default     = "SnipText-Developer/snip-text-landing-page"
+}
+
+variable "landing_github_repository_id" {
+  description = "랜딩 GitHub 저장소 숫자 ID. 저장소를 지우고 같은 이름으로 다시 만들면 바뀐다"
+  type        = number
+  default     = 1438022990
 }
