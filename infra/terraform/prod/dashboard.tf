@@ -124,21 +124,60 @@ resource "aws_cloudfront_origin_access_control" "dashboard" {
   signing_protocol                  = "sigv4"
 }
 
-# 화면 주소(/templates, /auth/google/callback 등)로 바로 들어오거나 새로고침해도 index.html을 준다.
-# 마지막 경로에 점(.)이 있는 요청(/static/js/main.js 등)은 파일 그대로 찾는다.
+# 주소를 경로 앞부분으로 나눈다 (#138)
+# - /dashboard/* → 대시보드 (버킷 dashboard/, PUBLIC_URL=/dashboard)
+# - /landing/*   → 랜딩 JS·CSS 그대로 (버킷 landing/, PUBLIC_URL=/landing)
+# - 예전 대시보드 주소(/login, /templates 등) → /dashboard/... 로 302 (예전 확장 빌드·북마크용. UT 뒤 정리)
+# - 나머지(/ 포함) → 랜딩. /robots.txt 같은 파일은 /landing/robots.txt 를 준다
+# 화면 주소로 바로 들어오거나 새로고침해도 각 앱의 index.html을 준다. 마지막 경로에 점(.)이 있으면 파일 그대로 찾는다.
 # 404·403을 index.html로 바꾸는 방식은 없는 파일까지 200으로 숨기므로 쓰지 않는다
+# 302로 둔 이유: 301은 브라우저가 오래 기억해 나중에 규칙을 지워도 계속 넘어간다
 resource "aws_cloudfront_function" "dashboard_spa" {
   name    = "${local.name}-dashboard-spa"
   runtime = "cloudfront-js-2.0"
-  comment = "Rewrite page routes to /index.html"
+  comment = "Route /dashboard/* to dashboard, the rest to landing"
   publish = true
   code    = <<-EOT
+    var LEGACY_DASHBOARD = ['login', 'templates', 'trash', 'gallery', 'ai-tone', 'auth'];
+
+    function queryString(qs) {
+      var parts = [];
+      for (var key in qs) {
+        var item = qs[key];
+        if (item.multiValue) {
+          for (var i = 0; i < item.multiValue.length; i++) {
+            parts.push(key + '=' + item.multiValue[i].value);
+          }
+        } else {
+          parts.push(key + '=' + item.value);
+        }
+      }
+      return parts.length > 0 ? '?' + parts.join('&') : '';
+    }
+
     function handler(event) {
       var request = event.request;
-      var last = request.uri.split('/').pop();
-      if (last.indexOf('.') === -1) {
-        request.uri = '/index.html';
+      var uri = request.uri;
+      var last = uri.split('/').pop();
+      var isPage = last.indexOf('.') === -1;
+
+      if (uri === '/dashboard' || uri.indexOf('/dashboard/') === 0) {
+        if (isPage) {
+          request.uri = '/dashboard/index.html';
+        }
+        return request;
       }
+      if (uri.indexOf('/landing/') === 0) {
+        return request;
+      }
+      if (LEGACY_DASHBOARD.indexOf(uri.split('/')[1]) !== -1) {
+        return {
+          statusCode: 302,
+          statusDescription: 'Found',
+          headers: { location: { value: '/dashboard' + uri + queryString(request.querystring) } }
+        };
+      }
+      request.uri = isPage ? '/landing/index.html' : '/landing' + uri;
       return request;
     }
   EOT
@@ -201,6 +240,7 @@ resource "aws_cloudfront_distribution" "dashboard" {
 # 대시보드 저장소의 prod 환경에서 도는 워크플로만 위임받는다 (백엔드 배포 역할과 같은 방식, github_deploy.tf)
 # 어느 브랜치가 prod 환경을 쓸지는 대시보드 저장소의 GitHub 환경 설정(배포 브랜치 main만)이 정한다
 locals {
+  dashboard_prefix         = "dashboard"
   dashboard_github_subject = "repo:${split("/", var.dashboard_github_repository)[0]}@${var.github_owner_id}/${split("/", var.dashboard_github_repository)[1]}@${var.dashboard_github_repository_id}:environment:${var.github_environment}"
 }
 
@@ -233,17 +273,24 @@ resource "aws_iam_role" "dashboard_deploy" {
 }
 
 # 빌드 결과 올리기(s3 sync --delete: 목록·올리기·지우기)와 이 배포의 캐시 비우기만
+# 버킷의 dashboard/ 아래만 쓸 수 있다. landing/ 은 랜딩 배포 역할(landing.tf)이 쓴다 (#138)
 data "aws_iam_policy_document" "dashboard_deploy" {
   statement {
-    sid       = "ListDashboardBucket"
+    sid       = "ListDashboardPrefix"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.dashboard.arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["${local.dashboard_prefix}/*"]
+    }
   }
 
   statement {
     sid       = "SyncDashboardObjects"
     actions   = ["s3:PutObject", "s3:DeleteObject"]
-    resources = ["${aws_s3_bucket.dashboard.arn}/*"]
+    resources = ["${aws_s3_bucket.dashboard.arn}/${local.dashboard_prefix}/*"]
   }
 
   statement {

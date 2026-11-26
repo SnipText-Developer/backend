@@ -48,6 +48,16 @@ output "dashboard_url" {
   value       = "https://${var.domain_name}"
 }
 
+output "landing_deploy_role_arn" {
+  description = "랜딩 저장소 배포 워크플로가 위임받는 역할 (#138, prod 환경 변수 AWS_DEPLOY_ROLE_ARN). 버킷·배포 ID는 대시보드 값을 쓴다"
+  value       = aws_iam_role.landing_deploy.arn
+}
+
+output "landing_s3_prefix" {
+  description = "랜딩 빌드 결과를 올리는 대시보드 버킷 안의 경로"
+  value       = local.landing_prefix
+}
+
 output "db_address" {
   description = "RDS 주소 (SSM 포트 포워딩 대상)"
   value       = aws_db_instance.main.address
