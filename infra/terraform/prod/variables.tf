@@ -137,6 +137,9 @@ variable "cors_allowed_origins" {
   default = [
     "https://sniptext.kr",
     "http://localhost:3000",
+    # 크롬 확장 (manifest key로 고정한 ID, 압축해제 설치 기준). 웹스토어에 올리면 스토어 ID로 바꾸고
+    # 대시보드 저장소 prod 환경 변수 REACT_APP_CHROME_EXTENSION_ID도 같이 바꾼다
+    "chrome-extension://deijpelidjmefllaonjkdcndkologogo",
   ]
 
   validation {

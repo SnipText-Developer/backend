@@ -23,6 +23,6 @@ app_db_username             = "sniptext_app"
 spring_profile       = "dev"
 google_client_id     = "000000000000-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
 google_redirect_uris  = ["https://sniptext.kr/auth/google/callback", "http://localhost:3000/auth/google/callback"]
-cors_allowed_origins  = ["https://sniptext.kr", "http://localhost:3000"] # 확장 ID를 받으면 "chrome-extension://<확장 ID>" 추가. 출시 후 sniptext.kr과 확장만
+cors_allowed_origins  = ["https://sniptext.kr", "http://localhost:3000", "chrome-extension://deijpelidjmefllaonjkdcndkologogo"] # 출시 후 sniptext.kr과 확장만
 auth_cookie_same_site = "None"                                           # 출시 후 Lax
 ai_model              = "claude-haiku-5-5"
