@@ -2,7 +2,7 @@
 # 랜딩은 대시보드와 같은 주소(sniptext.kr)에서 연다. 별도 버킷·인증서·배포 없이 대시보드 호스팅(dashboard.tf)에 얹는다
 # - 빌드 결과는 대시보드 버킷의 landing/ 아래에 둔다 (PUBLIC_URL=/landing으로 빌드해 파일 주소가 /landing/... 로 나온다)
 # - 주소는 /dashboard/* = 대시보드(버킷 dashboard/), 나머지 = 랜딩으로 나눈다 (CloudFront 함수, dashboard.tf)
-# - 지금은 /dashboard 경로만 열어 두었다. 대시보드가 dashboard/ 로 옮겨 간 뒤 함수를 바꿔 나머지 경로를 랜딩으로 돌린다
+# - 대시보드 배포 역할은 dashboard/ 아래만, 랜딩 배포 역할은 landing/ 아래만 쓸 수 있다
 
 locals {
   landing_prefix         = "landing"
