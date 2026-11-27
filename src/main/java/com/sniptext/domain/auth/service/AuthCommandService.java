@@ -2,12 +2,14 @@ package com.sniptext.domain.auth.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.hibernate.exception.ConstraintViolationException.ConstraintKind;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -49,6 +51,12 @@ public class AuthCommandService {
 
 	/** 같은 구글 계정·같은 이메일의 가입이 이미 있다는 뜻의 유니크 제약. 그 밖의 무결성 위반은 코드 실수라 500이다 */
 	private static final Set<String> ALREADY_SIGNED_UP_UNIQUES = Set.of("uk_users_email", "uk_social_provider_user");
+
+	/** 만료 토큰 정리에서 한 트랜잭션에 지우는 개수. 잠금을 짧게 잡으려고 나눠 지운다 */
+	static final int EXPIRED_TOKEN_DELETE_SIZE = 1000;
+
+	/** 만료 토큰 정리 한 묶음이 잠금 충돌로 실패했을 때 시도하는 최대 횟수 */
+	static final int EXPIRED_TOKEN_DELETE_MAX_ATTEMPTS = 3;
 
 	private final GoogleAuthCodeClient googleAuthCodeClient;
 	private final SocialAccountRepository socialAccountRepository;
@@ -173,6 +181,51 @@ public class AuthCommandService {
 		} catch (BusinessException e) {
 			if (e.getResultCode() != UserErrorCode.USER_NOT_FOUND) {
 				throw e;
+			}
+		}
+	}
+
+	/**
+	 * 만료된 재발급 토큰을 지우고 지운 개수를 돌려준다 (매일 04:00 정리 배치가 부른다).
+	 * 폐기됐지만 만료 전인 토큰은 재사용 감지에 쓰므로 남긴다.
+	 * 정해진 개수씩 각자 짧은 트랜잭션으로 지워, 같은 시각의 재발급·로그아웃이 오래 기다리지 않게 한다.
+	 * 기준 시각은 시작할 때 한 번 정한다. 도는 동안 새로 만료된 토큰은 다음 날 지운다.
+	 * 지워진 토큰이 다시 오면 재사용 감지 없이 AUTH401_5다. 만료돼 어차피 쓸 수 없는 토큰이라 허용한다.
+	 */
+	public int deleteExpiredRefreshTokens() {
+		return deleteExpiredRefreshTokens(EXPIRED_TOKEN_DELETE_SIZE);
+	}
+
+	// 테스트에서 나눠 지우기를 작은 개수로 확인하려고 개수를 받는다
+	int deleteExpiredRefreshTokens(int deleteSize) {
+		if (deleteSize < 1) {
+			throw new IllegalArgumentException("한 번에 지울 개수는 1 이상이어야 한다: " + deleteSize);
+		}
+		LocalDateTime now = LocalDateTime.now(clock);
+		int total = 0;
+		int deleted;
+		do {
+			deleted = deleteExpiredChunk(now, deleteSize);
+			total += deleted;
+		} while (deleted == deleteSize);
+		return total;
+	}
+
+	/**
+	 * 한 묶음을 지운다. 같은 순간 재발급의 계보 폐기나 로그아웃이 같은 만료 행을 건드리면 잠금 순서가 엇갈려 교착이 날 수 있다
+	 * (삭제는 만료 인덱스 → 행 → 다른 인덱스, 폐기는 family·user 인덱스 → 행). 새벽이라 드물어서 잠금으로 막지 않고,
+	 * 배치가 희생되면 그 묶음만 다시 시도한다. 재발급·로그아웃 쪽이 희생되면 그 요청은 실패한다.
+	 */
+	private int deleteExpiredChunk(LocalDateTime now, int deleteSize) {
+		for (int attempt = 1; ; attempt++) {
+			try {
+				return Objects.requireNonNull(
+					transactionTemplate.execute(status -> refreshTokenRepository.deleteExpired(now, deleteSize)));
+			} catch (PessimisticLockingFailureException e) {
+				if (attempt >= EXPIRED_TOKEN_DELETE_MAX_ATTEMPTS) {
+					throw e;
+				}
+				log.warn("만료 재발급 토큰 정리 중 잠금 충돌, 다시 시도: attempt={}", attempt);
 			}
 		}
 	}

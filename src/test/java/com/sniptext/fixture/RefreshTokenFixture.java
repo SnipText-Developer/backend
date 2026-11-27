@@ -44,6 +44,11 @@ public final class RefreshTokenFixture {
 		return RefreshToken.create(userId, ClientType.WEB, tokenHash, familyId, EXPIRES_AT);
 	}
 
+	/** 만료 시각을 정한 웹 토큰 (만료 경계 테스트용) */
+	public static RefreshToken webExpiringAt(Long userId, String tokenHash, LocalDateTime expiresAt) {
+		return RefreshToken.create(userId, ClientType.WEB, tokenHash, FAMILY_ID, expiresAt);
+	}
+
 	public static RefreshToken extension(Long userId, String tokenHash, String familyId) {
 		return RefreshToken.create(userId, ClientType.EXTENSION, tokenHash, familyId, EXPIRES_AT);
 	}

@@ -3,6 +3,7 @@
 | 항목 | 내용 |
 | --- | --- |
 | 버전 | v0.9 (2026-11-22, S2 크롬 확장 반영) |
+| v0.9 수정 (2026-11-23) | `refresh_tokens`에 인덱스 `idx_refresh_expires` (expires_at) 추가. 04:00 정리 배치가 만료된 토큰만 골라 지우기 위해서다 (#133, 아래 "04:00 배치 마이그레이션") |
 | v0.8 대비 | `extension_link_codes` 추가(웹 → 확장 연결 코드, 3-8). 확장 재발급 토큰은 기존 `refresh_tokens`에 `client_type = EXTENSION`으로 저장(테이블 변경 없음, 설명만 보강). `templates.updated_at`이 확장 동기화(S2 27번) 버전 기준임을 명시. 04:00 배치에 만료된 연결 코드 정리 추가. 갤러리 카테고리 표시 이름 "고객 응대" → "고객응대"(저장 값 `CUSTOMER_SERVICE`는 그대로). 확장 팝업 최근 사용 개수 설명을 기능명세 기준으로 변경 |
 | v0.7 → v0.8 | `users.plan_override` 삭제(플랜 구분 없음). `users.template_sort` 삭제(내 템플릿 정렬을 생성 순으로 고정). 템플릿 한도 50개·AI 하루 5회로 설계 메모 수정, 결제·구독 관련 "나중에 추가할 것" 삭제. `social_accounts.provider_user_id`를 `VARCHAR(255)`·`ascii_bin`으로 변경(구글 `sub` 규격). 모두 새 마이그레이션으로 반영 (아래 "마이그레이션" 참고) |
 | v0.6 → v0.7 | 설명만 보강: `users.profile_image_url`(500자 초과 시 저장 안 함), `users.last_login_at`(가입도 로그인으로 기록), `refresh_tokens.revoked_at`(재사용 감지 시 계보 폐기), 설계 메모 "가입"(인가 코드 방식). 테이블·컬럼·인덱스 변경 없음 |
@@ -164,7 +165,9 @@ erDiagram
 - 유니크 `uk_refresh_token_hash` (token_hash)
 - 인덱스 `idx_refresh_user` (user_id)
 - 인덱스 `idx_refresh_family` (family_id)
+- 인덱스 `idx_refresh_expires` (expires_at): 04:00 정리 배치가 만료된 토큰만 골라 지움
 - 외래키 `user_id` → `users.id` (삭제 시 CASCADE)
+- 정리 배치는 만료 시각이 지난 토큰만 지운다. 폐기됐지만 만료 전인 토큰은 재사용 감지(계보 폐기)에 쓰므로 남긴다
 - 확장 토큰(S2): 연결 코드 교환(24번)마다 새 계보로 저장. 웹 세션과 계보가 달라 서로 영향이 없음
 - 폐기 범위: 웹 로그아웃(4번)은 그 회원의 웹·확장 토큰 전체, 확장 로그아웃(26번)은 그 확장의 계보만
 - 확장 재발급(25번)은 EXTENSION 토큰만 받음 (S2 명세). 웹 재발급(3번)은 지금 토큰 종류를 보지 않고 같은 종류로 재발급하므로, 25번을 만들 때 3번도 WEB만 받도록 맞춤
@@ -363,6 +366,16 @@ CREATE TABLE extension_link_codes (
 
 - UT용 갤러리 템플릿 27개는 스키마 변경이 아니라 데이터 마이그레이션(`V{yyyyMMddHHmm}__insert_gallery_templates.sql`)으로 넣습니다. 출시 전 서버에 있던 개발용 샘플 갤러리는 이 마이그레이션에서 지웁니다.
 
+### 04:00 배치 마이그레이션
+
+만료된 재발급 토큰을 인덱스로 찾아 나눠 지우기 위해 인덱스만 추가합니다 (#133).
+
+```sql
+-- V202611251400__add_refresh_tokens_expires_index.sql
+ALTER TABLE refresh_tokens
+    ADD INDEX idx_refresh_expires (expires_at);
+```
+
 ## 부록. DDL (MySQL 8.4)
 
 ```sql
@@ -422,6 +435,7 @@ CREATE TABLE refresh_tokens (
     UNIQUE KEY uk_refresh_token_hash (token_hash),
     KEY idx_refresh_user (user_id),
     KEY idx_refresh_family (family_id),
+    KEY idx_refresh_expires (expires_at),
     CONSTRAINT fk_refresh_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '재발급 토큰';
 
