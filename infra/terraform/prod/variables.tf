@@ -137,6 +137,9 @@ variable "cors_allowed_origins" {
   default = [
     "https://sniptext.kr",
     "http://localhost:3000",
+    # 크롬 확장 (manifest key로 고정한 ID, 압축해제 설치 기준). 웹스토어에 올리면 스토어 ID로 바꾸고
+    # 대시보드 저장소 prod 환경 변수 REACT_APP_CHROME_EXTENSION_ID도 같이 바꾼다
+    "chrome-extension://deijpelidjmefllaonjkdcndkologogo",
   ]
 
   validation {
@@ -189,4 +192,18 @@ variable "github_environment" {
   description = "배포 역할을 위임받을 GitHub 환경. 이 환경을 쓰는 작업만 위임된다"
   type        = string
   default     = "prod"
+}
+
+# ---------- 대시보드 배포 역할 (#131) ----------
+# 소유자·환경은 백엔드와 같은 값(github_owner_id, github_environment)을 쓴다
+variable "dashboard_github_repository" {
+  description = "대시보드 배포 역할을 위임받을 GitHub 저장소 (소유자/이름, 대소문자 그대로)"
+  type        = string
+  default     = "SnipText-Developer/snip-text-dashboard"
+}
+
+variable "dashboard_github_repository_id" {
+  description = "대시보드 GitHub 저장소 숫자 ID. 저장소를 지우고 같은 이름으로 다시 만들면 바뀐다"
+  type        = number
+  default     = 1438261282
 }

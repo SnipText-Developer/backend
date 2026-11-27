@@ -38,7 +38,7 @@ import lombok.RequiredArgsConstructor;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-public class AuthController {
+public class AuthController implements AuthControllerDocs {
 
 	private static final String REFRESH_TOKEN_COOKIE = "refreshToken";
 	private static final String COOKIE_PATH = "/api/v1/auth";
@@ -46,6 +46,7 @@ public class AuthController {
 	private final AuthCommandService authCommandService;
 	private final AuthCookieProperties cookieProperties;
 
+	@Override
 	@PostMapping("/login")
 	public ResponseEntity<ApiResponse<AuthLoginResponse>> login(@Valid @RequestBody AuthLoginRequest request) {
 		AuthLoginResult result = authCommandService.login(request.toCommand());
@@ -58,6 +59,7 @@ public class AuthController {
 		return withRefreshToken(AuthSuccessCode.LOGGED_IN, response, result.refreshToken());
 	}
 
+	@Override
 	@PostMapping("/signup")
 	public ResponseEntity<ApiResponse<AuthSignUpResponse>> signUp(@Valid @RequestBody AuthSignUpRequest request) {
 		AuthSignUpResult result = authCommandService.signUp(request.toCommand());
@@ -69,6 +71,7 @@ public class AuthController {
 	 * 실패하면 응답은 전역 예외 처리가 만들고, 여기서는 다시 쓸 수 없는 쿠키를 지우는 헤더만 붙인다.
 	 * 지우지 않으면 브라우저가 14일 동안 같은 쿠키로 새로고침마다 재발급을 다시 시도한다.
 	 */
+	@Override
 	@PostMapping("/reissue")
 	public ResponseEntity<ApiResponse<AuthReissueResponse>> reissue(
 		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken, HttpServletResponse servletResponse) {
@@ -85,6 +88,7 @@ public class AuthController {
 	}
 
 	/** 접근 토큰 없이 쿠키만으로 처리한다. 쿠키가 없거나 이미 폐기된 토큰이어도 성공이고, 쿠키는 항상 지운다. */
+	@Override
 	@PostMapping("/logout")
 	public ResponseEntity<ApiResponse<Void>> logout(
 		@CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String refreshToken) {

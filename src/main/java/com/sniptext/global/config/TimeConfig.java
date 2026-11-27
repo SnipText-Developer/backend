@@ -12,7 +12,10 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class TimeConfig {
 
-	public static final ZoneId KST = ZoneId.of("Asia/Seoul");
+	/** 어노테이션 값처럼 상수 문자열이 필요한 곳에서 쓴다 (예: {@code @Scheduled(zone = TimeConfig.KST_ZONE_ID)}) */
+	public static final String KST_ZONE_ID = "Asia/Seoul";
+
+	public static final ZoneId KST = ZoneId.of(KST_ZONE_ID);
 
 	/**
 	 * 마이크로초 단위로 잘린 시계. 감사 기능을 거치지 않는 edited_at·last_used_at·deleted_at도

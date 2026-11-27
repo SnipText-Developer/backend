@@ -297,6 +297,9 @@ erDiagram
 | 매일 00:10 | 휴지통 30일 지난 템플릿 영구 삭제 |
 | 매일 04:00 | 만료된 재발급 토큰 정리, 만료된 확장 연결 코드 정리 (연결 코드는 S2, UT 뒤 추가) |
 
+- 모든 배치는 셰드락으로 잠가 서버 여러 대(배포 중 겹치는 컨테이너 포함)에서도 한 번만 돈다. 잠금 행은 `shedlock` 테이블에 배치 이름마다 1행이고, 잠금 시각은 DB 시각(UTC)으로 넣고 비교한다 (`V202611240039__create_shedlock.sql`, 아래 DDL)
+- 테스트에서는 스케줄 실행만 끄고(`SNIPTEXT_SCHEDULING_ENABLED=false`) 잠금은 그대로 쓴다
+
 ## 6. 확정 사항과 나중에 추가할 것
 
 | 항목 | 결정 | ERD 반영 |
@@ -503,4 +506,15 @@ CREATE TABLE ai_tone_daily_usages (
     UNIQUE KEY uk_ai_usage_user_date (user_id, usage_date),
     CONSTRAINT fk_ai_usage_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'AI 톤 교정 일일 사용량';
+```
+
+```sql
+-- 배치 잠금 (셰드락). 배치 이름마다 1행, 시각은 UTC (V202611240039__create_shedlock.sql)
+CREATE TABLE shedlock (
+    name                         VARCHAR(64) NOT NULL COMMENT '배치 이름 (@SchedulerLock name)',
+    lock_until                   DATETIME(3) NOT NULL COMMENT '잠금이 풀리는 시각 (UTC)',
+    locked_at                    DATETIME(3) NOT NULL COMMENT '잠근 시각 (UTC)',
+    locked_by                    VARCHAR(255) NOT NULL COMMENT '잠근 서버 (호스트 이름)',
+    PRIMARY KEY (name)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '배치 잠금 (셰드락)';
 ```

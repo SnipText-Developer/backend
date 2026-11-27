@@ -28,6 +28,26 @@ output "deploy_bucket_name" {
   value       = aws_s3_bucket.deploy.bucket
 }
 
+output "dashboard_bucket_name" {
+  description = "대시보드 빌드 결과를 올리는 버킷 (#131)"
+  value       = aws_s3_bucket.dashboard.bucket
+}
+
+output "dashboard_distribution_id" {
+  description = "대시보드 CloudFront 배포 ID (배포 뒤 캐시 비우기 대상)"
+  value       = aws_cloudfront_distribution.dashboard.id
+}
+
+output "dashboard_deploy_role_arn" {
+  description = "대시보드 저장소 배포 워크플로가 위임받는 역할 (prod 환경 변수 AWS_ROLE_ARN에 넣는다)"
+  value       = aws_iam_role.dashboard_deploy.arn
+}
+
+output "dashboard_url" {
+  description = "대시보드 주소"
+  value       = "https://${var.domain_name}"
+}
+
 output "db_address" {
   description = "RDS 주소 (SSM 포트 포워딩 대상)"
   value       = aws_db_instance.main.address
